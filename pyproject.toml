@@ -1,0 +1,7 @@
+[tool.pytest.ini_options]
+testpaths = ["backend", "simulator/tests", "tests"]
+addopts = "--import-mode=importlib"
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100

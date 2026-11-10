@@ -1,0 +1,748 @@
+asyncapi: 3.0.0
+info:
+  title: Rental Management - RabbitMQ Events & MQTT Telemetry
+  version: 1.1.0
+  description: 'Domain events 7 loại + MQTT cumulative meter readings. Exchange rental.domain.v1 (topic) và amq.topic
+    (RabbitMQ MQTT bridge). Đây là đặc tả thiết kế, chưa triển khai broker. V1.1: bắt buộc effective_at hợp đồng,
+    snapshot email, retry TTL/DLQ và điều kiện chạy Simulator.'
+defaultContentType: application/json
+servers:
+  rabbitmq:
+    host: rabbitmq:5672
+    protocol: amqp
+    description: RabbitMQ AMQP 0-9-1, internal-only
+  mqtt:
+    host: rabbitmq:1883
+    protocol: mqtt
+    description: RabbitMQ MQTT plugin, QoS 1, internal-only
+channels:
+  RoomCreated:
+    address: room.created.v1
+    description: 'Publisher: Room. Consumers: Metering. Exchange: rental.domain.v1.'
+    servers:
+    - $ref: '#/servers/rabbitmq'
+    messages:
+      RoomCreated:
+        $ref: '#/components/messages/RoomCreated'
+    x-exchange: rental.domain.v1
+    x-routing-key: room.created.v1
+  ContractStarted:
+    address: contract.started.v1
+    description: 'Publisher: Tenant. Consumers: Room, Metering. Exchange: rental.domain.v1.'
+    servers:
+    - $ref: '#/servers/rabbitmq'
+    messages:
+      ContractStarted:
+        $ref: '#/components/messages/ContractStarted'
+    x-exchange: rental.domain.v1
+    x-routing-key: contract.started.v1
+  ContractEnded:
+    address: contract.ended.v1
+    description: 'Publisher: Tenant. Consumers: Room, Metering. Exchange: rental.domain.v1.'
+    servers:
+    - $ref: '#/servers/rabbitmq'
+    messages:
+      ContractEnded:
+        $ref: '#/components/messages/ContractEnded'
+    x-exchange: rental.domain.v1
+    x-routing-key: contract.ended.v1
+  ContractExpiring:
+    address: contract.expiring.v1
+    description: 'Publisher: Tenant. Consumers: Notification. Exchange: rental.domain.v1.'
+    servers:
+    - $ref: '#/servers/rabbitmq'
+    messages:
+      ContractExpiring:
+        $ref: '#/components/messages/ContractExpiring'
+    x-exchange: rental.domain.v1
+    x-routing-key: contract.expiring.v1
+  InvoiceIssued:
+    address: invoice.issued.v1
+    description: 'Publisher: Billing. Consumers: Notification. Exchange: rental.domain.v1.'
+    servers:
+    - $ref: '#/servers/rabbitmq'
+    messages:
+      InvoiceIssued:
+        $ref: '#/components/messages/InvoiceIssued'
+    x-exchange: rental.domain.v1
+    x-routing-key: invoice.issued.v1
+  InvoiceReminderRequested:
+    address: invoice.reminder_requested.v1
+    description: 'Publisher: Billing. Consumers: Notification. Exchange: rental.domain.v1.'
+    servers:
+    - $ref: '#/servers/rabbitmq'
+    messages:
+      InvoiceReminderRequested:
+        $ref: '#/components/messages/InvoiceReminderRequested'
+    x-exchange: rental.domain.v1
+    x-routing-key: invoice.reminder_requested.v1
+  PaymentSucceeded:
+    address: payment.succeeded.v1
+    description: 'Publisher: Billing. Consumers: Notification. Exchange: rental.domain.v1.'
+    servers:
+    - $ref: '#/servers/rabbitmq'
+    messages:
+      PaymentSucceeded:
+        $ref: '#/components/messages/PaymentSucceeded'
+    x-exchange: rental.domain.v1
+    x-routing-key: payment.succeeded.v1
+  MeterReadingTelemetry:
+    address: meters/{meterId}/reading
+    description: Simulator MQTT publish QoS1, RabbitMQ bridge to amq.topic with routing meters.{meterId}.reading.
+      Metering consumes AMQP queue metering.telemetry.q Metering chốt UNIQUE(meter_id, cutoff_at), không tạo cutoff
+      khác giá trị khi nhiều mốc nghiệp vụ trùng nhau.
+    servers:
+    - $ref: '#/servers/mqtt'
+    parameters:
+      meterId:
+        description: UUID của đồng hồ được publish, phải khớp payload.meter_id
+    messages:
+      MeterReadingTelemetry:
+        $ref: '#/components/messages/MeterReadingTelemetry'
+    x-amqp-binding-key: meters.*.reading
+    x-mqtt-qos: 1
+operations:
+  publishRoomCreated:
+    action: send
+    summary: Room publishes RoomCreated
+    channel:
+      $ref: '#/channels/RoomCreated'
+    messages:
+    - $ref: '#/channels/RoomCreated/messages/RoomCreated'
+  consumeMeteringRoomCreated:
+    action: receive
+    summary: Metering consumes RoomCreated
+    channel:
+      $ref: '#/channels/RoomCreated'
+    messages:
+    - $ref: '#/channels/RoomCreated/messages/RoomCreated'
+  publishContractStarted:
+    action: send
+    summary: Tenant publishes ContractStarted
+    channel:
+      $ref: '#/channels/ContractStarted'
+    messages:
+    - $ref: '#/channels/ContractStarted/messages/ContractStarted'
+  consumeRoomContractStarted:
+    action: receive
+    summary: Room consumes ContractStarted
+    channel:
+      $ref: '#/channels/ContractStarted'
+    messages:
+    - $ref: '#/channels/ContractStarted/messages/ContractStarted'
+  consumeMeteringContractStarted:
+    action: receive
+    summary: Metering consumes ContractStarted
+    channel:
+      $ref: '#/channels/ContractStarted'
+    messages:
+    - $ref: '#/channels/ContractStarted/messages/ContractStarted'
+  publishContractEnded:
+    action: send
+    summary: Tenant publishes ContractEnded
+    channel:
+      $ref: '#/channels/ContractEnded'
+    messages:
+    - $ref: '#/channels/ContractEnded/messages/ContractEnded'
+  consumeRoomContractEnded:
+    action: receive
+    summary: Room consumes ContractEnded
+    channel:
+      $ref: '#/channels/ContractEnded'
+    messages:
+    - $ref: '#/channels/ContractEnded/messages/ContractEnded'
+  consumeMeteringContractEnded:
+    action: receive
+    summary: Metering consumes ContractEnded
+    channel:
+      $ref: '#/channels/ContractEnded'
+    messages:
+    - $ref: '#/channels/ContractEnded/messages/ContractEnded'
+  publishContractExpiring:
+    action: send
+    summary: Tenant publishes ContractExpiring
+    channel:
+      $ref: '#/channels/ContractExpiring'
+    messages:
+    - $ref: '#/channels/ContractExpiring/messages/ContractExpiring'
+  consumeNotificationContractExpiring:
+    action: receive
+    summary: Notification consumes ContractExpiring
+    channel:
+      $ref: '#/channels/ContractExpiring'
+    messages:
+    - $ref: '#/channels/ContractExpiring/messages/ContractExpiring'
+  publishInvoiceIssued:
+    action: send
+    summary: Billing publishes InvoiceIssued
+    channel:
+      $ref: '#/channels/InvoiceIssued'
+    messages:
+    - $ref: '#/channels/InvoiceIssued/messages/InvoiceIssued'
+  consumeNotificationInvoiceIssued:
+    action: receive
+    summary: Notification consumes InvoiceIssued
+    channel:
+      $ref: '#/channels/InvoiceIssued'
+    messages:
+    - $ref: '#/channels/InvoiceIssued/messages/InvoiceIssued'
+  publishInvoiceReminderRequested:
+    action: send
+    summary: Billing publishes InvoiceReminderRequested
+    channel:
+      $ref: '#/channels/InvoiceReminderRequested'
+    messages:
+    - $ref: '#/channels/InvoiceReminderRequested/messages/InvoiceReminderRequested'
+  consumeNotificationInvoiceReminderRequested:
+    action: receive
+    summary: Notification consumes InvoiceReminderRequested
+    channel:
+      $ref: '#/channels/InvoiceReminderRequested'
+    messages:
+    - $ref: '#/channels/InvoiceReminderRequested/messages/InvoiceReminderRequested'
+  publishPaymentSucceeded:
+    action: send
+    summary: Billing publishes PaymentSucceeded
+    channel:
+      $ref: '#/channels/PaymentSucceeded'
+    messages:
+    - $ref: '#/channels/PaymentSucceeded/messages/PaymentSucceeded'
+  consumeNotificationPaymentSucceeded:
+    action: receive
+    summary: Notification consumes PaymentSucceeded
+    channel:
+      $ref: '#/channels/PaymentSucceeded'
+    messages:
+    - $ref: '#/channels/PaymentSucceeded/messages/PaymentSucceeded'
+  publishMeterReadingTelemetry:
+    action: send
+    summary: Simulator publishes cumulative readings QoS1
+    channel:
+      $ref: '#/channels/MeterReadingTelemetry'
+    messages:
+    - $ref: '#/channels/MeterReadingTelemetry/messages/MeterReadingTelemetry'
+  consumeMeterReadingTelemetry:
+    action: receive
+    summary: Metering consumes telemetry through AMQP
+    channel:
+      $ref: '#/channels/MeterReadingTelemetry'
+    messages:
+    - $ref: '#/channels/MeterReadingTelemetry/messages/MeterReadingTelemetry'
+    description: Consumers are actually AMQP clients on metering.telemetry.q bound to amq.topic (not MQTT subscribers).
+components:
+  schemas:
+    RoomCreatedData:
+      type: object
+      properties:
+        room_id: &id001
+          type: string
+          format: uuid
+        property_id: *id001
+        floor_id: *id001
+        room_code: &id003
+          type: string
+      required:
+      - room_id
+      - property_id
+      - floor_id
+      - room_code
+    RoomCreatedEnvelope:
+      type: object
+      properties:
+        event_id: *id001
+        event_type:
+          type: string
+          const: RoomCreated
+        event_version:
+          type: integer
+          const: 1
+        occurred_at: &id002
+          type: string
+          format: date-time
+        effective_at: *id002
+        correlation_id: *id001
+        aggregate_id: *id001
+        data:
+          $ref: '#/components/schemas/RoomCreatedData'
+      required:
+      - event_id
+      - event_type
+      - event_version
+      - occurred_at
+      - correlation_id
+      - aggregate_id
+      - data
+      description: effective_at có khi sự kiện tác động vào nghiệp vụ từ một thời điểm khác occurred_at, ví dụ hợp
+        đồng nhập muộn.
+    ContractStartedData:
+      type: object
+      properties:
+        contract_id: *id001
+        room_id: *id001
+        start_date:
+          type: string
+          format: date
+          description: Ngày bắt đầu hợp đồng, bao gồm ngày này
+      required:
+      - contract_id
+      - room_id
+      - start_date
+    ContractStartedEnvelope:
+      type: object
+      properties:
+        event_id: *id001
+        event_type:
+          type: string
+          const: ContractStarted
+        event_version:
+          type: integer
+          const: 1
+        occurred_at: *id002
+        effective_at:
+          type: string
+          format: date-time
+          description: 'ContractStarted: 00:00 đầu ngày start_date Asia/Ho_Chi_Minh'
+        correlation_id: *id001
+        aggregate_id: *id001
+        data:
+          $ref: '#/components/schemas/ContractStartedData'
+      required:
+      - event_id
+      - event_type
+      - event_version
+      - occurred_at
+      - correlation_id
+      - aggregate_id
+      - data
+      - effective_at
+      description: effective_at có khi sự kiện tác động vào nghiệp vụ từ một thời điểm khác occurred_at, ví dụ hợp
+        đồng nhập muộn.
+    ContractEndedData:
+      type: object
+      properties:
+        contract_id: *id001
+        room_id: *id001
+        actual_end_date:
+          type: string
+          format: date
+          description: Ngày kết thúc thực tế hợp đồng, bao gồm ngày này
+        end_reason: *id003
+      required:
+      - contract_id
+      - room_id
+      - actual_end_date
+    ContractEndedEnvelope:
+      type: object
+      properties:
+        event_id: *id001
+        event_type:
+          type: string
+          const: ContractEnded
+        event_version:
+          type: integer
+          const: 1
+        occurred_at: *id002
+        effective_at:
+          type: string
+          format: date-time
+          description: 'ContractEnded: 00:00 ngày sau actual_end_date Asia/Ho_Chi_Minh'
+        correlation_id: *id001
+        aggregate_id: *id001
+        data:
+          $ref: '#/components/schemas/ContractEndedData'
+      required:
+      - event_id
+      - event_type
+      - event_version
+      - occurred_at
+      - correlation_id
+      - aggregate_id
+      - data
+      - effective_at
+      description: >-
+        effective_at là 00:00 ngày sau actual_end_date. Consumer chỉ áp dụng
+        khi thời điểm hiện tại >= effective_at. Room chỉ xóa occupancy khi
+        occupancy_contract_id khớp contract_id; sử dụng effective_at cho
+        occupancy_updated_at. Khi ContractEnded(A) và ContractStarted(B) có
+        cùng effective_at, B phải được giữ dù event đến theo thứ tự nào.
+        ContractStarted cho phép mốc bằng occupancy_updated_at; event cũ
+        không được ghi đè trạng thái mới.        
+    ContractExpiringData:
+      type: object
+      properties:
+        contract_id: *id001
+        room_id: *id001
+        end_date:
+          type: string
+          format: date
+        days_remaining:
+          type: integer
+          minimum: 0
+        room_code:
+          type: string
+        tenant_name:
+          type: string
+      required:
+      - contract_id
+      - room_id
+      - end_date
+      - days_remaining
+      - room_code
+      - tenant_name
+    ContractExpiringEnvelope:
+      type: object
+      properties:
+        event_id: *id001
+        event_type:
+          type: string
+          const: ContractExpiring
+        event_version:
+          type: integer
+          const: 1
+        occurred_at: *id002
+        effective_at: *id002
+        correlation_id: *id001
+        aggregate_id: *id001
+        data:
+          $ref: '#/components/schemas/ContractExpiringData'
+      required:
+      - event_id
+      - event_type
+      - event_version
+      - occurred_at
+      - correlation_id
+      - aggregate_id
+      - data
+      description: effective_at có khi sự kiện tác động vào nghiệp vụ từ một thời điểm khác occurred_at, ví dụ hợp
+        đồng nhập muộn.
+    InvoiceIssuedData:
+      type: object
+      properties:
+        invoice_id: *id001
+        contract_id: *id001
+        recipient_email:
+          type: string
+          format: email
+        invoice_code: *id003
+        total_amount: &id004
+          type: integer
+          format: int64
+          minimum: 0
+        due_date:
+          type: string
+          format: date
+        tenant_name:
+          type: string
+        room_code:
+          type: string
+        period_start:
+          type: string
+          format: date
+        period_end_exclusive:
+          type: string
+          format: date
+          description: Mốc cuối không bao gồm
+      required:
+      - invoice_id
+      - contract_id
+      - recipient_email
+      - invoice_code
+      - total_amount
+      - due_date
+      - tenant_name
+      - room_code
+      - period_start
+      - period_end_exclusive
+    InvoiceIssuedEnvelope:
+      type: object
+      properties:
+        event_id: *id001
+        event_type:
+          type: string
+          const: InvoiceIssued
+        event_version:
+          type: integer
+          const: 1
+        occurred_at: *id002
+        effective_at: *id002
+        correlation_id: *id001
+        aggregate_id: *id001
+        data:
+          $ref: '#/components/schemas/InvoiceIssuedData'
+      required:
+      - event_id
+      - event_type
+      - event_version
+      - occurred_at
+      - correlation_id
+      - aggregate_id
+      - data
+      description: effective_at có khi sự kiện tác động vào nghiệp vụ từ một thời điểm khác occurred_at, ví dụ hợp
+        đồng nhập muộn.
+    InvoiceReminderRequestedData:
+      type: object
+      properties:
+        invoice_id: *id001
+        recipient_email:
+          type: string
+          format: email
+        reminder_date:
+          type: string
+          format: date
+        due_date:
+          type: string
+          format: date
+        invoice_code:
+          type: string
+        total_amount:
+          type: integer
+          format: int64
+          minimum: 0
+        tenant_name:
+          type: string
+        room_code:
+          type: string
+        period_start:
+          type: string
+          format: date
+        period_end_exclusive:
+          type: string
+          format: date
+          description: Mốc cuối không bao gồm
+      required:
+      - invoice_id
+      - recipient_email
+      - reminder_date
+      - due_date
+      - invoice_code
+      - total_amount
+      - tenant_name
+      - room_code
+      - period_start
+      - period_end_exclusive
+    InvoiceReminderRequestedEnvelope:
+      type: object
+      properties:
+        event_id: *id001
+        event_type:
+          type: string
+          const: InvoiceReminderRequested
+        event_version:
+          type: integer
+          const: 1
+        occurred_at: *id002
+        effective_at: *id002
+        correlation_id: *id001
+        aggregate_id: *id001
+        data:
+          $ref: '#/components/schemas/InvoiceReminderRequestedData'
+      required:
+      - event_id
+      - event_type
+      - event_version
+      - occurred_at
+      - correlation_id
+      - aggregate_id
+      - data
+      description: effective_at có khi sự kiện tác động vào nghiệp vụ từ một thời điểm khác occurred_at, ví dụ hợp
+        đồng nhập muộn.
+    PaymentSucceededData:
+      type: object
+      properties:
+        invoice_id: *id001
+        payment_attempt_id: *id001
+        provider_transaction_id: *id003
+        paid_amount: *id004
+        recipient_email:
+          type: string
+          format: email
+        invoice_code:
+          type: string
+        tenant_name:
+          type: string
+        room_code:
+          type: string
+        period_start:
+          type: string
+          format: date
+        period_end_exclusive:
+          type: string
+          format: date
+          description: Mốc cuối không bao gồm
+        paid_at:
+          type: string
+          format: date-time
+      required:
+      - invoice_id
+      - payment_attempt_id
+      - paid_amount
+      - recipient_email
+      - invoice_code
+      - tenant_name
+      - room_code
+      - period_start
+      - period_end_exclusive
+      - paid_at
+    PaymentSucceededEnvelope:
+      type: object
+      properties:
+        event_id: *id001
+        event_type:
+          type: string
+          const: PaymentSucceeded
+        event_version:
+          type: integer
+          const: 1
+        occurred_at: *id002
+        effective_at: *id002
+        correlation_id: *id001
+        aggregate_id: *id001
+        data:
+          $ref: '#/components/schemas/PaymentSucceededData'
+      required:
+      - event_id
+      - event_type
+      - event_version
+      - occurred_at
+      - correlation_id
+      - aggregate_id
+      - data
+      description: effective_at có khi sự kiện tác động vào nghiệp vụ từ một thời điểm khác occurred_at, ví dụ hợp
+        đồng nhập muộn.
+    MeterReadingTelemetry:
+      type: object
+      properties:
+        meter_id: *id001
+        measured_at: *id002
+        reading_value:
+          type: number
+          minimum: 0
+          description: Cumulative meter reading, not delta; 3 decimal places maximum.
+      required:
+      - meter_id
+      - measured_at
+      - reading_value
+      description: Source = SIMULATOR. Natural PK in metering_db (meter_id, measured_at). Duplicate with different
+        reading_value raises CONFLICTING_DUPLICATE alert.
+  messages:
+    RoomCreated:
+      name: RoomCreated
+      title: RoomCreated
+      contentType: application/json
+      correlationId:
+        location: $message.payload#/correlation_id
+      payload:
+        $ref: '#/components/schemas/RoomCreatedEnvelope'
+    ContractStarted:
+      name: ContractStarted
+      title: ContractStarted
+      contentType: application/json
+      correlationId:
+        location: $message.payload#/correlation_id
+      payload:
+        $ref: '#/components/schemas/ContractStartedEnvelope'
+    ContractEnded:
+      name: ContractEnded
+      title: ContractEnded
+      contentType: application/json
+      correlationId:
+        location: $message.payload#/correlation_id
+      payload:
+        $ref: '#/components/schemas/ContractEndedEnvelope'
+    ContractExpiring:
+      name: ContractExpiring
+      title: ContractExpiring
+      contentType: application/json
+      correlationId:
+        location: $message.payload#/correlation_id
+      payload:
+        $ref: '#/components/schemas/ContractExpiringEnvelope'
+    InvoiceIssued:
+      name: InvoiceIssued
+      title: InvoiceIssued
+      contentType: application/json
+      correlationId:
+        location: $message.payload#/correlation_id
+      payload:
+        $ref: '#/components/schemas/InvoiceIssuedEnvelope'
+    InvoiceReminderRequested:
+      name: InvoiceReminderRequested
+      title: InvoiceReminderRequested
+      contentType: application/json
+      correlationId:
+        location: $message.payload#/correlation_id
+      payload:
+        $ref: '#/components/schemas/InvoiceReminderRequestedEnvelope'
+    PaymentSucceeded:
+      name: PaymentSucceeded
+      title: PaymentSucceeded
+      contentType: application/json
+      correlationId:
+        location: $message.payload#/correlation_id
+      payload:
+        $ref: '#/components/schemas/PaymentSucceededEnvelope'
+    MeterReadingTelemetry:
+      name: MeterReadingTelemetry
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/MeterReadingTelemetry'
+      x-mqtt-qos: 1
+x-rabbitmq-topology:
+  domain_exchange:
+    name: rental.domain.v1
+    type: topic
+    durable: true
+  mqtt_exchange:
+    name: amq.topic
+    type: topic
+    description: RabbitMQ MQTT plugin mặc định chuyển meters/{meterId}/reading thành meters.{meterId}.reading
+  queues:
+    room.events.q:
+      exchange: rental.domain.v1
+      bindings:
+      - contract.started.v1
+      - contract.ended.v1
+      dlq: room.events.dlq
+    metering.events.q:
+      exchange: rental.domain.v1
+      bindings:
+      - room.created.v1
+      - contract.started.v1
+      - contract.ended.v1
+      dlq: metering.events.dlq
+    notification.events.q:
+      exchange: rental.domain.v1
+      bindings:
+      - contract.expiring.v1
+      - invoice.issued.v1
+      - invoice.reminder_requested.v1
+      - payment.succeeded.v1
+      dlq: notification.events.dlq
+    metering.telemetry.q:
+      exchange: amq.topic
+      bindings:
+      - meters.*.reading
+      dlq: metering.telemetry.dlq
+  retry_policy: Consumer ACK khi transaction DB thành công; khi lỗi tạm thời publish sang retry queue có publisher
+    confirms rồi ACK message gốc. Retry 3 lần (10s, 60s, 300s), sau đó DLQ. Đếm số lần thử qua message header; mọi
+    consumer idempotent. Không requeue vô hạn. Không bảo đảm exactly-once delivery.
+  exchange_dlx: rental.dlx
+  retry_topology:
+    source_queues:
+    - room.events.q
+    - metering.events.q
+    - notification.events.q
+    - metering.telemetry.q
+    naming: '{source_queue}.retry.{delay_seconds}s'
+    delays_ms:
+    - 10000
+    - 60000
+    - 300000
+    durable: true
+    mechanism: Mỗi source queue có ba retry queue với x-message-ttl tương ứng, x-dead-letter-exchange="" (default
+      exchange), x-dead-letter-routing-key = tên source queue. Worker publish vào retry queue tùy attempt và chỉ
+      ACK message gốc sau publisher confirm; hết retry đưa về DLQ qua rental.dlx.
+    dlq_exchange: rental.dlx
+  startup_order: Khai báo rental.domain.v1, amq.topic bindings, queues (đặc biệt metering.telemetry.q), retry queues
+    và DLQ trước khi Simulator bắt đầu MQTT publish. RabbitMQ MQTT plugin không giữ telemetry nếu chưa có queue
+    bind phù hợp.

@@ -1,0 +1,125 @@
+{
+  "exchanges": [
+    {
+      "name": "rental.domain.v1",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    }
+  ],
+  "queues": [
+    {
+      "name": "room.events.q",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "metering.events.q",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "notification.events.q",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "metering.telemetry.q",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    }
+  ],
+  "bindings": [
+    {
+      "source": "rental.domain.v1",
+      "vhost": "/",
+      "destination": "room.events.q",
+      "destination_type": "queue",
+      "routing_key": "contract.started.v1",
+      "arguments": {}
+    },
+    {
+      "source": "rental.domain.v1",
+      "vhost": "/",
+      "destination": "room.events.q",
+      "destination_type": "queue",
+      "routing_key": "contract.ended.v1",
+      "arguments": {}
+    },
+    {
+      "source": "rental.domain.v1",
+      "vhost": "/",
+      "destination": "metering.events.q",
+      "destination_type": "queue",
+      "routing_key": "room.created.v1",
+      "arguments": {}
+    },
+    {
+      "source": "rental.domain.v1",
+      "vhost": "/",
+      "destination": "metering.events.q",
+      "destination_type": "queue",
+      "routing_key": "contract.started.v1",
+      "arguments": {}
+    },
+    {
+      "source": "rental.domain.v1",
+      "vhost": "/",
+      "destination": "metering.events.q",
+      "destination_type": "queue",
+      "routing_key": "contract.ended.v1",
+      "arguments": {}
+    },
+    {
+      "source": "rental.domain.v1",
+      "vhost": "/",
+      "destination": "notification.events.q",
+      "destination_type": "queue",
+      "routing_key": "contract.expiring.v1",
+      "arguments": {}
+    },
+    {
+      "source": "rental.domain.v1",
+      "vhost": "/",
+      "destination": "notification.events.q",
+      "destination_type": "queue",
+      "routing_key": "invoice.issued.v1",
+      "arguments": {}
+    },
+    {
+      "source": "rental.domain.v1",
+      "vhost": "/",
+      "destination": "notification.events.q",
+      "destination_type": "queue",
+      "routing_key": "invoice.reminder_requested.v1",
+      "arguments": {}
+    },
+    {
+      "source": "rental.domain.v1",
+      "vhost": "/",
+      "destination": "notification.events.q",
+      "destination_type": "queue",
+      "routing_key": "payment.succeeded.v1",
+      "arguments": {}
+    },
+    {
+      "source": "amq.topic",
+      "vhost": "/",
+      "destination": "metering.telemetry.q",
+      "destination_type": "queue",
+      "routing_key": "meters.*.reading",
+      "arguments": {}
+    }
+  ]
+}

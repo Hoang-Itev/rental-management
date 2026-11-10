@@ -1,0 +1,1 @@
+This folder belongs to one service. Generate revision files using alembic revision --autogenerate after the ORM is ready.

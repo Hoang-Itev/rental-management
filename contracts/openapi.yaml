@@ -1,0 +1,5921 @@
+openapi: 3.1.0
+info:
+  title: Rental Management - HTTP API Contracts
+  version: 1.1.0
+  description: Thiết kế V1.1 từ Database V3 (26 bảng). Các đường dẫn /api/v1 và /public/v1 đi qua API Gateway; /internal/v1
+    chỉ trong Docker network. Mỗi microservice chỉ truy cập DB của mình. Không phải mã ứng dụng đã triển khai. Quy
+    ước khoảng hóa đơn [start, end), nhưng end_date hợp đồng là ngày cuối được thuê. Phiên bản này bổ sung MoMo
+    reconciliation, retry jobs, hạn chế token trong access logs và thống nhất khoảng hóa đơn [start,end).
+servers:
+- url: http://localhost:8080
+  description: Public API Gateway local
+tags:
+- name: Auth
+- name: Room
+- name: Tenant
+- name: Metering
+- name: Billing
+- name: Notification
+- name: Public
+- name: Internal-Room
+- name: Internal-Tenant
+- name: Internal-Metering
+- name: Internal-Billing
+- name: Operations
+paths:
+  /api/v1/auth/login:
+    post:
+      tags:
+      - Auth
+      summary: Đăng nhập quản trị
+      operationId: auth_post_api_v1_auth_login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security: []
+  /api/v1/auth/me:
+    get:
+      tags:
+      - Auth
+      summary: Xem tài khoản hiện tại
+      operationId: auth_get_api_v1_auth_me
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/properties:
+    get:
+      tags:
+      - Room
+      summary: Danh sách khu trọ
+      operationId: room_get_api_v1_properties
+      parameters: &id004
+      - &id002
+        name: page
+        in: query
+        required: false
+        description: page
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+      - &id003
+        name: page_size
+        in: query
+        required: false
+        description: page_size
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyList'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags:
+      - Room
+      summary: Tạo khu trọ
+      operationId: room_post_api_v1_properties
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PropertyCreate'
+      responses:
+        '201':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Property'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/properties/{property_id}:
+    get:
+      tags:
+      - Room
+      summary: Chi tiết khu trọ
+      operationId: room_get_api_v1_properties_property_id
+      parameters:
+      - name: property_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Property'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    patch:
+      tags:
+      - Room
+      summary: Cập nhật khu trọ
+      operationId: room_patch_api_v1_properties_property_id
+      parameters:
+      - name: property_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: &id001
+                  type: string
+                address: *id001
+                description: *id001
+                status:
+                  type: string
+                  enum:
+                  - ACTIVE
+                  - INACTIVE
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Property'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/properties/{property_id}/buildings:
+    get:
+      tags:
+      - Room
+      summary: Danh sách dãy nhà
+      operationId: room_get_api_v1_properties_property_id_buildings
+      parameters:
+      - name: property_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - *id002
+      - *id003
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuildingList'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags:
+      - Room
+      summary: Tạo dãy nhà
+      operationId: room_post_api_v1_properties_property_id_buildings
+      parameters:
+      - name: property_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BuildingCreate'
+      responses:
+        '201':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Building'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/buildings/{building_id}/floors:
+    get:
+      tags:
+      - Room
+      summary: Danh sách tầng
+      operationId: room_get_api_v1_buildings_building_id_floors
+      parameters:
+      - name: building_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - *id002
+      - *id003
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FloorList'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags:
+      - Room
+      summary: Tạo tầng
+      operationId: room_post_api_v1_buildings_building_id_floors
+      parameters:
+      - name: building_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FloorCreate'
+      responses:
+        '201':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Floor'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/floors/{floor_id}/rooms/bulk:
+    post:
+      tags:
+      - Room
+      summary: Tạo hàng loạt phòng
+      operationId: room_post_api_v1_floors_floor_id_rooms_bulk
+      description: Atomic transaction; mỗi phòng phát RoomCreated vào outbox. Nếu trùng room_code, rollback cả lô.
+      parameters:
+      - name: floor_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema: *id001
+        description: UUID/string do caller cung cấp để retry POST an toàn; database có ràng buộc độc lập.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoomBulkCreate'
+      responses:
+        '201':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Room'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/rooms:
+    get:
+      tags:
+      - Room
+      summary: Danh sách phòng
+      operationId: room_get_api_v1_rooms
+      parameters:
+      - name: property_id
+        in: query
+        required: false
+        description: property_id
+        schema:
+          type: string
+          format: uuid
+      - name: status
+        in: query
+        required: false
+        description: status
+        schema:
+          type: string
+      - name: occupancy
+        in: query
+        required: false
+        description: occupancy
+        schema:
+          type: string
+      - *id002
+      - *id003
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomList'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/rooms/{room_id}:
+    get:
+      tags:
+      - Room
+      summary: Chi tiết phòng
+      operationId: room_get_api_v1_rooms_room_id
+      parameters:
+      - name: room_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Room'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    patch:
+      tags:
+      - Room
+      summary: Cập nhật thông tin phòng
+      operationId: room_patch_api_v1_rooms_room_id
+      description: Không trực tiếp PATCH occupancy_contract_id; chỉ cập nhật bởi ContractStarted/Ended events.
+      parameters:
+      - name: room_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                room_code: *id001
+                area_m2: &id011
+                  type: number
+                  description: Chỉ số tích lũy, không phải số tiêu thụ của lần gửi; Decimal(16,3).
+                listed_rent: &id006
+                  type: integer
+                  format: int64
+                  minimum: 0
+                status:
+                  type: string
+                  enum:
+                  - ACTIVE
+                  - INACTIVE
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Room'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /internal/v1/rooms/{room_id}/validation:
+    get:
+      tags:
+      - Internal-Room
+      summary: Tenant xác thực phòng trước khi tạo hợp đồng
+      operationId: internal_room_get_internal_v1_rooms_room_id_validation
+      parameters:
+      - name: room_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomValidation'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - ServiceToken: []
+      servers:
+      - url: http://room-service:8000
+        description: Internal only
+  /api/v1/tenants:
+    get:
+      tags:
+      - Tenant
+      summary: Danh sách người thuê
+      operationId: tenant_get_api_v1_tenants
+      parameters: *id004
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantList'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags:
+      - Tenant
+      summary: Tạo hồ sơ người thuê
+      operationId: tenant_post_api_v1_tenants
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantCreate'
+      responses:
+        '201':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tenant'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/tenants/{tenant_id}:
+    get:
+      tags:
+      - Tenant
+      summary: Chi tiết người thuê
+      operationId: tenant_get_api_v1_tenants_tenant_id
+      parameters:
+      - name: tenant_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tenant'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    patch:
+      tags:
+      - Tenant
+      summary: Cập nhật người thuê
+      operationId: tenant_patch_api_v1_tenants_tenant_id
+      parameters:
+      - name: tenant_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                full_name: *id001
+                phone: *id001
+                email:
+                  type: string
+                  format: email
+                note: *id001
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tenant'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/contracts:
+    get:
+      tags:
+      - Tenant
+      summary: Danh sách hợp đồng
+      operationId: tenant_get_api_v1_contracts
+      parameters:
+      - name: room_id
+        in: query
+        required: false
+        description: room_id
+        schema:
+          type: string
+          format: uuid
+      - name: status
+        in: query
+        required: false
+        description: status
+        schema:
+          type: string
+      - *id002
+      - *id003
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContractList'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags:
+      - Tenant
+      summary: Tạo hợp đồng nháp
+      operationId: tenant_post_api_v1_contracts
+      description: Chỉ tạo DRAFT; Tenant gọi Room validation, tra email người đại diện. Đặt điều khoản đầu tiên
+        trong transaction.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContractCreate'
+      responses:
+        '201':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contract'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/contracts/expiring:
+    get:
+      tags:
+      - Tenant
+      summary: Hợp đồng gần hết hạn
+      operationId: tenant_get_api_v1_contracts_expiring
+      parameters:
+      - name: within_days
+        in: query
+        required: false
+        description: Mặc định 7 ngày
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 90
+      - *id002
+      - *id003
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContractList'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/contracts/{contract_id}:
+    get:
+      tags:
+      - Tenant
+      summary: Chi tiết hợp đồng
+      operationId: tenant_get_api_v1_contracts_contract_id
+      parameters:
+      - name: contract_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contract'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    patch:
+      tags:
+      - Tenant
+      summary: Chỉnh hợp đồng nháp trước xác nhận
+      operationId: tenant_patch_api_v1_contracts_contract_id
+      description: Chỉ DRAFT, ghi ContractEvent thay đổi; sau confirm dùng renew/end flows.
+      parameters:
+      - name: contract_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                start_date: &id005
+                  type: string
+                  format: date
+                  description: Ngày lịch YYYY-MM-DD; quy tắc bao gồm hoặc không bao gồm phụ thuộc trường nghiệp vụ.
+                end_date: *id005
+                representative_tenant_id: &id009
+                  type: string
+                  format: uuid
+                deposit_amount: *id006
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contract'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/contracts/{contract_id}/terms:
+    get:
+      tags:
+      - Tenant
+      summary: Danh sách điều khoản theo thời gian
+      operationId: tenant_get_api_v1_contracts_contract_id_terms
+      parameters:
+      - name: contract_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContractTermList'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags:
+      - Tenant
+      summary: Thêm phiên bản điều khoản mới
+      operationId: tenant_post_api_v1_contracts_contract_id_terms
+      description: Giá mới thông thường hiệu lực từ đầu tháng kế tiếp, không ghi đè giá cũ.
+      parameters:
+      - name: contract_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TermInput'
+      responses:
+        '201':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContractTerm'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/contracts/{contract_id}/events:
+    get:
+      tags:
+      - Tenant
+      summary: Lịch sử thay đổi hợp đồng
+      operationId: tenant_get_api_v1_contracts_contract_id_events
+      parameters:
+      - name: contract_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - *id002
+      - *id003
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContractEventList'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/contracts/{contract_id}/confirm:
+    post:
+      tags:
+      - Tenant
+      summary: Xác nhận hợp đồng nháp
+      operationId: tenant_post_api_v1_contracts_contract_id_confirm
+      description: DRAFT→SCHEDULED; kiểm tra trùng lịch theo EXCLUDE. Job đến ngày start_date mới kiểm tra phòng
+        có ACTIVE hoặc EXPIRED_PENDING khác không; nếu có, giữ SCHEDULED và cảnh báo. Khi kích hoạt thành công phát
+        ContractStarted có effective_at = 00:00 start_date giờ VN.
+      parameters:
+      - name: contract_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contract'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/contracts/{contract_id}/renew:
+    post:
+      tags:
+      - Tenant
+      summary: Gia hạn hợp đồng
+      operationId: tenant_post_api_v1_contracts_contract_id_renew
+      description: Cập nhật end_date, lưu contract_events; kiểm tra chồng lấn và version term.
+      parameters:
+      - name: contract_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RenewContract'
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contract'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/contracts/{contract_id}/end:
+    post:
+      tags:
+      - Tenant
+      summary: Xác nhận kết thúc hợp đồng
+      operationId: tenant_post_api_v1_contracts_contract_id_end
+      description: >-
+        Xác nhận actual_end_date trong [start_date, end_date], bao gồm cả hai đầu.
+        Nếu effective_at (00:00 ngày sau actual_end_date, Asia/Ho_Chi_Minh)
+        còn ở tương lai, hợp đồng giữ ACTIVE đến mốc đó; job lifecycle mới
+        chuyển ENDED và phát ContractEnded. Nếu mốc đã qua, xử lý ngay.
+        EXPIRED_PENDING muốn tính thêm ngày phải gia hạn trước; hợp đồng
+        SCHEDULED chưa đến hiệu lực thì dùng cancel. Không có bàn giao riêng.
+      parameters:
+      - name: contract_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EndContract'
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contract'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/contracts/{contract_id}/cancel:
+    post:
+      tags:
+      - Tenant
+      summary: Hủy hợp đồng chưa có hiệu lực
+      operationId: tenant_post_api_v1_contracts_contract_id_cancel
+      parameters:
+      - name: contract_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Reason'
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contract'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/jobs/contracts/lifecycle/run:
+    post:
+      tags:
+      - Tenant
+      summary: Kích hoạt job vòng đời hợp đồng cho demo
+      operationId: tenant_post_api_v1_jobs_contracts_lifecycle_run
+      description: Chạy tay job vòng đời cho admin/demo. Job SCHEDULED→ACTIVE kiểm tra lại ACTIVE/EXPIRED_PENDING
+        theo room_id; nếu xung đột giữ SCHEDULED và cảnh báo. Quá hạn chưa kết thúc thành EXPIRED_PENDING, không
+        tự tạo ContractEnded.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                as_of: &id007
+                  type: string
+                  format: date-time
+      responses:
+        '202':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LifecycleResult'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /internal/v1/contracts/{contract_id}/billing-context:
+    get:
+      tags:
+      - Internal-Tenant
+      summary: Billing lấy snapshot hợp đồng và điều khoản trong kỳ
+      operationId: internal_tenant_get_internal_v1_contracts_contract_id_billing_context
+      description: Không trả giá từ DB Billing. Nếu hợp đồng chưa có ngày xác nhận kết thúc thì không tính thêm
+        thời gian sau ngày kết thúc đã thỏa thuận.
+      parameters:
+      - name: contract_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: period_start
+        in: query
+        required: true
+        description: period_start
+        schema:
+          type: string
+          format: date
+      - name: period_end_exclusive
+        in: query
+        required: true
+        description: period_end_exclusive
+        schema:
+          type: string
+          format: date
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BillingContext'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - ServiceToken: []
+      servers:
+      - url: http://tenant-service:8000
+        description: Internal only
+  /api/v1/rooms/{room_id}/meters:
+    get:
+      tags:
+      - Metering
+      summary: Đồng hồ điện nước của phòng
+      operationId: metering_get_api_v1_rooms_room_id_meters
+      parameters:
+      - name: room_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeterList'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/meters/{meter_id}/readings:
+    get:
+      tags:
+      - Metering
+      summary: Lịch sử số đo của đồng hồ
+      operationId: metering_get_api_v1_meters_meter_id_readings
+      parameters:
+      - name: meter_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: from
+        in: query
+        required: false
+        description: from
+        schema:
+          type: string
+          format: date-time
+      - name: to
+        in: query
+        required: false
+        description: to
+        schema:
+          type: string
+          format: date-time
+      - *id002
+      - *id003
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadingList'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/meters/{meter_id}/cutoffs:
+    get:
+      tags:
+      - Metering
+      summary: Các mốc chốt đồng hồ
+      operationId: metering_get_api_v1_meters_meter_id_cutoffs
+      parameters:
+      - name: meter_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - *id002
+      - *id003
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CutoffList'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/meter-cutoffs/{cutoff_id}/confirm:
+    post:
+      tags:
+      - Metering
+      summary: Chốt chỉ số thiếu dữ liệu bằng tay
+      operationId: metering_post_api_v1_meter_cutoffs_cutoff_id_confirm
+      description: Chỉ cho phép với PENDING; ghi nhận manual_reason + confirmed_by qua JWT.
+      parameters:
+      - name: cutoff_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmCutoff'
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cutoff'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/meter-cutoffs/{cutoff_id}/corrections:
+    post:
+      tags:
+      - Metering
+      summary: Yêu cầu phiên bản chốt thay thế
+      operationId: metering_post_api_v1_meter_cutoffs_cutoff_id_corrections
+      description: Không sửa bản CONFIRMED; không tự sửa hóa đơn đã phát hành.
+      parameters:
+      - name: cutoff_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CutoffCorrection'
+      responses:
+        '201':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cutoff'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/meter-alerts:
+    get:
+      tags:
+      - Metering
+      summary: Danh sách cảnh báo đồng hồ
+      operationId: metering_get_api_v1_meter_alerts
+      parameters:
+      - name: status
+        in: query
+        required: false
+        description: status
+        schema:
+          type: string
+      - name: alert_type
+        in: query
+        required: false
+        description: alert_type
+        schema:
+          type: string
+      - *id002
+      - *id003
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeterAlertList'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/meter-alerts/{alert_id}/resolve:
+    post:
+      tags:
+      - Metering
+      summary: Xác nhận xử lý cảnh báo
+      operationId: metering_post_api_v1_meter_alerts_alert_id_resolve
+      parameters:
+      - name: alert_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                resolution_note: *id001
+              required:
+              - resolution_note
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeterAlert'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/jobs/meters/monthly-cutoffs/run:
+    post:
+      tags:
+      - Metering
+      summary: Chạy chốt chỉ số tháng (demo)
+      operationId: metering_post_api_v1_jobs_meters_monthly_cutoffs_run
+      description: Chốt chỉ số tại 00:00 ngày 1 giờ VN cho mọi meter ACTIVE, cả phòng trống. UNIQUE(meter_id, cutoff_at)
+        WHERE status <> SUPERSEDED. Nếu cùng thời điểm đã có cutoff, dùng lại; không ghi đè số CONFIRMED.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                cutoff_at: *id007
+              required:
+              - cutoff_at
+      responses:
+        '202':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeterCutoffRunResult'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /internal/v1/meters:
+    get:
+      tags:
+      - Internal-Metering
+      summary: Simulator tải danh sách đồng hồ đang hoạt động
+      operationId: internal_metering_get_internal_v1_meters
+      parameters:
+      - name: status
+        in: query
+        required: false
+        description: ACTIVE
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeterList'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - ServiceToken: []
+      servers:
+      - url: http://metering-service:8000
+        description: Internal only
+  /internal/v1/rooms/{room_id}/usage:
+    get:
+      tags:
+      - Internal-Metering
+      summary: Billing lấy tiêu thụ đã chốt và ID cutoff
+      operationId: internal_metering_get_internal_v1_rooms_room_id_usage
+      description: Truy vấn tiêu thụ cho khoảng [period_start,period_end_exclusive); nếu thiếu cutoff trả PENDING_CUTOFF
+        và missing_cutoffs. Mỗi meter/cutoff_at chỉ có một bản chốt hiệu lực, dùng chung khi trùng mốc tháng/hợp
+        đồng. Không suy diễn số liệu nếu thiếu dữ liệu, Billing giữ DRAFT blocked_reason.
+      parameters:
+      - name: room_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: contract_id
+        in: query
+        required: true
+        description: contract_id
+        schema:
+          type: string
+          format: uuid
+      - name: period_start
+        in: query
+        required: true
+        description: period_start
+        schema:
+          type: string
+          format: date
+      - name: period_end_exclusive
+        in: query
+        required: true
+        description: period_end_exclusive
+        schema:
+          type: string
+          format: date
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsageSummary'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - ServiceToken: []
+      servers:
+      - url: http://metering-service:8000
+        description: Internal only
+  /api/v1/invoices:
+    get:
+      tags:
+      - Billing
+      summary: Danh sách hóa đơn
+      operationId: billing_get_api_v1_invoices
+      parameters:
+      - name: contract_id
+        in: query
+        required: false
+        description: contract_id
+        schema:
+          type: string
+          format: uuid
+      - name: status
+        in: query
+        required: false
+        description: status
+        schema:
+          type: string
+      - name: billing_month
+        in: query
+        required: false
+        description: billing_month
+        schema:
+          type: string
+          format: date
+      - *id002
+      - *id003
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceList'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/invoices/{invoice_id}:
+    get:
+      tags:
+      - Billing
+      summary: Chi tiết hóa đơn và các dòng tiền
+      operationId: billing_get_api_v1_invoices_invoice_id
+      parameters:
+      - name: invoice_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invoice'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/invoices/{invoice_id}/issue:
+    post:
+      tags:
+      - Billing
+      summary: Phát hành hóa đơn nháp đủ dữ liệu
+      operationId: billing_post_api_v1_invoices_invoice_id_issue
+      description: DRAFT→ISSUED; tạo access control metadata/outbox InvoiceIssued cùng transaction, không bỏ token
+        gốc vào sự kiện. Thời gian invoice dùng [period_start, period_end) (mốc cuối không bao gồm); không dùng
+        end_date + 1 trong constraint invoices. Hóa đơn FINAL không được tính trùng phần đã có hóa đơn.
+      parameters:
+      - name: invoice_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invoice'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/invoices/{invoice_id}/void:
+    post:
+      tags:
+      - Billing
+      summary: Hủy hóa đơn chưa thanh toán
+      operationId: billing_post_api_v1_invoices_invoice_id_void
+      description: Không cho VOID hóa đơn PAID hay khi payment attempt PENDING; thu hồi toàn bộ token.
+      parameters:
+      - name: invoice_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Reason'
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invoice'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/invoices/{invoice_id}/reissue:
+    post:
+      tags:
+      - Billing
+      summary: Phát hành bản hóa đơn sửa
+      operationId: billing_post_api_v1_invoices_invoice_id_reissue
+      description: Chỉ trước khi PAID, từ hóa đơn đã phát hành; bản cũ chuyển VOID và bản mới revision+1.
+      parameters:
+      - name: invoice_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Reason'
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invoice'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/invoices/{invoice_id}/reminders:
+    post:
+      tags:
+      - Billing
+      summary: Yêu cầu gửi nhắc nợ
+      operationId: billing_post_api_v1_invoices_invoice_id_reminders
+      description: Phát InvoiceReminderRequested với dedupe_key theo invoice_id và ngày VN. Scheduler tự chạy hằng
+        ngày; Notification phải gọi reminder-eligibility ngay trước gửi, Billing không sẵn sàng thì retry.
+      parameters:
+      - name: invoice_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema: *id001
+        description: UUID/string do caller cung cấp để retry POST an toàn; database có ràng buộc độc lập.
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invoice'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/invoices/{invoice_id}/payment-attempts:
+    get:
+      tags:
+      - Billing
+      summary: Các lần thử thanh toán của hóa đơn
+      operationId: billing_get_api_v1_invoices_invoice_id_payment_attempts
+      parameters:
+      - name: invoice_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentAttemptList'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/invoices/{invoice_id}/adjustments:
+    get:
+      tags:
+      - Billing
+      summary: Yêu cầu điều chỉnh sau thanh toán
+      operationId: billing_get_api_v1_invoices_invoice_id_adjustments
+      parameters:
+      - name: invoice_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceAdjustmentList'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags:
+      - Billing
+      summary: Ghi nhận yêu cầu điều chỉnh
+      operationId: billing_post_api_v1_invoices_invoice_id_adjustments
+      description: Chỉ tạo cho hóa đơn PAID; không đổi total_amount hoặc tự hoàn tiền.
+      parameters:
+      - name: invoice_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdjustmentCreate'
+      responses:
+        '201':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceAdjustment'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/invoice-adjustments/{adjustment_id}/resolve:
+    post:
+      tags:
+      - Billing
+      summary: Đóng yêu cầu điều chỉnh
+      operationId: billing_post_api_v1_invoice_adjustments_adjustment_id_resolve
+      parameters:
+      - name: adjustment_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResolveAdjustment'
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceAdjustment'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/billing-runs:
+    get:
+      tags:
+      - Billing
+      summary: Lịch sử tác vụ lập hóa đơn
+      operationId: billing_get_api_v1_billing_runs
+      parameters: *id004
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BillingRunList'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags:
+      - Billing
+      summary: Tạo tác vụ lập hóa đơn theo tháng
+      operationId: billing_post_api_v1_billing_runs
+      description: Job định kỳ mặc định chạy lúc 02:00 ngày 1 giờ VN (sau monthly cutoff lúc 00:00). Dùng unique/EXCLUDE
+        [period_start,period_end) chống trùng khi rerun/multiple replicas. Các hóa đơn thiếu dữ liệu giữ DRAFT với
+        blocked_reason và được job quét lại định kỳ.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BillingRunRequest'
+      responses:
+        '202':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BillingRun'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema: *id001
+        description: UUID/string do caller cung cấp để retry POST an toàn; database có ràng buộc độc lập.
+  /public/v1/invoices/{token}:
+    get:
+      tags:
+      - Public
+      summary: Xem hóa đơn qua token
+      operationId: public_get_public_v1_invoices_token
+      description: 'Token ngẫu nhiên, chỉ lưu hash, có hạn và thu hồi được. Không trả thông tin nhạy cảm. Ẩn URL
+        chứa token khỏi Nginx/Billing access logs; response có Referrer-Policy: no-referrer và Cache-Control: no-store.'
+      parameters:
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoicePublicView'
+          headers:
+            Referrer-Policy:
+              description: Hạn chế token URL bị gửi sang trang khác
+              schema:
+                type: string
+                const: no-referrer
+            Cache-Control:
+              description: Không cache nội dung hóa đơn/thanh toán
+              schema:
+                type: string
+                const: no-store
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security: []
+  /public/v1/invoices/{token}/payments/momo:
+    post:
+      tags:
+      - Public
+      summary: Tạo hoặc sử dụng lại phiên MoMo đang chờ
+      operationId: public_post_public_v1_invoices_token_payments_momo
+      description: Chỉ thanh toán đầy đủ hóa đơn ISSUED. Ghi payment_attempt PENDING vào DB trước khi gọi MoMo.
+        Nếu có attempt PENDING khác thì dùng lại pay_url khi có; nếu chưa có URL thì trả trạng thái PENDING/đang
+        đối soát, không mở phiên mới. Timeout hoặc kết quả chưa rõ giữ PENDING; chỉ FAILED khi kết quả thất bại
+        chắc chắn.
+      parameters:
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema: *id001
+        description: UUID/string do caller cung cấp để retry POST an toàn; database có ràng buộc độc lập.
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MomoPaymentSession'
+          headers:
+            Referrer-Policy:
+              description: Hạn chế token URL bị gửi sang trang khác
+              schema:
+                type: string
+                const: no-referrer
+            Cache-Control:
+              description: Không cache nội dung hóa đơn/thanh toán
+              schema:
+                type: string
+                const: no-store
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security: []
+  /webhooks/momo/ipn:
+    post:
+      tags:
+      - Public
+      summary: MoMo callback thông báo kết quả thanh toán
+      operationId: public_post_webhooks_momo_ipn
+      description: Xác minh HMAC theo tài liệu tích hợp MoMo Sandbox đang sử dụng, dùng raw data canonical theo
+        MoMo; kiểm tra orderId, amount, payment status; idempotent + đối soát. Không tin redirect từ trình duyệt.
+        Cấu trúc request là subset thực tế dùng cho validation; đối chiếu với tài liệu MoMo trước triển khai. Theo
+        tài liệu MoMo Payment Notification, callback IPN được đáp 204 No Content. Payload bên dưới là subset các
+        trường cốt lõi; responseTime/orderInfo/orderType/payType/extraData có thể cần để xác minh HMAC. Nếu IPN
+        đến muộn, vẫn đối chiếu với payment_attempt và đưa vào quy trình đối soát, không tự bỏ qua chỉ vì status
+        tạm thời EXPIRED.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                partnerCode: *id001
+                orderId: *id001
+                requestId: *id001
+                amount:
+                  type: integer
+                resultCode:
+                  type: integer
+                transId:
+                  type: integer
+                message: *id001
+                signature: *id001
+                orderInfo:
+                  type: string
+                orderType:
+                  type: string
+                payType:
+                  type: string
+                responseTime:
+                  type: integer
+                  format: int64
+                extraData:
+                  type: string
+              required:
+              - partnerCode
+              - orderId
+              - requestId
+              - amount
+              - resultCode
+              - signature
+      responses:
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '204':
+          description: MoMo IPN nhận và xử lý/ghi nhận (no content); xác minh chữ ký và đối soát trước ghi SUCCESS.
+      security: []
+  /internal/v1/invoices/{invoice_id}/reminder-eligibility:
+    get:
+      tags:
+      - Internal-Billing
+      summary: Notification kiểm tra hóa đơn còn nợ trước nhắc
+      operationId: internal_billing_get_internal_v1_invoices_invoice_id_reminder_eligibility
+      parameters:
+      - name: invoice_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReminderEligibility'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - ServiceToken: []
+      servers:
+      - url: http://billing-service:8000
+        description: Internal only
+  /internal/v1/invoices/{invoice_id}/access-links:
+    post:
+      tags:
+      - Internal-Billing
+      summary: Notification xin liên kết hóa đơn có thời hạn
+      operationId: internal_billing_post_internal_v1_invoices_invoice_id_access_links
+      description: Chỉ tạo access link cho hóa đơn ISSUED; nếu PAID/VOID/DRAFT trả 409 INVOICE_NOT_ISSUED. Notification
+        nhận 409 khi gửi link hóa đơn thì đánh dấu email job SKIPPED. Chỉ lưu token_hash; tuyệt đối không ghi token
+        gốc vào RabbitMQ/access logs.
+      parameters:
+      - name: invoice_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccessLinkRequest'
+      responses:
+        '201':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessLink'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - ServiceToken: []
+      servers:
+      - url: http://billing-service:8000
+        description: Internal only
+  /api/v1/email-jobs:
+    get:
+      tags:
+      - Notification
+      summary: Danh sách tác vụ email
+      operationId: notification_get_api_v1_email_jobs
+      parameters:
+      - name: status
+        in: query
+        required: false
+        description: status
+        schema:
+          type: string
+      - name: email_type
+        in: query
+        required: false
+        description: email_type
+        schema:
+          type: string
+      - *id002
+      - *id003
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailJobList'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/email-jobs/{job_id}:
+    get:
+      tags:
+      - Notification
+      summary: Chi tiết tác vụ email
+      operationId: notification_get_api_v1_email_jobs_job_id
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailJob'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/email-jobs/{job_id}/retry:
+    post:
+      tags:
+      - Notification
+      summary: Thử gửi lại tác vụ thất bại
+      operationId: notification_post_api_v1_email_jobs_job_id_retry
+      description: Chỉ cho phép với FAILED; với REMINDER luôn kiểm tra Billing trước gửi lại.
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailJob'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /health:
+    get:
+      tags:
+      - Operations
+      summary: Liveness của từng service
+      operationId: operations_get_health
+      description: Chạy trên port nội bộ từng service, không phụ thuộc DB/RabbitMQ. Không nhất thiết expose qua
+        Gateway.
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+      security: []
+  /ready:
+    get:
+      tags:
+      - Operations
+      summary: Readiness của từng service
+      operationId: operations_get_ready
+      description: Kiểm tra các phụ thuộc tối thiểu; dùng 503 khi chưa sẵn sàng.
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+        '503':
+          description: Service not ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+      security: []
+  /internal/v1/contracts/billable:
+    get:
+      tags:
+      - Internal-Tenant
+      summary: Billing liệt kê hợp đồng giao với kỳ cần tính
+      operationId: internal_tenant_get_internal_v1_contracts_billable
+      description: Lấy cả hợp đồng ENDED đã có phát sinh trong kỳ; loại CANCELLED/DRAFT. Hạn EXPIRED_PENDING không
+        tự tính vượt end_date.
+      parameters:
+      - name: period_start
+        in: query
+        required: true
+        description: period_start
+        schema:
+          type: string
+          format: date
+      - name: period_end_exclusive
+        in: query
+        required: true
+        description: period_end_exclusive
+        schema:
+          type: string
+          format: date
+      - name: cursor
+        in: query
+        required: false
+        description: cursor
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        description: limit
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BillableContractsPage'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - ServiceToken: []
+      servers:
+      - url: http://tenant-service:8000
+        description: Internal only
+  /api/v1/buildings/{building_id}:
+    patch:
+      tags:
+      - Room
+      summary: Cập nhật tên/trạng thái dãy
+      operationId: room_patch_api_v1_buildings_building_id
+      parameters:
+      - name: building_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: *id001
+                status:
+                  type: string
+                  enum:
+                  - ACTIVE
+                  - INACTIVE
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Building'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/floors/{floor_id}:
+    patch:
+      tags:
+      - Room
+      summary: Cập nhật tên/trạng thái tầng
+      operationId: room_patch_api_v1_floors_floor_id
+      parameters:
+      - name: floor_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: *id001
+                status:
+                  type: string
+                  enum:
+                  - ACTIVE
+                  - INACTIVE
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Floor'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Xung đột nghiệp vụ / ràng buộc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Dữ liệu không thỏa điều kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Phụ thuộc nội bộ chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/final-invoices:
+    post:
+      tags:
+      - Billing
+      summary: Lập hóa đơn quyết toán cho phần còn lại khi hợp đồng kết thúc
+      operationId: billing_post_api_v1_final_invoices
+      description: Chỉ hợp đồng ENDED. Billing đọc context từ Tenant và các cutoff CONTRACT_END/MONTHLY từ Metering.
+        Chỉ tính phần chưa phủ bởi hóa đơn PERIODIC hoặc FINAL chưa VOID. Tạo DRAFT nếu thiếu chỉ số; idempotent
+        theo contract. Job hàng tháng cũng có thể phát FINAL thay PERIODIC cho tháng kết thúc. Thời gian invoice
+        dùng [period_start, period_end) (mốc cuối không bao gồm); không dùng end_date + 1 trong constraint invoices.
+        Hóa đơn FINAL không được tính trùng phần đã có hóa đơn.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FinalInvoiceRequest'
+      responses:
+        '201':
+          description: Tạo hóa đơn FINAL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invoice'
+        '409':
+          description: Chưa đủ điều kiện hoặc không còn khoản nào chưa tính
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/jobs/payments/reconcile/run:
+    post:
+      tags:
+      - Billing
+      summary: Chạy đối soát các giao dịch MoMo PENDING (admin/demo)
+      operationId: billing_run_payment_reconciliation
+      description: Đối soát MoMo PENDING theo phiên hoặc theo nhóm. Nếu trạng thái chưa rõ, giữ PENDING. Không sửa
+        hóa đơn nếu chưa xác minh giao dịch.
+      security:
+      - BearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                payment_attempt_id:
+                  type: string
+                  format: uuid
+                  description: Tùy chọn, đối soát đúng một attempt
+                limit:
+                  type: integer
+                  minimum: 1
+                  maximum: 100
+                  default: 50
+              additionalProperties: false
+      responses:
+        '200':
+          description: Kết quả đối soát
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  checked_count:
+                    type: integer
+                    minimum: 0
+                  succeeded_count:
+                    type: integer
+                    minimum: 0
+                  failed_count:
+                    type: integer
+                    minimum: 0
+                  still_pending_count:
+                    type: integer
+                    minimum: 0
+                required:
+                - checked_count
+                - succeeded_count
+                - failed_count
+                - still_pending_count
+        '400': &id008
+          description: Lỗi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401': *id008
+        '403': *id008
+        '503': *id008
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    ServiceToken:
+      type: apiKey
+      in: header
+      name: X-Service-Token
+      description: Token riêng cho API nội bộ trong Docker network; không expose public.
+  schemas:
+    Error:
+      type: object
+      properties:
+        code: *id001
+        message: *id001
+        correlation_id: *id009
+        details:
+          type: object
+          additionalProperties: true
+      required:
+      - code
+      - message
+      - correlation_id
+    PageMeta:
+      type: object
+      properties:
+        page:
+          type: integer
+          minimum: 1
+        page_size:
+          type: integer
+          minimum: 1
+          maximum: 100
+        total:
+          type: integer
+          minimum: 0
+      required:
+      - page
+      - page_size
+      - total
+    Property:
+      type: object
+      properties:
+        id: *id009
+        name: *id001
+        address: *id001
+        description:
+          type:
+          - string
+          - 'null'
+        status:
+          type: string
+          enum:
+          - ACTIVE
+          - INACTIVE
+      required:
+      - id
+      - name
+      - address
+      - status
+    PropertyCreate:
+      type: object
+      properties:
+        name: *id001
+        address: *id001
+        description: *id001
+      required:
+      - name
+      - address
+    Building:
+      type: object
+      properties:
+        id: *id009
+        property_id: *id009
+        name: *id001
+        status:
+          type: string
+          enum:
+          - ACTIVE
+          - INACTIVE
+      required:
+      - id
+      - property_id
+      - name
+      - status
+    BuildingCreate:
+      type: object
+      properties:
+        name: *id001
+      required:
+      - name
+    Floor:
+      type: object
+      properties:
+        id: *id009
+        building_id: *id009
+        floor_number:
+          type: integer
+        name: *id001
+        status:
+          type: string
+          enum:
+          - ACTIVE
+          - INACTIVE
+      required:
+      - id
+      - building_id
+      - floor_number
+      - status
+    FloorCreate:
+      type: object
+      properties:
+        floor_number:
+          type: integer
+        name: *id001
+      required:
+      - floor_number
+    Room:
+      type: object
+      properties:
+        id: *id009
+        property_id: *id009
+        floor_id: *id009
+        room_code: *id001
+        area_m2:
+          type: number
+          exclusiveMinimum: 0
+        listed_rent: *id006
+        status:
+          type: string
+          enum:
+          - ACTIVE
+          - INACTIVE
+        occupancy_contract_id: *id009
+        display_occupancy:
+          type: string
+          enum:
+          - VACANT
+          - OCCUPIED
+          - INACTIVE
+        occupancy_updated_at: *id007
+      required:
+      - id
+      - floor_id
+      - room_code
+      - area_m2
+      - listed_rent
+      - status
+      - display_occupancy
+    RoomCreateItem:
+      type: object
+      properties:
+        room_code: *id001
+        area_m2:
+          type: number
+          exclusiveMinimum: 0
+        listed_rent: *id006
+      required:
+      - room_code
+      - area_m2
+      - listed_rent
+    RoomBulkCreate:
+      type: object
+      properties:
+        rooms:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/RoomCreateItem'
+      required:
+      - rooms
+      description: Một transaction; trùng mã thì rollback cả lô và không phát RoomCreated.
+    Tenant:
+      type: object
+      properties:
+        id: *id009
+        full_name: *id001
+        phone: *id001
+        email:
+          type: string
+          format: email
+        note: *id001
+      required:
+      - id
+      - full_name
+    TenantCreate:
+      type: object
+      properties:
+        full_name: *id001
+        phone: *id001
+        email:
+          type: string
+          format: email
+        note: *id001
+      required:
+      - full_name
+    ContractTerm:
+      type: object
+      properties:
+        id: *id009
+        contract_id: *id009
+        effective_from: *id005
+        effective_to: *id005
+        monthly_rent: *id006
+        electricity_unit_price: *id006
+        water_unit_price: *id006
+        monthly_service_fee: *id006
+      required:
+      - id
+      - contract_id
+      - effective_from
+      - monthly_rent
+      - electricity_unit_price
+      - water_unit_price
+      - monthly_service_fee
+    TermInput:
+      type: object
+      properties:
+        effective_from: *id005
+        effective_to: *id005
+        monthly_rent: *id006
+        electricity_unit_price: *id006
+        water_unit_price: *id006
+        monthly_service_fee: *id006
+      required:
+      - effective_from
+      - monthly_rent
+      - electricity_unit_price
+      - water_unit_price
+    Contract:
+      type: object
+      properties:
+        id: *id009
+        contract_code: *id001
+        room_id: *id009
+        room_code_snapshot: *id001
+        representative_tenant_id: *id009
+        start_date: *id005
+        end_date: *id005
+        actual_end_date: *id005
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - SCHEDULED
+          - ACTIVE
+          - EXPIRED_PENDING
+          - ENDED
+          - CANCELLED
+        deposit_amount: *id006
+        end_reason: *id001
+      required:
+      - id
+      - contract_code
+      - room_id
+      - representative_tenant_id
+      - start_date
+      - end_date
+      - status
+    ContractCreate:
+      type: object
+      properties:
+        contract_code: *id001
+        room_id: *id009
+        representative_tenant_id: *id009
+        start_date: *id005
+        end_date: *id005
+        deposit_amount: *id006
+        initial_terms:
+          $ref: '#/components/schemas/TermInput'
+      required:
+      - contract_code
+      - room_id
+      - representative_tenant_id
+      - start_date
+      - end_date
+      - initial_terms
+    ContractEvent:
+      type: object
+      properties:
+        id: *id009
+        contract_id: *id009
+        event_type: *id001
+        occurred_at: *id007
+        actor_id: *id009
+        reason: *id001
+        details:
+          type: object
+          additionalProperties: true
+      required:
+      - id
+      - contract_id
+      - event_type
+      - occurred_at
+    RenewContract:
+      type: object
+      properties:
+        new_end_date: *id005
+        reason: *id001
+        new_terms:
+          $ref: '#/components/schemas/TermInput'
+      required:
+      - new_end_date
+    EndContract:
+      type: object
+      properties:
+        actual_end_date: *id005
+        reason: *id001
+      required:
+      - actual_end_date
+      - reason
+      description: Chủ trọ xác nhận kết thúc thực tế, không yêu cầu bước bàn giao riêng.
+    Reason:
+      type: object
+      properties:
+        reason: *id001
+      required:
+      - reason
+    LifecycleResult:
+      type: object
+      properties:
+        job_id: *id009
+        processed:
+          type: integer
+        started:
+          type: integer
+        pending_end:
+          type: integer
+      required:
+      - job_id
+      - processed
+    BillingTerm:
+      type: object
+      properties:
+        id: *id009
+        effective_from: *id005
+        effective_to: *id005
+        monthly_rent: *id006
+        electricity_unit_price: *id006
+        water_unit_price: *id006
+        monthly_service_fee: *id006
+      required:
+      - id
+      - effective_from
+      - monthly_rent
+      - electricity_unit_price
+      - water_unit_price
+      - monthly_service_fee
+    BillingContext:
+      type: object
+      properties:
+        contract_id: *id009
+        room_id: *id009
+        contract_status: *id001
+        tenant_name: *id001
+        tenant_email:
+          type: string
+          format: email
+        room_code: *id001
+        chargeable_from: *id005
+        chargeable_to_exclusive: *id005
+        terms:
+          type: array
+          items:
+            $ref: '#/components/schemas/BillingTerm'
+      required:
+      - contract_id
+      - room_id
+      - contract_status
+      - chargeable_from
+      - chargeable_to_exclusive
+      - terms
+    RoomValidation:
+      type: object
+      properties:
+        room_id: *id009
+        exists: &id010
+          type: boolean
+        operational: *id010
+        property_id: *id009
+        room_code: *id001
+      required:
+      - room_id
+      - exists
+      - operational
+    Meter:
+      type: object
+      properties:
+        id: *id009
+        room_id: *id009
+        meter_code: *id001
+        meter_type:
+          type: string
+          enum:
+          - ELECTRICITY
+          - WATER
+        unit:
+          type: string
+          enum:
+          - KWH
+          - M3
+        initial_reading: *id011
+        status:
+          type: string
+          enum:
+          - ACTIVE
+          - INACTIVE
+        last_received_at: *id007
+      required:
+      - id
+      - room_id
+      - meter_code
+      - meter_type
+      - unit
+      - status
+    Reading:
+      type: object
+      properties:
+        meter_id: *id009
+        measured_at: *id007
+        reading_value: *id011
+        received_at: *id007
+        validation_status:
+          type: string
+          enum:
+          - VALID
+          - SUSPECT
+          - REJECTED
+        anomaly_reason: *id001
+      required:
+      - meter_id
+      - measured_at
+      - reading_value
+      - received_at
+      - validation_status
+    Cutoff:
+      type: object
+      properties:
+        id: *id009
+        meter_id: *id009
+        contract_id: *id009
+        cutoff_type:
+          type: string
+          enum:
+          - CONTRACT_START
+          - CONTRACT_END
+          - MONTHLY
+        cutoff_at: *id007
+        reading_value: *id011
+        source:
+          type: string
+          enum:
+          - AUTOMATIC
+          - MANUAL
+        status:
+          type: string
+          enum:
+          - PENDING
+          - CONFIRMED
+          - SUPERSEDED
+        manual_reason: *id001
+        confirmed_at: *id007
+        supersedes_id: *id009
+      required:
+      - id
+      - meter_id
+      - cutoff_type
+      - cutoff_at
+      - status
+    ConfirmCutoff:
+      type: object
+      properties:
+        reading_value: *id011
+        manual_reason: *id001
+      required:
+      - reading_value
+      - manual_reason
+      description: Nhập tay khi cutoff PENDING; bản CONFIRMED đã sử dụng không sửa trực tiếp.
+    CutoffCorrection:
+      type: object
+      properties:
+        reading_value: *id011
+        manual_reason: *id001
+      required:
+      - reading_value
+      - manual_reason
+      description: Tạo phiên bản thay thế, không tác động hóa đơn đã phát hành.
+    MeterAlert:
+      type: object
+      properties:
+        id: *id009
+        meter_id: *id009
+        alert_type:
+          type: string
+          enum:
+          - OFFLINE
+          - READING_DECREASE
+          - LATE_AFTER_CUTOFF
+          - CONFLICTING_DUPLICATE
+        status:
+          type: string
+          enum:
+          - OPEN
+          - RESOLVED
+        detected_at: *id007
+        detail:
+          type: object
+          additionalProperties: true
+      required:
+      - id
+      - meter_id
+      - alert_type
+      - status
+      - detected_at
+    UsageLine:
+      type: object
+      properties:
+        meter_id: *id009
+        meter_type:
+          type: string
+          enum:
+          - ELECTRICITY
+          - WATER
+        unit:
+          type: string
+          enum:
+          - KWH
+          - M3
+        start_cutoff_id: *id009
+        end_cutoff_id: *id009
+        start_reading: *id011
+        end_reading: *id011
+        consumption: *id011
+      required:
+      - meter_id
+      - meter_type
+      - unit
+      - start_cutoff_id
+      - end_cutoff_id
+      - start_reading
+      - end_reading
+      - consumption
+    UsageSummary:
+      type: object
+      properties:
+        room_id: *id009
+        contract_id: *id009
+        period_start: *id005
+        period_end_exclusive: *id005
+        status:
+          type: string
+          enum:
+          - READY
+          - PENDING_CUTOFF
+        missing_cutoffs:
+          type: array
+          items: *id001
+        utilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/UsageLine'
+      required:
+      - room_id
+      - contract_id
+      - period_start
+      - period_end_exclusive
+      - status
+      - utilities
+    MeterCutoffRunResult:
+      type: object
+      properties:
+        job_id: *id009
+        cutoff_at: *id007
+        confirmed_count:
+          type: integer
+        pending_count:
+          type: integer
+      required:
+      - job_id
+      - cutoff_at
+    InvoiceItem:
+      type: object
+      properties:
+        id: *id009
+        invoice_id: *id009
+        item_type:
+          type: string
+          enum:
+          - RENT
+          - ELECTRICITY
+          - WATER
+          - SERVICE
+        description: *id001
+        quantity: *id011
+        unit: *id001
+        unit_price:
+          type: number
+          description: Đơn giá hiển thị (4 chữ số thập phân). amount tính từ giá gốc/ngày theo Decimal, không suy
+            diễn lại từ số đã làm tròn nếu prorate.
+        amount: *id006
+        period_start: *id005
+        period_end: *id005
+        meter_start_value: *id011
+        meter_end_value: *id011
+        source_term_id: *id009
+        source_cutoff_start_id: *id009
+        source_cutoff_end_id: *id009
+      required:
+      - id
+      - invoice_id
+      - item_type
+      - description
+      - quantity
+      - unit_price
+      - amount
+    Invoice:
+      type: object
+      properties:
+        id: *id009
+        invoice_code: *id001
+        contract_id: *id009
+        room_id: *id009
+        invoice_type:
+          type: string
+          enum:
+          - PERIODIC
+          - FINAL
+        billing_month: *id005
+        period_start: *id005
+        period_end: *id005
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - ISSUED
+          - PAID
+          - VOID
+        blocked_reason: *id001
+        revision:
+          type: integer
+        replaces_invoice_id: *id009
+        total_amount: *id006
+        due_date: *id005
+        issued_at: *id007
+        paid_at: *id007
+        tenant_name_snapshot: *id001
+        tenant_email_snapshot: *id001
+        room_code_snapshot: *id001
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/InvoiceItem'
+      required:
+      - id
+      - invoice_code
+      - contract_id
+      - room_id
+      - invoice_type
+      - period_start
+      - period_end
+      - status
+      - total_amount
+      - due_date
+    InvoiceAdjustment:
+      type: object
+      properties:
+        id: *id009
+        invoice_id: *id009
+        reason: *id001
+        amount_delta:
+          type: integer
+          format: int64
+        status:
+          type: string
+          enum:
+          - OPEN
+          - RESOLVED
+          - REJECTED
+        resolution_note: *id001
+        created_at: *id007
+      required:
+      - id
+      - invoice_id
+      - reason
+      - amount_delta
+      - status
+    AdjustmentCreate:
+      type: object
+      properties:
+        reason: *id001
+        amount_delta:
+          type: integer
+          format: int64
+      required:
+      - reason
+      - amount_delta
+    ResolveAdjustment:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+          - RESOLVED
+          - REJECTED
+        resolution_note: *id001
+      required:
+      - status
+      - resolution_note
+    PaymentAttempt:
+      type: object
+      properties:
+        id: *id009
+        invoice_id: *id009
+        provider:
+          type: string
+          enum:
+          - MOMO
+        order_id: *id001
+        request_id: *id001
+        provider_transaction_id: *id001
+        amount: *id006
+        status:
+          type: string
+          enum:
+          - PENDING
+          - SUCCESS
+          - FAILED
+          - EXPIRED
+        pay_url: *id001
+        expires_at: *id007
+        result_code: *id001
+        confirmed_at: *id007
+      required:
+      - id
+      - invoice_id
+      - provider
+      - order_id
+      - request_id
+      - amount
+      - status
+    MomoPaymentSession:
+      type: object
+      properties:
+        payment_attempt_id: *id009
+        status:
+          type: string
+          enum:
+          - PENDING
+          - SUCCESS
+        pay_url:
+          type: string
+          format: uri
+        expires_at: *id007
+        reused_pending_attempt: *id010
+      required:
+      - payment_attempt_id
+      - status
+      - reused_pending_attempt
+    BillingRun:
+      type: object
+      properties:
+        id: *id009
+        billing_month: *id005
+        trigger_type:
+          type: string
+          enum:
+          - SCHEDULED
+          - MANUAL
+        status:
+          type: string
+          enum:
+          - RUNNING
+          - COMPLETED
+          - FAILED
+        started_at: *id007
+        finished_at: *id007
+        issued_count:
+          type: integer
+        waiting_count:
+          type: integer
+        skipped_count:
+          type: integer
+        failed_count:
+          type: integer
+      required:
+      - id
+      - billing_month
+      - trigger_type
+      - status
+      - started_at
+    BillingRunRequest:
+      type: object
+      properties:
+        billing_month: *id005
+      required:
+      - billing_month
+      description: Ngày đầu tháng cần phát hành, vd 2026-11-01; chạy lại không tạo hóa đơn trùng.
+    InvoicePublicView:
+      type: object
+      properties:
+        invoice_code: *id001
+        room_code: *id001
+        tenant_name: *id001
+        period_start: *id005
+        period_end: *id005
+        status:
+          type: string
+          enum:
+          - ISSUED
+          - PAID
+        total_amount: *id006
+        due_date: *id005
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/InvoiceItem'
+      required:
+      - invoice_code
+      - room_code
+      - period_start
+      - period_end
+      - status
+      - total_amount
+      - items
+    ReminderEligibility:
+      type: object
+      properties:
+        invoice_id: *id009
+        eligible: *id010
+        reason:
+          type: string
+          enum:
+          - OUTSTANDING
+          - ALREADY_PAID
+          - VOID
+          - NOT_ISSUED
+          - NOT_DUE
+      required:
+      - invoice_id
+      - eligible
+      - reason
+    AccessLinkRequest:
+      type: object
+      properties:
+        source_event_id: *id009
+        recipient_email:
+          type: string
+          format: email
+      required:
+      - source_event_id
+      - recipient_email
+      description: Xác thực service; Billing tạo token ngẫu nhiên chỉ trả về đúng một lần, DB chỉ lưu hash.
+    AccessLink:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+        expires_at: *id007
+      required:
+      - url
+      - expires_at
+    EmailJob:
+      type: object
+      properties:
+        id: *id009
+        source_event_id: *id009
+        email_type:
+          type: string
+          enum:
+          - INVOICE
+          - REMINDER
+          - PAYMENT_RECEIPT
+          - CONTRACT_EXPIRING
+        invoice_id: *id009
+        recipient_email:
+          type: string
+          format: email
+        subject: *id001
+        status:
+          type: string
+          enum:
+          - PENDING
+          - SENDING
+          - SENT
+          - FAILED
+          - SKIPPED
+        attempt_count:
+          type: integer
+        next_attempt_at: *id007
+        sent_at: *id007
+        last_error: *id001
+      required:
+      - id
+      - source_event_id
+      - email_type
+      - recipient_email
+      - status
+      - attempt_count
+    User:
+      type: object
+      properties:
+        id: *id009
+        email:
+          type: string
+          format: email
+        full_name: *id001
+        is_active: *id010
+      required:
+      - id
+      - email
+      - full_name
+      - is_active
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+      required:
+      - email
+      - password
+    LoginResponse:
+      type: object
+      properties:
+        access_token: *id001
+        token_type:
+          type: string
+          enum:
+          - bearer
+        expires_in:
+          type: integer
+        user:
+          $ref: '#/components/schemas/User'
+      required:
+      - access_token
+      - token_type
+      - expires_in
+      - user
+    Health:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+          - ok
+          - ready
+          - not_ready
+        service: *id001
+      required:
+      - status
+      - service
+    PropertyList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Property'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+      required:
+      - items
+      - meta
+    BuildingList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Building'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+      required:
+      - items
+      - meta
+    FloorList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Floor'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+      required:
+      - items
+      - meta
+    RoomList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Room'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+      required:
+      - items
+      - meta
+    TenantList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tenant'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+      required:
+      - items
+      - meta
+    ContractList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Contract'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+      required:
+      - items
+      - meta
+    ContractTermList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContractTerm'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+      required:
+      - items
+      - meta
+    ContractEventList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContractEvent'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+      required:
+      - items
+      - meta
+    MeterList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Meter'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+      required:
+      - items
+      - meta
+    ReadingList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Reading'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+      required:
+      - items
+      - meta
+    CutoffList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Cutoff'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+      required:
+      - items
+      - meta
+    MeterAlertList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MeterAlert'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+      required:
+      - items
+      - meta
+    InvoiceList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Invoice'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+      required:
+      - items
+      - meta
+    InvoiceAdjustmentList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/InvoiceAdjustment'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+      required:
+      - items
+      - meta
+    PaymentAttemptList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentAttempt'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+      required:
+      - items
+      - meta
+    BillingRunList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/BillingRun'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+      required:
+      - items
+      - meta
+    EmailJobList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmailJob'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+      required:
+      - items
+      - meta
+    BillableContract:
+      type: object
+      properties:
+        contract_id: *id009
+        room_id: *id009
+        status: *id001
+        start_date: *id005
+        end_date: *id005
+        actual_end_date: *id005
+      required:
+      - contract_id
+      - room_id
+      - status
+      - start_date
+      - end_date
+    BillableContractsPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/BillableContract'
+        next_cursor:
+          type: string
+      required:
+      - items
+      description: Cursor pagination; service only enumerates, not joins across DB.
+    FinalInvoiceRequest:
+      type: object
+      properties:
+        contract_id:
+          type: string
+          format: uuid
+      required:
+      - contract_id
+      description: Tạo DRAFT FINAL cho phần hợp đồng chưa được hóa đơn hợp lệ trước bao phủ; nếu không có khoản
+        mới thì trả 409/không tạo.
+security:
+- BearerAuth: []

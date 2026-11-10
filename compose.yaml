@@ -1,0 +1,180 @@
+name: rental-management
+
+x-service-common: &service-common
+  restart: unless-stopped
+  networks: [internal]
+  depends_on:
+    postgres:
+      condition: service_healthy
+    rabbitmq-init:
+      condition: service_completed_successfully
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: postgres
+      AUTH_DB_PASSWORD: ${AUTH_DB_PASSWORD:?Set AUTH_DB_PASSWORD in .env}
+      ROOM_DB_PASSWORD: ${ROOM_DB_PASSWORD:?Set ROOM_DB_PASSWORD in .env}
+      TENANT_DB_PASSWORD: ${TENANT_DB_PASSWORD:?Set TENANT_DB_PASSWORD in .env}
+      METERING_DB_PASSWORD: ${METERING_DB_PASSWORD:?Set METERING_DB_PASSWORD in .env}
+      BILLING_DB_PASSWORD: ${BILLING_DB_PASSWORD:?Set BILLING_DB_PASSWORD in .env}
+      NOTIFICATION_DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:?Set NOTIFICATION_DB_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init/01-create-databases.sh:/docker-entrypoint-initdb.d/01-create-databases.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+    networks: [internal]
+
+  rabbitmq:
+    image: rabbitmq:4.1-management
+    restart: unless-stopped
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:?Set RABBITMQ_DEFAULT_USER in .env}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:?Set RABBITMQ_DEFAULT_PASS in .env}
+    ports:
+      - "127.0.0.1:15672:15672"  # Management UI: local computer only
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./infra/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 8s
+      retries: 15
+    networks: [internal]
+
+  rabbitmq-init:
+    image: python:3.12-alpine
+    restart: "no"
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:?Set RABBITMQ_DEFAULT_USER in .env}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:?Set RABBITMQ_DEFAULT_PASS in .env}
+    volumes:
+      - ./infra/rabbitmq/definitions.json:/setup/definitions.json:ro
+      - ./infra/rabbitmq/bootstrap.py:/setup/bootstrap.py:ro
+    command: ["python", "/setup/bootstrap.py"]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks: [internal]
+
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8025:8025"  # Mailpit UI, local only
+    networks: [internal]
+
+  auth:
+    build: ./backend/auth
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://auth_app:${AUTH_DB_PASSWORD}@postgres:5432/auth_db
+      SERVICE_TOKEN: ${SERVICE_TOKEN}
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [internal]
+
+  room:
+    <<: *service-common
+    build: ./backend/services/room
+    environment:
+      DATABASE_URL: postgresql+psycopg://room_app:${ROOM_DB_PASSWORD}@postgres:5432/room_db
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/
+      SERVICE_TOKEN: ${SERVICE_TOKEN}
+
+  tenant:
+    <<: *service-common
+    build: ./backend/services/tenant
+    environment:
+      DATABASE_URL: postgresql+psycopg://tenant_app:${TENANT_DB_PASSWORD}@postgres:5432/tenant_db
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/
+      ROOM_URL: http://room:8000
+      SERVICE_TOKEN: ${SERVICE_TOKEN}
+
+  metering:
+    <<: *service-common
+    build: ./backend/services/metering
+    environment:
+      DATABASE_URL: postgresql+psycopg://metering_app:${METERING_DB_PASSWORD}@postgres:5432/metering_db
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/
+      SERVICE_TOKEN: ${SERVICE_TOKEN}
+
+  billing:
+    <<: *service-common
+    build: ./backend/services/billing
+    environment:
+      DATABASE_URL: postgresql+psycopg://billing_app:${BILLING_DB_PASSWORD}@postgres:5432/billing_db
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/
+      TENANT_URL: http://tenant:8000
+      METERING_URL: http://metering:8000
+      SERVICE_TOKEN: ${SERVICE_TOKEN}
+
+  notification:
+    <<: *service-common
+    build: ./backend/services/notification
+    environment:
+      DATABASE_URL: postgresql+psycopg://notification_app:${NOTIFICATION_DB_PASSWORD}@postgres:5432/notification_db
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/
+      BILLING_URL: http://billing:8000
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      OWNER_EMAIL: ${OWNER_EMAIL}
+      SERVICE_TOKEN: ${SERVICE_TOKEN}
+
+  nginx:
+    build:
+      context: .
+      dockerfile: infra/nginx/Dockerfile
+    restart: unless-stopped
+    environment:
+      SERVICE_TOKEN: ${SERVICE_TOKEN}
+    ports:
+      - "127.0.0.1:8080:80"  # Gateway local only; configure TLS later on EC2
+    depends_on:
+      - auth
+      - room
+      - tenant
+      - metering
+      - billing
+      - notification
+    networks: [internal]
+
+  # Simulator stays disabled until app/main.py is implemented.
+  simulator:
+    profiles: ["simulator"]
+    build: ./simulator
+    environment:
+      METERING_URL: http://metering:8000
+      MQTT_HOST: rabbitmq
+      MQTT_PORT: "1883"
+      MQTT_USERNAME: ${RABBITMQ_DEFAULT_USER}
+      MQTT_PASSWORD: ${RABBITMQ_DEFAULT_PASS}
+      SERVICE_TOKEN: ${SERVICE_TOKEN}
+    depends_on:
+      rabbitmq-init:
+        condition: service_completed_successfully
+      metering:
+        condition: service_started
+    networks: [internal]
+
+volumes:
+  postgres_data:
+  rabbitmq_data:
+
+networks:
+  internal:
+    driver: bridge

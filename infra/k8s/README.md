@@ -1,0 +1,1 @@
+Optional local kind demo. Create manifests only when the core Compose deployment works.
