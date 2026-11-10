@@ -1,0 +1,131 @@
+{
+  "version": "demo_v1",
+  "property": {
+    "code": "DEMO-PROPERTY-01",
+    "name": "Khu trọ Demo Minh An",
+    "address": "Địa chỉ minh họa, TP. Hồ Chí Minh"
+  },
+  "buildings": [
+    {
+      "code": "A",
+      "name": "Dãy A"
+    },
+    {
+      "code": "B",
+      "name": "Dãy B"
+    }
+  ],
+  "rooms": [
+    "A101",
+    "A102",
+    "A103",
+    "A201",
+    "A202",
+    "A203",
+    "B101",
+    "B102",
+    "B103",
+    "B201",
+    "B202",
+    "B203"
+  ],
+  "occupied_rooms": [
+    "A101",
+    "A102",
+    "A201",
+    "B101",
+    "B102",
+    "B201"
+  ],
+  "tenants": [
+    {
+      "name": "Khách thuê demo 01",
+      "email": "tenant01@example.test"
+    },
+    {
+      "name": "Khách thuê demo 02",
+      "email": "tenant02@example.test"
+    },
+    {
+      "name": "Khách thuê demo 03",
+      "email": "tenant03@example.test"
+    },
+    {
+      "name": "Khách thuê demo 04",
+      "email": "tenant04@example.test"
+    },
+    {
+      "name": "Khách thuê demo 05",
+      "email": "tenant05@example.test"
+    },
+    {
+      "name": "Khách thuê demo 06",
+      "email": "tenant06@example.test"
+    },
+    {
+      "name": "Khách thuê demo 07",
+      "email": "tenant07@example.test"
+    },
+    {
+      "name": "Khách thuê demo 08",
+      "email": "tenant08@example.test"
+    }
+  ],
+  "contracts": [
+    {
+      "code": "DEMO-CT-001",
+      "room_code": "A101",
+      "tenant_index": 0,
+      "start_date": "2026-09-01",
+      "end_date": "2027-08-31"
+    },
+    {
+      "code": "DEMO-CT-002",
+      "room_code": "A102",
+      "tenant_index": 1,
+      "start_date": "2026-09-01",
+      "end_date": "2027-08-31"
+    },
+    {
+      "code": "DEMO-CT-003",
+      "room_code": "A201",
+      "tenant_index": 2,
+      "start_date": "2026-09-01",
+      "end_date": "2027-08-31"
+    },
+    {
+      "code": "DEMO-CT-004",
+      "room_code": "B101",
+      "tenant_index": 3,
+      "start_date": "2026-09-01",
+      "end_date": "2027-08-31"
+    },
+    {
+      "code": "DEMO-CT-005",
+      "room_code": "B102",
+      "tenant_index": 4,
+      "start_date": "2026-09-01",
+      "end_date": "2027-08-31"
+    },
+    {
+      "code": "DEMO-CT-006",
+      "room_code": "B201",
+      "tenant_index": 5,
+      "start_date": "2026-09-01",
+      "end_date": "2027-08-31"
+    }
+  ],
+  "billing_month": "2026-10-01",
+  "period_end": "2026-11-01",
+  "invoice_due_date": "2026-11-15",
+  "issued_rooms": [
+    "A101",
+    "A102",
+    "A201",
+    "B101"
+  ],
+  "blocked_rooms": [
+    "B102",
+    "B201"
+  ]
+}

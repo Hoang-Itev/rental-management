@@ -1,0 +1,35 @@
+# Explicit opt-in overlay for seed scripts. Not part of normal docker compose up.
+# Container images already contain SQLAlchemy/psycopg/Argon2 dependencies.
+services:
+  auth:
+    volumes:
+      - ./scripts/seed:/seed:ro
+    environment:
+      SEED_MODE: ${SEED_MODE:-disabled}
+      SEED_OWNER_PASSWORD: ${SEED_OWNER_PASSWORD:-}
+      OWNER_EMAIL: ${OWNER_EMAIL:?Set OWNER_EMAIL in .env}
+  room:
+    volumes:
+      - ./scripts/seed:/seed:ro
+    environment:
+      SEED_MODE: ${SEED_MODE:-disabled}
+  tenant:
+    volumes:
+      - ./scripts/seed:/seed:ro
+    environment:
+      SEED_MODE: ${SEED_MODE:-disabled}
+  metering:
+    volumes:
+      - ./scripts/seed:/seed:ro
+    environment:
+      SEED_MODE: ${SEED_MODE:-disabled}
+  billing:
+    volumes:
+      - ./scripts/seed:/seed:ro
+    environment:
+      SEED_MODE: ${SEED_MODE:-disabled}
+  notification:
+    volumes:
+      - ./scripts/seed:/seed:ro
+    environment:
+      SEED_MODE: ${SEED_MODE:-disabled}
