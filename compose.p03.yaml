@@ -1,0 +1,29 @@
+# P03 feature overlay. Always pass -f compose.yaml -f compose.p03.yaml
+# for the RoomCreated -> Metering event pipeline.
+services:
+  room-outbox:
+    build: ./backend/services/room
+    command: ["python", "-m", "app.worker"]
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://room_app:${ROOM_DB_PASSWORD:?ROOM_DB_PASSWORD required}@postgres:5432/room_db
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:?RABBIT user required}:${RABBITMQ_DEFAULT_PASS:?RABBIT password required}@rabbitmq:5672/
+    depends_on:
+      room-migrate:
+        condition: service_completed_successfully
+      rabbitmq-init:
+        condition: service_completed_successfully
+    networks: [internal]
+  metering-consumer:
+    build: ./backend/services/metering
+    command: ["python", "-m", "app.worker"]
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://metering_app:${METERING_DB_PASSWORD:?METERING_DB_PASSWORD required}@postgres:5432/metering_db
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:?RABBIT user required}:${RABBITMQ_DEFAULT_PASS:?RABBIT password required}@rabbitmq:5672/
+    depends_on:
+      metering-migrate:
+        condition: service_completed_successfully
+      rabbitmq-init:
+        condition: service_completed_successfully
+    networks: [internal]

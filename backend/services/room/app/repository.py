@@ -42,3 +42,15 @@ def add(session: Session, item):
     session.add(item)
     session.flush()  # Detect database UNIQUE/FK/trigger violations before returning.
     return item
+
+
+def claim_room_created_outbox(session: Session):
+    """Lock one unpublished RoomCreated row, skipping rows claimed by other workers."""
+    query = (
+        select(m.OutboxEvent)
+        .where(m.OutboxEvent.event_type == "RoomCreated", m.OutboxEvent.published_at.is_(None))
+        .order_by(m.OutboxEvent.created_at, m.OutboxEvent.id)
+        .limit(1)
+        .with_for_update(skip_locked=True)
+    )
+    return session.scalars(query).first()
