@@ -1,0 +1,13 @@
+# P04 integration only; a random -p project MUST be provided by scripts/test_p04_integration.ps1.
+# Docker Compose >= 2.24 required for !reset. No ports for RabbitMQ admin UI.
+services:
+  rabbitmq:
+    ports: !reset []
+  tenant:
+    volumes:
+      - ./tests/integration:/app/integration:ro
+      - ./requirements-test.txt:/app/requirements-test.txt:ro
+    environment:
+      P04_EPHEMERAL_TEST: "1"
+      P04_PROJECT_NAME: ${P04_PROJECT_NAME:?Set randomized P04_PROJECT_NAME}
+      P04_TENANT_URL: http://tenant:8000

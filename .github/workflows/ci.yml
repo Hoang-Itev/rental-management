@@ -32,7 +32,17 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           import yaml
-          required = [Path('compose.yaml'), Path('compose.dev.yaml'), Path('compose.seed.yaml'), Path('compose.auth-test.yaml'), Path('compose.room-test.yaml'), Path('compose.p03.yaml'), Path('compose.p03-unit.yaml'), Path('.github/workflows/ci.yml')]
+          # Docker Compose supports custom YAML tags.
+          # PyYAML needs explicit constructors for validation.
+          def compose_tag(loader, tag_suffix, node):
+              if isinstance(node, yaml.SequenceNode):
+                  return loader.construct_sequence(node)
+              if isinstance(node, yaml.MappingNode):
+                  return loader.construct_mapping(node)
+              return loader.construct_scalar(node)
+
+          yaml.SafeLoader.add_multi_constructor("!", compose_tag)
+          required = [Path('compose.yaml'), Path('compose.dev.yaml'), Path('compose.seed.yaml'), Path('compose.auth-test.yaml'), Path('compose.room-test.yaml'), Path('compose.p03.yaml'), Path('compose.p03-unit.yaml'), Path('compose.p04-unit.yaml'), Path('compose.p04-isolated.yaml'), Path('.github/workflows/ci.yml')]
           for path in required:
               assert path.exists(), f'Missing {path}'
               yaml.safe_load(path.read_text(encoding='utf-8'))
@@ -267,3 +277,43 @@ jobs:
         run: |
           docker compose -p "$P03_PROJECT_NAME" -f compose.yaml -f compose.p03.yaml -f compose.p03-isolated.yaml ps -a || true
           docker compose -p "$P03_PROJECT_NAME" -f compose.yaml -f compose.p03.yaml -f compose.p03-isolated.yaml logs --tail=120 || true
+
+  # P04: Room REST + tenant_db PostgreSQL GiST EXCLUDE (two independent HTTP requests).
+  # The PowerShell runner picks a disposable project starting p04ci.
+  room-tenant-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    needs: static-checks
+    steps:
+      - uses: actions/checkout@v4
+      - name: Write isolated P04 CI-only credentials
+        shell: bash
+        run: |
+          cat > .env <<'EOF'
+          POSTGRES_USER=postgres
+          POSTGRES_PASSWORD=p04_ci_pg_temporary
+          AUTH_DB_PASSWORD=p04_ci_auth_temporary
+          ROOM_DB_PASSWORD=p04_ci_room_temporary
+          TENANT_DB_PASSWORD=p04_ci_tenant_temporary
+          METERING_DB_PASSWORD=p04_ci_metering_temporary
+          BILLING_DB_PASSWORD=p04_ci_billing_temporary
+          NOTIFICATION_DB_PASSWORD=p04_ci_notification_temporary
+          RABBITMQ_DEFAULT_USER=p04_ci_rabbit
+          RABBITMQ_DEFAULT_PASS=p04_ci_rabbit_temporary
+          SERVICE_TOKEN=p04_ci_service_token_long_enough
+          JWT_SECRET=p04_ci_jwt_secret_long_enough_123
+          OWNER_EMAIL=owner.demo@example.com
+          EOF
+      - name: Real P04 Room + Tenant contract integration
+        shell: pwsh
+        env:
+          P04_CI_PROJECT_NAME: p04ci${{ github.run_id }}${{ github.run_attempt }}
+        run: ./scripts/test_p04_integration.ps1
+      - name: Inspect failed isolated P04 stack
+        if: failure()
+        shell: bash
+        env:
+          P04_PROJECT_NAME: p04ci${{ github.run_id }}${{ github.run_attempt }}
+        run: |
+          docker compose -p "$P04_PROJECT_NAME" -f compose.yaml -f compose.p04-isolated.yaml ps -a || true
+          docker compose -p "$P04_PROJECT_NAME" -f compose.yaml -f compose.p04-isolated.yaml logs --tail=100 || true
