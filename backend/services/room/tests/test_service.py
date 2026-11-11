@@ -7,8 +7,15 @@ from sqlalchemy import func, select
 
 from app import models as m, schemas as s
 from app.service import RoomError, RoomService
-from conftest import unit_room
+# from conftest import unit_room
 
+def unit_room(code="A101", property_id=None):
+    return s.RoomCreateItem(
+        room_code=code,
+        area_m2="22.50",
+        listed_rent=2500000,
+        property_id=property_id,
+    )
 
 def created_tree(svc):
     p=svc.create_property(s.PropertyCreate(name="a",address="address"))
