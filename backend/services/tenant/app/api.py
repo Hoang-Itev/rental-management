@@ -82,3 +82,26 @@ def events(contract_id:UUID,db:Db,settings:Settings,page:Page=1,page_size:Size=2
 def confirm(contract_id:UUID,db:Db,settings:Settings,
             x_auth_user_id: Annotated[str|None,Header(alias='X-Auth-User-Id')]=None):
     return service(db,settings).confirm(contract_id,actor_id(x_auth_user_id))
+
+
+@router.post('/contracts/{contract_id}/renew', response_model=s.ContractOut)
+def renew_contract(contract_id: UUID, body: s.RenewRequest, db: Db, settings: Settings):
+    return service(db,settings).renew(contract_id, body.new_end_date, body.reason, body.new_terms)
+
+@router.post('/contracts/{contract_id}/end', response_model=s.ContractOut)
+def end_contract(contract_id: UUID, body: s.EndRequest, db: Db, settings: Settings,
+                 x_auth_user_id: Annotated[str|None,Header(alias='X-Auth-User-Id')]=None):
+    return service(db,settings).end_contract(contract_id, body.actual_end_date, body.reason, actor_id(x_auth_user_id))
+
+@router.post('/jobs/contracts/lifecycle/run', response_model=s.LifecycleResult, status_code=202)
+def run_contract_lifecycle(body: s.LifecycleRun, db: Db, settings: Settings):
+    from app.scheduler import run_due
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    if body.as_of is not None:
+        if body.as_of.tzinfo is None or body.as_of > now:
+            from app.service import invalid
+            raise invalid('as_of must be timezone-aware and not in the future')
+        now = body.as_of
+    return run_due(now=now, sessions=__import__('app.db',fromlist=['get_sessionmaker']).get_sessionmaker(),
+                   room_factory=lambda: RoomClient(settings))

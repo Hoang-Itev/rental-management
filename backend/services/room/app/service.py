@@ -278,4 +278,5 @@ class RoomService:
         prop = repo.get(self.session, m.Property, building.property_id) if building else None
         operational = all(x is not None and x.status == "ACTIVE" for x in (room, floor, building, prop))
         return s.RoomValidation(room_id=room_id, exists=True, operational=operational,
-                                property_id=room.property_id, room_code=room.room_code)
+                                property_id=room.property_id, room_code=room.room_code,
+                                occupancy_contract_id=room.occupancy_contract_id)

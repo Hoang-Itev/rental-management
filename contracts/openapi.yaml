@@ -5225,6 +5225,10 @@ components:
         operational: *id010
         property_id: *id009
         room_code: *id001
+        occupancy_contract_id:
+          type: string
+          format: uuid
+          description: Current physical occupant contract, nullable, for Tenant activation guard.
       required:
       - room_id
       - exists

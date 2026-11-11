@@ -1,0 +1,42 @@
+# P05 workers. Always merge AFTER compose.yaml and compose.p03.yaml.
+services:
+  tenant-outbox:
+    build: ./backend/services/tenant
+    command: ["python", "-m", "app.worker"]
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://tenant_app:${TENANT_DB_PASSWORD:?TENANT_DB_PASSWORD required}@postgres:5432/tenant_db
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:?rabbit user}:${RABBITMQ_DEFAULT_PASS:?rabbit pass}@rabbitmq:5672/
+    depends_on:
+      tenant-migrate:
+        condition: service_completed_successfully
+      rabbitmq-init:
+        condition: service_completed_successfully
+    networks: [internal]
+  tenant-scheduler:
+    build: ./backend/services/tenant
+    command: ["python", "-m", "app.scheduler"]
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://tenant_app:${TENANT_DB_PASSWORD:?TENANT_DB_PASSWORD required}@postgres:5432/tenant_db
+      ROOM_URL: http://room:8000
+      SERVICE_TOKEN: ${SERVICE_TOKEN:?SERVICE_TOKEN required}
+    depends_on:
+      tenant-migrate:
+        condition: service_completed_successfully
+      room:
+        condition: service_healthy
+    networks: [internal]
+  room-consumer:
+    build: ./backend/services/room
+    command: ["python", "-m", "app.worker", "consume"]
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://room_app:${ROOM_DB_PASSWORD:?ROOM_DB_PASSWORD required}@postgres:5432/room_db
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:?rabbit user}:${RABBITMQ_DEFAULT_PASS:?rabbit pass}@rabbitmq:5672/
+    depends_on:
+      room-migrate:
+        condition: service_completed_successfully
+      rabbitmq-init:
+        condition: service_completed_successfully
+    networks: [internal]

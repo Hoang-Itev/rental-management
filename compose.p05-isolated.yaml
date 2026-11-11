@@ -1,0 +1,12 @@
+# ONLY for randomized p05test/p05ci disposable Compose projects.
+services:
+  rabbitmq:
+    ports: !reset []
+  tenant:
+    volumes:
+      - ./tests/integration:/app/integration:ro
+      - ./requirements-test.txt:/app/requirements-test.txt:ro
+    environment:
+      P05_EPHEMERAL_TEST: "1"
+      P05_PROJECT_NAME: ${P05_PROJECT_NAME:?P05 randomized project required}
+      METERING_DATABASE_URL: postgresql+psycopg://metering_app:${METERING_DB_PASSWORD:?metering password required}@postgres:5432/metering_db

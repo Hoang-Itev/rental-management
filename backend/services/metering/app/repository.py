@@ -51,3 +51,36 @@ def list_meters(session: Session, status: str | None = "ACTIVE", page: int = 1, 
     rows = session.scalars(stmt.offset((page - 1) * page_size).limit(page_size)).all()
     total = session.scalar(select(func.count()).select_from(m.Meter).where(*where))
     return list(rows), int(total or 0)
+
+
+def ensure_handover_cutoffs(session: Session, room_id: UUID, contract_id: UUID,
+                            instant, kind: str) -> None:
+    """Row-lock each meter; one physical cutoff per meter+instant, two logical reasons."""
+    from app import models as m
+    for meter_type in ('ELECTRICITY','WATER'):
+        ensure_meter(session,room_id,meter_type)
+    session.flush()
+    meters=list(session.scalars(select(m.Meter).where(m.Meter.room_id==room_id)
+                                .order_by(m.Meter.id).with_for_update()))
+    if len(meters)!=2:
+        raise RuntimeError('Expected exactly two meters')
+    reason='CONTRACT_START' if kind=='ContractStarted' else 'CONTRACT_END'
+    for meter in meters:
+        cutoff=session.scalar(select(m.MeterCutoff).where(
+            m.MeterCutoff.meter_id==meter.id, m.MeterCutoff.cutoff_at==instant,
+            m.MeterCutoff.status!='SUPERSEDED').with_for_update())
+        if cutoff is None:
+            cutoff=m.MeterCutoff(id=uuid4(), meter_id=meter.id,
+                contract_id=contract_id,cutoff_type=reason, cutoff_at=instant,
+                source='AUTOMATIC', status='PENDING')
+            session.add(cutoff)
+            session.flush()
+        elif reason=='CONTRACT_START' and cutoff.cutoff_type=='CONTRACT_END':
+            # Stable canonical projection regardless of End(A)/Start(B) arrival order.
+            cutoff.cutoff_type='CONTRACT_START'
+            cutoff.contract_id=contract_id
+            session.flush()
+        statement=(_insert(session,m.MeterCutoffReason)
+                   .values(id=uuid4(),cutoff_id=cutoff.id,contract_id=contract_id,reason_type=reason)
+                   .on_conflict_do_nothing(index_elements=['cutoff_id','contract_id','reason_type']))
+        session.execute(statement)

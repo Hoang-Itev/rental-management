@@ -42,12 +42,16 @@ async def process_delivery(message, channel, sessions: sessionmaker[Session]) ->
         envelope = json.loads(message.body)
         if not isinstance(envelope, dict):
             raise ValueError("event body must be an object")
-        if envelope.get("event_type") != "RoomCreated":
-            raise ValueError("event type not supported in P03")
-        # Validation is outside database TX, so malformed events never get
-        # recorded as processed and can be quarantined without retry loops.
+        # Contract events share the existing durable Metering queue.
+        # Unknown/malformed envelopes remain quarantined.
         from app.service import RoomCreatedEnvelope
-        RoomCreatedEnvelope.model_validate(envelope)
+        from app.lifecycle import ContractEnvelope
+        if envelope.get('event_type') == 'RoomCreated':
+            RoomCreatedEnvelope.model_validate(envelope)
+        elif envelope.get('event_type') in ('ContractStarted','ContractEnded'):
+            ContractEnvelope.model_validate(envelope)
+        else:
+            raise ValueError('unknown Metering event_type')
     except (UnicodeDecodeError, json.JSONDecodeError, ValueError, ValidationError) as exc:
         try:
             await transfer(channel, QUEUE + ".dlq", message.body,
@@ -61,17 +65,24 @@ async def process_delivery(message, channel, sessions: sessionmaker[Session]) ->
 
     try:
         with sessions() as session:
-            applied = MeteringService(session).process_room_created(envelope)
+            service=MeteringService(session)
+            applied = (service.process_room_created(envelope) if envelope['event_type']=='RoomCreated'
+                       else service.process_contract_event(envelope))
     except Exception as exc:
+        from app.lifecycle import FutureEvent
+        future=isinstance(exc, FutureEvent)
         try:
             retry = int((message.headers or {}).get("x-p03-retry", 0))
         except (TypeError, ValueError):
             retry = 0
-        dest = QUEUE + ".dlq" if retry >= len(RETRY_DELAYS) else (
-            QUEUE + ".retry." + str(RETRY_DELAYS[retry]) + "s"
-        )
-        new_headers = {**(message.headers or {}), "x-p03-retry": retry + 1,
+        # Future effective_at is a scheduling condition, not a failure.
+        dest = (QUEUE + '.retry.300s' if future else
+                (QUEUE + ".dlq" if retry >= len(RETRY_DELAYS) else
+                 QUEUE + ".retry." + str(RETRY_DELAYS[retry]) + "s"))
+        new_headers = {**(message.headers or {}),
                        "x-p03-error": type(exc).__name__[:80]}
+        if not future:
+            new_headers['x-p03-retry']=retry + 1
         try:
             await transfer(channel, dest, message.body, new_headers)
         except Exception:

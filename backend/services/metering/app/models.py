@@ -95,10 +95,11 @@ class MeterCutoff(UUIDPK, Base):
         CheckConstraint("reading_value IS NULL OR reading_value >= 0", name="reading_nonnegative"),
         CheckConstraint("status <> 'CONFIRMED' OR (reading_value IS NOT NULL AND confirmed_at IS NOT NULL)", name="confirmed_complete"),
         CheckConstraint("source <> 'MANUAL' OR (manual_reason IS NOT NULL AND confirmed_by IS NOT NULL)", name="manual_audit_required"),
-        # One effective physical reading per meter/time, shared by all business reasons.
+        # PG17 NULLS NOT DISTINCT: monthly contract_id NULL must still be unique.
         Index(
-            "uq_meter_cutoffs_active_time", "meter_id", "cutoff_at",
+            "uq_meter_cutoffs_active_scope", "meter_id", "cutoff_type", "cutoff_at", "contract_id",
             unique=True, postgresql_where=text("status <> 'SUPERSEDED'"),
+            postgresql_nulls_not_distinct=True,
         ),
     )
 
@@ -127,3 +128,16 @@ class ProcessedEvent(Base):
     event_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     event_type: Mapped[str] = mapped_column(sa.String(80), nullable=False)
     processed_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class MeterCutoffReason(UUIDPK, Base):
+    """A physical reading may serve End(A) and Start(B) at the same instant."""
+    __tablename__ = 'meter_cutoff_reasons'
+    cutoff_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey('meter_cutoffs.id'), nullable=False)
+    contract_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    reason_type: Mapped[str] = mapped_column(sa.String(25), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), nullable=False, server_default=func.now())
+    __table_args__ = (
+        sa.UniqueConstraint('cutoff_id','contract_id','reason_type',name='uq_cutoff_reasons_contract_type'),
+        status_check('reason_type_values','reason_type','CONTRACT_START','CONTRACT_END'),
+    )
