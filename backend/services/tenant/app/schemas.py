@@ -104,11 +104,7 @@ class ContractPatch(Patch):
     deposit_amount: Money | None = None
     @model_validator(mode='after')
     def required_fields(self):
-        if any(
-            getattr(self, field) is None
-            for field in self.model_fields_set
-            if field != 'deposit_amount'
-        ):
+        if any(getattr(self,field) is None for field in self.model_fields_set if field != 'deposit_amount'):
             raise ValueError('contract fields cannot be null')
         return self
 
@@ -151,3 +147,23 @@ class RoomValidation(BaseModel):
     operational: bool
     property_id: UUID | None = None
     room_code: str | None = None
+    occupancy_contract_id: UUID | None = None
+
+
+class RenewRequest(Strict):
+    new_end_date: date
+    reason: str | None = Field(default=None, max_length=2000)
+    new_terms: TermInput | None = None
+
+class EndRequest(Strict):
+    actual_end_date: date
+    reason: Name
+
+class LifecycleRun(Strict):
+    as_of: datetime | None = None
+
+class LifecycleResult(Strict):
+    job_id: UUID
+    processed: int
+    started: int
+    pending_end: int

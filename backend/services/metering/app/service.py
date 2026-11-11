@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Literal
 from uuid import UUID
 
@@ -66,3 +66,19 @@ class MeteringService:
 
     def list_meters(self, status: str | None = "ACTIVE", page: int = 1, page_size: int = 100):
         return repo.list_meters(self.session, status=status, page=page, page_size=page_size)
+
+
+    def process_contract_event(self, raw: dict, *, now: datetime | None = None) -> bool:
+        from app.lifecycle import ContractEnvelope, FutureEvent
+        event=ContractEnvelope.model_validate(raw)
+        now=now or datetime.now(timezone.utc)
+        if now.tzinfo is None:
+            raise ValueError('now must be timezone-aware')
+        if event.effective_at > now:
+            raise FutureEvent('Contract boundary is not due')
+        with self.atomic():
+            inserted=repo.mark_processed(self.session,event.event_id,event.event_type)
+            if inserted:
+                repo.ensure_handover_cutoffs(self.session,event.data.room_id,
+                    event.data.contract_id,event.effective_at, event.event_type)
+        return inserted

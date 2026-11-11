@@ -1990,12 +1990,17 @@ paths:
       summary: Xác nhận kết thúc hợp đồng
       operationId: tenant_post_api_v1_contracts_contract_id_end
       description: >-
-        Xác nhận actual_end_date trong [start_date, end_date], bao gồm cả hai đầu.
-        Nếu effective_at (00:00 ngày sau actual_end_date, Asia/Ho_Chi_Minh)
-        còn ở tương lai, hợp đồng giữ ACTIVE đến mốc đó; job lifecycle mới
-        chuyển ENDED và phát ContractEnded. Nếu mốc đã qua, xử lý ngay.
-        EXPIRED_PENDING muốn tính thêm ngày phải gia hạn trước; hợp đồng
-        SCHEDULED chưa đến hiệu lực thì dùng cancel. Không có bàn giao riêng.
+        Xác nhận ngày bàn giao thực tế actual_end_date, có thể muộn hơn
+        end_date theo kế hoạch nhưng không được trước start_date
+        hoặc sau ngày hiện tại tại Việt Nam.
+        Thời điểm kết thúc có hiệu lực lúc 00:00 ngày sau actual_end_date,
+        theo múi giờ Asia/Ho_Chi_Minh.
+        Trước thời điểm này, hợp đồng giữ trạng thái ACTIVE hoặc
+        EXPIRED_PENDING. Scheduler chỉ chuyển sang ENDED và phát
+        ContractEnded khi đã đến thời điểm hiệu lực.
+        EXPIRED_PENDING không tự giải phóng phòng.
+        Phần thời gian ở quá hạn cần được Billing xử lý theo
+        quy tắc tính phí riêng.
       parameters:
       - name: contract_id
         in: path
@@ -5225,6 +5230,10 @@ components:
         operational: *id010
         property_id: *id009
         room_code: *id001
+        occupancy_contract_id:
+          type: string
+          format: uuid
+          description: Current physical occupant contract, nullable, for Tenant activation guard.
       required:
       - room_id
       - exists

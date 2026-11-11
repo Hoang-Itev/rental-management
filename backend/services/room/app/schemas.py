@@ -192,6 +192,7 @@ class RoomValidation(BaseModel):
     operational: bool
     property_id: UUID | None = None
     room_code: str | None = None
+    occupancy_contract_id: UUID | None = None
 
 
 class ErrorOut(BaseModel):

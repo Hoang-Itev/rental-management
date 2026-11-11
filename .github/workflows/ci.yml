@@ -42,7 +42,7 @@ jobs:
               return loader.construct_scalar(node)
 
           yaml.SafeLoader.add_multi_constructor("!", compose_tag)
-          required = [Path('compose.yaml'), Path('compose.dev.yaml'), Path('compose.seed.yaml'), Path('compose.auth-test.yaml'), Path('compose.room-test.yaml'), Path('compose.p03.yaml'), Path('compose.p03-unit.yaml'), Path('compose.p04-unit.yaml'), Path('compose.p04-isolated.yaml'), Path('.github/workflows/ci.yml')]
+          required = [Path('compose.yaml'), Path('compose.dev.yaml'), Path('compose.seed.yaml'), Path('compose.auth-test.yaml'), Path('compose.room-test.yaml'), Path('compose.p03.yaml'), Path('compose.p03-unit.yaml'), Path('compose.p04-unit.yaml'), Path('compose.p04-isolated.yaml'), Path('compose.p05.yaml'), Path('compose.p05-isolated.yaml'), Path('.github/workflows/ci.yml')]
           for path in required:
               assert path.exists(), f'Missing {path}'
               yaml.safe_load(path.read_text(encoding='utf-8'))
@@ -317,3 +317,34 @@ jobs:
         run: |
           docker compose -p "$P04_PROJECT_NAME" -f compose.yaml -f compose.p04-isolated.yaml ps -a || true
           docker compose -p "$P04_PROJECT_NAME" -f compose.yaml -f compose.p04-isolated.yaml logs --tail=100 || true
+
+  # P05: disposable PostgreSQL + real RabbitMQ cross-service lifecycle tests.
+  contract-lifecycle-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs: static-checks
+    steps:
+      - uses: actions/checkout@v4
+      - name: Write disposable P05 CI credentials
+        shell: bash
+        run: |
+          cat > .env <<'EOF'
+          POSTGRES_USER=postgres
+          POSTGRES_PASSWORD=p05_ci_pg_local_only
+          AUTH_DB_PASSWORD=p05_ci_auth_local_only
+          ROOM_DB_PASSWORD=p05_ci_room_local_only
+          TENANT_DB_PASSWORD=p05_ci_tenant_local_only
+          METERING_DB_PASSWORD=p05_ci_metering_local_only
+          BILLING_DB_PASSWORD=p05_ci_billing_local_only
+          NOTIFICATION_DB_PASSWORD=p05_ci_notification_local_only
+          RABBITMQ_DEFAULT_USER=p05_ci_rabbit
+          RABBITMQ_DEFAULT_PASS=p05_ci_rabbit_local_only
+          SERVICE_TOKEN=p05_ci_service_token_32_char_test_only
+          JWT_SECRET=p05_ci_jwt_secret_32_char_test_only
+          OWNER_EMAIL=owner.demo@example.org
+          EOF
+      - name: Real Tenant lifecycle, Room occupancy and Metering cutoffs
+        shell: pwsh
+        env:
+          P05_CI_PROJECT_NAME: p05ci${{ github.run_id }}${{ github.run_attempt }}
+        run: ./scripts/test_p05_integration.ps1
