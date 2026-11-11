@@ -8,7 +8,7 @@ $expected = [ordered]@{
   auth         = 1
   room         = 6
   tenant       = 5
-  metering     = 5
+  metering     = 6
   billing      = 8
   notification = 1
 }
@@ -54,7 +54,7 @@ try {
     Write-Host "$db : $count business tables, Alembic $revision (head)" -ForegroundColor Green
     $total += $count
   }
-  Write-Host "SCHEMA OK: $total/26 business tables; 6 Alembic heads matched." -ForegroundColor Green
+  Write-Host "SCHEMA OK: $total/27 business tables; 6 Alembic heads matched." -ForegroundColor Green
 } finally {
   Pop-Location
 }

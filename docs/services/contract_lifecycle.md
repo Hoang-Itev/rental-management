@@ -28,7 +28,7 @@ No sensor readings may be invented. When telemetry is absent, a handover cutoff 
 
 `tenant_v3_002` relaxes `actual_end_date <= end_date`. Otherwise late physical handover after a planned end can never be represented honestly. It retains `actual_end_date >= start_date`.
 
-`metering_v3_002` adds the logical handover reasons, preserving both business actors when cutoff timestamps coincide. No V3 tables are deleted.
+`metering_v3_003` adds the logical handover reasons, preserving both business actors when cutoff timestamps coincide. No V3 tables are deleted.
 
 ## Tests
 

@@ -59,3 +59,14 @@ def actual_occupancy_intersects_start(db: Session, room_id: UUID, start, exclude
         m.Contract.status == 'ENDED', m.Contract.actual_end_date.is_not(None),
         m.Contract.start_date <= start, m.Contract.actual_end_date >= start,
     ).limit(1)) is not None
+
+
+def pending_handover_ids(db: Session):
+    return list(db.execute(
+        select(m.Contract.id, m.Contract.actual_end_date, m.Contract.end_reason)
+        .where(
+            m.Contract.status.in_(('ACTIVE', 'EXPIRED_PENDING')),
+            m.Contract.actual_end_date.is_not(None)
+        )
+        .order_by(m.Contract.actual_end_date, m.Contract.id)
+    ).all())

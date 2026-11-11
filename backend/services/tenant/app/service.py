@@ -261,6 +261,8 @@ class TenantService:
             c = self._get(m.Contract, contract_id, lock=True)
             if c.status == 'EXPIRED_PENDING':
                 return c
+            if c.actual_end_date is not None:
+                raise invalid('Contract handover already recorded')
             if c.status != 'ACTIVE' or now < _boundary(_end_exclusive(c.end_date)):
                 raise invalid('Contract has not reached expiry')
             c.status = 'EXPIRED_PENDING'
@@ -273,6 +275,8 @@ class TenantService:
         try:
             with self.db.begin():
                 c = self._get(m.Contract, contract_id, lock=True)
+                if c.actual_end_date is not None:
+                    raise invalid('Cannot renew after handover is recorded')
                 if c.status not in ('SCHEDULED', 'ACTIVE', 'EXPIRED_PENDING'):
                     raise invalid('Only confirmed, not-ended contracts can renew')
                 old_end = c.end_date
@@ -288,8 +292,11 @@ class TenantService:
                 if new_terms is not None:
                     if new_terms.effective_from != next_day:
                         raise invalid('Renewal price must start on day after previous end')
-                    if new_terms.effective_to is not None and new_terms.effective_to > _end_exclusive(new_end_date):
-                        raise invalid('Renewal price extends beyond new period')
+                    if (
+                        new_terms.effective_to is not None
+                        and new_terms.effective_to != _end_exclusive(new_end_date)
+                    ):
+                        raise invalid('Renewal price must cover the full extended period')
                     if last.effective_to is not None and last.effective_to != next_day:
                         raise invalid('Existing price history does not cover original period')
                     last.effective_to = next_day
@@ -314,6 +321,7 @@ class TenantService:
         except IntegrityError as exc:
             raise invalid('Extension violates confirmed contract period exclusion') from exc
 
+    
     def end_contract(self, contract_id: UUID, actual_end_date: date, reason: str,
                      actor_id: UUID | None = None, *, now: datetime | None = None):
         now = now or datetime.now(timezone.utc)
@@ -323,25 +331,47 @@ class TenantService:
             raise invalid('Cannot end a contract on a future date')
         if not reason.strip():
             raise invalid('Termination reason is required')
+
         try:
             with self.db.begin():
                 c = self._get(m.Contract, contract_id, lock=True)
+
                 if c.status == 'ENDED':
                     if c.actual_end_date == actual_end_date:
                         return c
                     raise invalid('Contract already ended on another date')
+
                 if c.status not in ('ACTIVE', 'EXPIRED_PENDING'):
                     raise invalid('Only occupied contracts can end')
+
                 if actual_end_date < c.start_date:
                     raise invalid('End date before contract start')
-                c.status = 'ENDED'
-                c.actual_end_date = actual_end_date
-                c.end_reason = reason
+
+                if c.actual_end_date is not None:
+                    if c.actual_end_date != actual_end_date:
+                        raise invalid('Handover date already recorded')
+                else:
+                    c.actual_end_date = actual_end_date
+                    c.end_reason = reason
+
                 effective = _boundary(_end_exclusive(actual_end_date))
-                self._event(self.db, c.id, 'ENDED', actor_id=actor_id,
-                            details={'effective_at': effective.isoformat(), 'reason': reason})
-                self._outbox(self.db, c, 'ContractEnded', effective)
+
+                # Before midnight: record handover, keep occupancy.
+                if now >= effective:
+                    c.status = 'ENDED'
+                    self._event(
+                        self.db, c.id, 'ENDED', actor_id=actor_id,
+                        details={
+                            'effective_at': effective.isoformat(),
+                            'reason': c.end_reason
+                        }
+                    )
+                    self._outbox(self.db, c, 'ContractEnded', effective)
+
                 self.db.flush()
+
             return c
+
         except IntegrityError as exc:
             raise invalid('Unable to record actual contract end') from exc
+
