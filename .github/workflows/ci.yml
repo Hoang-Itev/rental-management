@@ -32,7 +32,7 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           import yaml
-          required = [Path('compose.yaml'), Path('compose.dev.yaml'), Path('compose.seed.yaml'), Path('.github/workflows/ci.yml')]
+          required = [Path('compose.yaml'), Path('compose.dev.yaml'), Path('compose.seed.yaml'), Path('compose.auth-test.yaml'), Path('.github/workflows/ci.yml')]
           for path in required:
               assert path.exists(), f'Missing {path}'
               yaml.safe_load(path.read_text(encoding='utf-8'))
@@ -75,7 +75,9 @@ jobs:
           if [[ "${{ matrix.service }}" == "auth" ]]; then path="backend/auth"; else path="backend/services/${{ matrix.service }}"; fi
           cd "$path"
           if grep -r -E -q '^[[:space:]]*(async[[:space:]]+)?def[[:space:]]+test_' tests --include='test_*.py'; then
-            if grep -E -q '^[[:space:]]*(async[[:space:]]+)?def[[:space:]]+test_' tests/test_service.py; then
+            if [[ "${{ matrix.service }}" == "auth" ]]; then
+              python -m pytest tests -q --cov=app --cov-report=term-missing --cov-fail-under=95
+            elif grep -E -q '^[[:space:]]*(async[[:space:]]+)?def[[:space:]]+test_' tests/test_service.py; then
               python -m pytest tests -q --cov=app.service --cov-report=term-missing --cov-fail-under=80
             else
               python -m pytest tests -q
@@ -109,7 +111,7 @@ jobs:
           RABBITMQ_DEFAULT_PASS=ci_rabbit_local_only
           SERVICE_TOKEN=ci_service_token_local_only
           JWT_SECRET=ci_jwt_local_only_at_least_32_chars
-          OWNER_EMAIL=owner.demo@example.test
+          OWNER_EMAIL=owner.demo@example.com
           EOF
       - name: Validate Compose configuration
         run: docker compose -f compose.yaml -f compose.seed.yaml config --quiet
@@ -184,7 +186,7 @@ jobs:
           RABBITMQ_DEFAULT_PASS=ci_rabbit_smoke_local_only
           SERVICE_TOKEN=ci_service_token_smoke_local_only
           JWT_SECRET=ci_jwt_smoke_local_only_at_least_32_chars
-          OWNER_EMAIL=owner.demo@example.test
+          OWNER_EMAIL=owner.demo@example.com
           EOF
       - name: Validate Compose
         run: docker compose config --quiet
@@ -193,6 +195,18 @@ jobs:
       - name: Inspect one-shot jobs, healthy apps, broker and Gateway
         shell: pwsh
         run: ./scripts/smoke_test.ps1 -TimeoutSeconds 240
+      - name: Validate live Nginx configuration
+        run: docker compose exec -T nginx nginx -t
+      - name: Seed disposable owner for real Auth / Gateway integration
+        env:
+          SEED_MODE: demo
+          SEED_OWNER_PASSWORD: CI_Demo_Auth_Only_2026_Strong_Password
+        run: docker compose -f compose.yaml -f compose.seed.yaml run --rm --no-deps auth python /seed/seed_service.py auth
+      - name: Test login, JWT and Nginx auth_request against real PostgreSQL
+        env:
+          TEST_AUTH_EMAIL: owner.demo@example.com
+          TEST_AUTH_PASSWORD: CI_Demo_Auth_Only_2026_Strong_Password
+        run: python3 scripts/auth/gateway_check.py
       - name: Diagnose failed Compose startup
         if: failure()
         run: |

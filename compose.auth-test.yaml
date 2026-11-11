@@ -1,0 +1,6 @@
+# Optional ephemeral test overlay; never used in normal docker compose up.
+services:
+  auth:
+    volumes:
+      - ./backend/auth/tests:/app/tests:ro
+      - ./requirements-test.txt:/app/requirements-test.txt:ro
