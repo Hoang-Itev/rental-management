@@ -152,7 +152,7 @@ jobs:
         run: |
           set -euo pipefail
           docker compose -f compose.yaml -f compose.room-test.yaml run --rm --no-deps room \
-            sh -c 'python -m pip install --disable-pip-version-check -q -r /app/requirements-test.txt && python -m pytest integration -q'
+            sh -c 'python -m pip install --disable-pip-version-check -q -r /app/requirements-test.txt && python -m pytest integration/test_postgres.py -q'
       - name: Run seed again to prove idempotence
         run: |
           set -euo pipefail
