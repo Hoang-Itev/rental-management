@@ -1,31 +1,60 @@
+# Windows PowerShell 5.1 compatible. Checks each DB revision against the Alembic
+# head in the corresponding Docker image (never hard-codes *_001 / *_002 / *_003).
 param([string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot))
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
 $expected = [ordered]@{
-  auth_db=1
-  room_db=6
-  tenant_db=5
-  metering_db=5
-  billing_db=8
-  notification_db=1
+  auth         = 1
+  room         = 6
+  tenant       = 5
+  metering     = 5
+  billing      = 8
+  notification = 1
 }
+
+function Invoke-DockerChecked {
+  param([string[]]$Arguments, [string]$Description)
+  $output = & docker @Arguments
+  if ($LASTEXITCODE -ne 0) { throw "$Description failed (exit code $LASTEXITCODE)." }
+  return @($output)
+}
+
 Push-Location $ProjectRoot
 try {
-  $sum=0
-  foreach ($database in $expected.Keys) {
-    $sql = "SELECT count(*) FROM pg_catalog.pg_tables WHERE schemaname = 'public' AND tablename <> 'alembic_version';"
-    $raw = & docker compose exec -T postgres psql -X -q -A -t -U postgres -d $database -c $sql
-    if ($LASTEXITCODE -ne 0) { throw "psql failed: $database" }
-    $value = [int]($raw | Select-Object -Last 1).Trim()
-    $should = [int]$expected[$database]
-    if ($value -ne $should) { throw "${database}: expected $should business tables, actual $value" }
-    $ver = & docker compose exec -T postgres psql -X -q -A -t -U postgres -d $database -c 'SELECT version_num FROM alembic_version;'
-    if ($LASTEXITCODE -ne 0) { throw "No alembic_version on $database" }
-    if (-not ($ver -like '*_v3_001')) { throw "$database unexpected alembic version: $ver" }
-    Write-Host "$database : $value tables + alembic_version $ver" -ForegroundColor Green
-    $sum += $value
+  $total = 0
+  foreach ($service in $expected.Keys) {
+    $db = "${service}_db"
+
+    # Alembic may print multiple lines if branches exist. This project requires
+    # exactly one head in each independent service.
+    $headOutput = @(Invoke-DockerChecked -Arguments @('compose','run','--rm','--no-deps',$service,'python','-m','alembic','heads') -Description "alembic heads for $service")
+    $heads = @()
+    foreach ($line in $headOutput) {
+      if ($line -match '^\s*([A-Za-z0-9_]+)\s+\(head\)\s*$') { $heads += $Matches[1] }
+    }
+    if ($heads.Count -ne 1) {
+      throw "${service}: expected exactly one Alembic head. Output: $($headOutput -join '; ')"
+    }
+    $head = [string]$heads[0]
+
+    $sql = "SELECT count(*) FROM pg_catalog.pg_tables WHERE schemaname='public' AND tablename <> 'alembic_version';"
+    $rawCount = @(Invoke-DockerChecked -Arguments @('compose','exec','-T','postgres','psql','-X','-q','-A','-t','-U','postgres','-d',$db,'-c',$sql) -Description "count business tables in $db")
+    $countText = ($rawCount -join "`n").Trim()
+    $count = 0
+    if (-not [int]::TryParse($countText, [ref]$count)) { throw "${db}: invalid table count: $countText" }
+    $should = [int]$expected[$service]
+    if ($count -ne $should) { throw "${db}: expected $should business tables; found $count" }
+
+    $rawRevision = @(Invoke-DockerChecked -Arguments @('compose','exec','-T','postgres','psql','-X','-q','-A','-t','-U','postgres','-d',$db,'-c','SELECT version_num FROM alembic_version;') -Description "read alembic_version in $db")
+    $revision = ($rawRevision -join "`n").Trim()
+    if ($revision -ne $head) {
+      throw "${db}: DB revision '$revision' differs from image head '$head'. Rebuild images / apply migration before seeding."
+    }
+    Write-Host "$db : $count business tables, Alembic $revision (head)" -ForegroundColor Green
+    $total += $count
   }
-  Write-Host "TOTAL: $sum/26 business tables + 6 alembic_version tables" -ForegroundColor Green
+  Write-Host "SCHEMA OK: $total/26 business tables; 6 Alembic heads matched." -ForegroundColor Green
 } finally {
   Pop-Location
 }

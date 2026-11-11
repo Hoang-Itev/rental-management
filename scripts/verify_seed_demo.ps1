@@ -1,11 +1,18 @@
-param([string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot))
+param(
+  [string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot),
+  [switch]$SkipAuth
+)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 Push-Location $ProjectRoot
 try {
-  foreach ($svc in @('auth','room','tenant','metering','billing','notification')) {
-    & docker compose -f compose.yaml -f compose.seed.yaml run --rm --no-deps `
-       $svc python /seed/verify_service.py $svc
-    if ($LASTEXITCODE -ne 0) { throw "Verify failed: $svc" }
+  $services = @('room','tenant','metering','billing','notification')
+  if (-not $SkipAuth) { $services = @('auth') + $services }
+  foreach ($svc in $services) {
+    & docker compose -f compose.yaml -f compose.seed.yaml run --rm --no-deps $svc python /seed/verify_service.py $svc
+    if ($LASTEXITCODE -ne 0) { throw "Seed verification failed for $svc" }
   }
-} finally { Pop-Location }
+  Write-Host "SEED VERIFY OK: $($services -join ', ')" -ForegroundColor Green
+} finally {
+  Pop-Location
+}

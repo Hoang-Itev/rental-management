@@ -230,3 +230,21 @@ Không tự ý bổ sung bảng, thay đổi ranh giới service hoặc thay đ�
 - Room: phòng phải thuộc chính khu trọ chứa floor. Bản vá Room V3.1 kiểm tra điều này bằng trigger ở DB, đồng thời cần kiểm tra tại service khi viết API.
 - Database isolation: PostgreSQL PUBLIC có quyền CONNECT mặc định; cần thu hồi khỏi 6 database, kể cả trên volume đã tồn tại.
 - Metering: bản vá V3.1 thay index theo cutoff_type/contract_id thành một unique index theo (meter_id, cutoff_at) cho các bản chưa SUPERSEDED. Trước khi migration chạy, phải giải quyết mọi bản chốt còn hiệu lực bị trùng thời điểm.
+
+
+## P00.1 — Quy tắc bất biến cấu trúc phòng (room_v3_003, 2026-11-11)
+
+Đã chốt **không có nghiệp vụ chuyển dãy nhà sang khu trọ khác** hay
+**chuyển tầng sang dãy nhà khác**. Sau khi INSERT, hai khóa
+`buildings.property_id` và `floors.building_id` không được UPDATE sang
+ID khác trong mọi trường hợp, kể cả dãy/tầng chưa có phòng. Các field
+được phép PATCH trong OpenAPI (ví dụ tên, trạng thái) không bị ảnh hưởng.
+
+Lý do: revision `room_v3_002` chỉ chặn di chuyển nếu thấy phòng tồn tại;
+trong hai transaction đồng thời, phép kiểm tra này có thể không nhìn thấy
+phòng chưa commit. Revision `room_v3_003` đổi hàm trigger thành chặn
+thay đổi khóa cha vô điều kiện; không tạo thêm bảng và không sửa migration
+đã áp dụng. Có kiểm thử PostgreSQL dùng savepoint và rollback.
+
+Schema xác thực trên local luôn đối chiếu `alembic_version` với `alembic heads`
+của image service tương ứng; không ghi cố định 001/002/003.

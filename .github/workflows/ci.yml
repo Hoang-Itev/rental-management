@@ -66,7 +66,7 @@ jobs:
         shell: bash
         run: |
           if [[ "${{ matrix.service }}" == "auth" ]]; then path="backend/auth"; else path="backend/services/${{ matrix.service }}"; fi
-          python -m pip install 'pytest>=8,<10' 'pytest-cov>=5,<8'
+          python -m pip install -r requirements-test.txt
           python -m pip install -r "$path/requirements.txt"
       - name: Run actual service tests when implemented
         shell: bash
@@ -141,6 +141,9 @@ jobs:
           for svc in room tenant metering billing; do
             docker compose -f compose.yaml -f compose.seed.yaml run --rm --no-deps "$svc" python /seed/verify_constraints.py "$svc"
           done
+      - name: Verify room_v3_003 hierarchy immutability (rollback-only)
+        run: |
+          docker compose -f compose.yaml -f compose.seed.yaml run --rm --no-deps room python /seed/verify_room_immutability.py
       - name: Run seed again to prove idempotence
         run: |
           set -euo pipefail
@@ -154,5 +157,47 @@ jobs:
         if: failure()
         run: docker compose logs postgres --tail=120
       - name: Stop test environment
+        if: always()
+        run: docker compose down -v --remove-orphans
+
+  # Separate GitHub-hosted runner => new Docker volumes, no existing Alembic state.
+  # This tests the REAL Compose startup dependency graph, not just run --no-deps.
+  compose-startup-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: static-checks
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate isolated CI-only credentials
+        shell: bash
+        run: |
+          cat > .env <<'EOF'
+          POSTGRES_USER=postgres
+          POSTGRES_PASSWORD=ci_pg_smoke_local_only
+          AUTH_DB_PASSWORD=ci_auth_smoke_local_only
+          ROOM_DB_PASSWORD=ci_room_smoke_local_only
+          TENANT_DB_PASSWORD=ci_tenant_smoke_local_only
+          METERING_DB_PASSWORD=ci_metering_smoke_local_only
+          BILLING_DB_PASSWORD=ci_billing_smoke_local_only
+          NOTIFICATION_DB_PASSWORD=ci_notification_smoke_local_only
+          RABBITMQ_DEFAULT_USER=ci_rabbit
+          RABBITMQ_DEFAULT_PASS=ci_rabbit_smoke_local_only
+          SERVICE_TOKEN=ci_service_token_smoke_local_only
+          JWT_SECRET=ci_jwt_smoke_local_only_at_least_32_chars
+          OWNER_EMAIL=owner.demo@example.test
+          EOF
+      - name: Validate Compose
+        run: docker compose config --quiet
+      - name: Boot the complete stack from new Docker volumes
+        run: docker compose up -d --build
+      - name: Inspect one-shot jobs, healthy apps, broker and Gateway
+        shell: pwsh
+        run: ./scripts/smoke_test.ps1 -TimeoutSeconds 240
+      - name: Diagnose failed Compose startup
+        if: failure()
+        run: |
+          docker compose ps -a || true
+          docker compose logs --tail=140 || true
+      - name: Destroy ONLY disposable GitHub CI volumes
         if: always()
         run: docker compose down -v --remove-orphans
