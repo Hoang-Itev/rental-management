@@ -1,0 +1,6 @@
+# Test mounts only; never use in normal production Compose.
+services:
+  tenant:
+    volumes:
+      - ./backend/services/tenant/tests:/app/tests:ro
+      - ./requirements-test.txt:/app/requirements-test.txt:ro
