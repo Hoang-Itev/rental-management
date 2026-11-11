@@ -162,21 +162,27 @@ def active_cutoff_at(session: Session, meter_id: UUID, instant, kind: str):
     ).order_by(m.MeterCutoff.id).limit(1))
 
 
-def closest_valid(session: Session, meter_id: UUID, instant, window: timedelta):
-    # Fetch at most two neighbours; do not select SUSPECT/REJECTED or out-of-window.
+
+def closest_valid(
+    session: Session,
+    meter_id: UUID,
+    instant,
+    window: timedelta,
+):
     stamp = m.MeterReading.measured_at
-    base = [m.MeterReading.meter_id == meter_id,
-            m.MeterReading.validation_status == 'VALID']
-    before = session.scalar(select(m.MeterReading).where(
-        *base, stamp >= instant - window, stamp <= instant
-    ).order_by(stamp.desc()).limit(1))
-    after = session.scalar(select(m.MeterReading).where(
-        *base, stamp > instant, stamp <= instant + window
-    ).order_by(stamp.asc()).limit(1))
-    candidates = [r for r in (before, after) if r is not None]
-    return min(candidates, key=lambda r: (
-        abs(db_utc(r.measured_at) - instant), db_utc(r.measured_at) > instant
-    )) if candidates else None
+
+    return session.scalar(
+        select(m.MeterReading)
+        .where(
+            m.MeterReading.meter_id == meter_id,
+            m.MeterReading.validation_status == "VALID",
+            stamp >= instant - window,
+            stamp <= instant,
+        )
+        .order_by(stamp.desc())
+        .limit(1)
+    )
+
 
 
 def pending_cutoff_ids(session: Session, until):
@@ -254,7 +260,7 @@ def current_confirmed_near_reading(session: Session, meter_id: UUID, measured_at
         m.MeterCutoff.meter_id == meter_id,
         m.MeterCutoff.status == 'CONFIRMED',
         m.MeterCutoff.source == 'AUTOMATIC',
-        m.MeterCutoff.cutoff_at >= measured_at - window,
+        m.MeterCutoff.cutoff_at >= measured_at,
         m.MeterCutoff.cutoff_at <= measured_at + window,
     )))
 

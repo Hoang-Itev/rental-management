@@ -106,7 +106,7 @@ def test_01_room_contract_mqtt_cutoff_manual_revision_and_idempotence():
     assert all(c.status == 'PENDING' for c in cutoffs)
 
     # Real MQTT QoS1 samples are inside the 15-minute window.
-    mqtt_snapshot(meters, effective + timedelta(minutes=3))
+    mqtt_snapshot(meters, effective - timedelta(minutes=3))
     until(lambda db: db.scalar(select(func.count()).select_from(m.MeterReading).where(
         m.MeterReading.meter_id.in_([x.id for x in meters]),
         m.MeterReading.validation_status == 'VALID')) == 2,

@@ -379,7 +379,7 @@ class MeteringService:
 
     def finalize_due_cutoffs(self, *, now: datetime | None = None,
                              only_at: datetime | None = None):
-        """Wait for +/-15m window; closest VALID within tolerance or leave PENDING."""
+        """After the grace period, use the latest eligible VALID reading at or before the cutoff."""
         from app.cutoffs import WINDOW, db_utc, utc
         now = utc(now or datetime.now(timezone.utc))
         confirmed = 0

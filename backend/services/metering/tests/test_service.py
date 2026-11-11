@@ -207,28 +207,56 @@ def test_p07_select_valid_nearest_and_reject_outside_15_minutes(make_session):
         svc = MeteringService(db)
         assert svc.finalize_due_cutoffs(now=instant + timedelta(minutes=15)) == 0
         assert row.status == 'PENDING' and row.reading_value is None
-        _insert_reading(db, meter.id, instant + timedelta(minutes=15), '503')
+        _insert_reading(db, meter.id, instant + timedelta(minutes=1), '503')
         _insert_reading(db, meter.id, instant - timedelta(minutes=15), '502')
         assert svc.finalize_due_cutoffs(now=instant + timedelta(minutes=15)) == 1
         assert row.status == 'CONFIRMED'
-        assert row.reading_value == Decimal('502')  # tie -> earlier reading
+        assert row.reading_value == Decimal('502')  
         assert row.source_reading_at.replace(tzinfo=timezone.utc) == instant - timedelta(minutes=15)
         _insert_reading(db, meter.id, instant, '502.5')
         assert svc.finalize_due_cutoffs(now=instant + timedelta(days=1)) == 0
         assert row.reading_value == Decimal('502')  # immutable
 
 
-def test_p07_nearest_later_reading_requires_window_elapsed(make_session):
+
+def test_p07_future_sample_does_not_close_cutoff(make_session):
     with make_session() as db:
         meter = new_meter(db)
         instant = _dt(11, 12)
         row = _pending(db, meter.id, instant)
-        _insert_reading(db, meter.id, instant + timedelta(minutes=5), '101')
+
+        # Mẫu đo sau mốc không hợp lệ để chốt.
+        _insert_reading(
+            db,
+            meter.id,
+            instant + timedelta(minutes=1),
+            "101",
+        )
+
         svc = MeteringService(db)
-        assert svc.finalize_due_cutoffs(now=instant + timedelta(minutes=14, seconds=59)) == 0
-        assert row.status == 'PENDING'
-        assert svc.finalize_due_cutoffs(now=instant + timedelta(minutes=15)) == 1
-        assert row.reading_value == Decimal('101')
+
+        assert svc.finalize_due_cutoffs(
+            now=instant + timedelta(minutes=15)
+        ) == 0
+
+        assert row.status == "PENDING"
+        assert row.reading_value is None
+
+        # Mẫu đo đúng thời điểm chốt được chấp nhận.
+        _insert_reading(
+            db,
+            meter.id,
+            instant,
+            "100",
+        )
+
+        assert svc.finalize_due_cutoffs(
+            now=instant + timedelta(minutes=16)
+        ) == 1
+
+        assert row.status == "CONFIRMED"
+        assert row.reading_value == Decimal("100")
+
 
 
 def test_p07_manual_confirm_requires_actor_reason_and_version(make_session):
@@ -368,7 +396,7 @@ def test_p07_late_better_reading_alert_does_not_rewrite_confirmed(make_session):
         svc = MeteringService(db)
         assert svc.finalize_due_cutoffs(now=instant+timedelta(minutes=16))==1
         assert row.reading_value==100
-        later = instant + timedelta(minutes=1)
+        later = instant - timedelta(minutes=1)
         assert svc.record_telemetry(sample(meter.id, later.isoformat(), '101'),
                                     now=instant+timedelta(minutes=20))=='inserted'
         assert row.reading_value==100 and row.status=='CONFIRMED'
