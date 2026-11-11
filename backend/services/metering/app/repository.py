@@ -9,6 +9,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from app import models as m
+from app.cutoffs import db_utc
 
 
 def _insert(session: Session, entity):
@@ -75,7 +76,7 @@ def ensure_handover_cutoffs(session: Session, room_id: UUID, contract_id: UUID,
                 source='AUTOMATIC', status='PENDING')
             session.add(cutoff)
             session.flush()
-        elif reason=='CONTRACT_START' and cutoff.cutoff_type=='CONTRACT_END':
+        elif reason=='CONTRACT_START' and cutoff.cutoff_type=='CONTRACT_END' and cutoff.status=='PENDING':
             # Stable canonical projection regardless of End(A)/Start(B) arrival order.
             cutoff.cutoff_type='CONTRACT_START'
             cutoff.contract_id=contract_id
@@ -84,6 +85,7 @@ def ensure_handover_cutoffs(session: Session, room_id: UUID, contract_id: UUID,
                    .values(id=uuid4(),cutoff_id=cutoff.id,contract_id=contract_id,reason_type=reason)
                    .on_conflict_do_nothing(index_elements=['cutoff_id','contract_id','reason_type']))
         session.execute(statement)
+
 
 def meter_locked(session: Session, meter_id: UUID):
     """Serialize insert + conflict-alert creation by physical meter."""
@@ -143,13 +145,125 @@ def list_alerts(session: Session, *, status=None, alert_type=None,
             int(session.scalar(select(func.count()).select_from(m.MeterAlert).where(*conditions)) or 0))
 
 
+# P07 queries. Selection remains database-side; no cross-service joins.
+from datetime import timedelta
+
+
+def active_cutoff(session: Session, cutoff_id: UUID):
+    return session.get(m.MeterCutoff, cutoff_id)
+
+
+def active_cutoff_at(session: Session, meter_id: UUID, instant, kind: str):
+    return session.scalar(select(m.MeterCutoff).where(
+        m.MeterCutoff.meter_id == meter_id,
+        m.MeterCutoff.cutoff_at == instant,
+        m.MeterCutoff.cutoff_type == kind,
+        m.MeterCutoff.status != 'SUPERSEDED',
+    ).order_by(m.MeterCutoff.id).limit(1))
+
+
+def closest_valid(session: Session, meter_id: UUID, instant, window: timedelta):
+    # Fetch at most two neighbours; do not select SUSPECT/REJECTED or out-of-window.
+    stamp = m.MeterReading.measured_at
+    base = [m.MeterReading.meter_id == meter_id,
+            m.MeterReading.validation_status == 'VALID']
+    before = session.scalar(select(m.MeterReading).where(
+        *base, stamp >= instant - window, stamp <= instant
+    ).order_by(stamp.desc()).limit(1))
+    after = session.scalar(select(m.MeterReading).where(
+        *base, stamp > instant, stamp <= instant + window
+    ).order_by(stamp.asc()).limit(1))
+    candidates = [r for r in (before, after) if r is not None]
+    return min(candidates, key=lambda r: (
+        abs(db_utc(r.measured_at) - instant), db_utc(r.measured_at) > instant
+    )) if candidates else None
+
+
+def pending_cutoff_ids(session: Session, until):
+    return list(session.scalars(select(m.MeterCutoff.id).where(
+        m.MeterCutoff.status == 'PENDING', m.MeterCutoff.cutoff_at <= until
+    ).order_by(m.MeterCutoff.cutoff_at, m.MeterCutoff.id)))
+
+
+def list_cutoffs(session: Session, *, meter_id=None, room_id=None, status=None,
+                 cutoff_type=None, from_at=None, to_at=None, page=1, page_size=100):
+    filters = []
+    if meter_id is not None: filters.append(m.MeterCutoff.meter_id == meter_id)
+    if room_id is not None: filters.append(m.Meter.room_id == room_id)
+    if status is not None: filters.append(m.MeterCutoff.status == status)
+    if cutoff_type is not None: filters.append(m.MeterCutoff.cutoff_type == cutoff_type)
+    if from_at is not None: filters.append(m.MeterCutoff.cutoff_at >= from_at)
+    if to_at is not None: filters.append(m.MeterCutoff.cutoff_at < to_at)  # exclusive
+    stmt = select(m.MeterCutoff).join(m.Meter).where(*filters)
+    count = select(func.count()).select_from(m.MeterCutoff).join(m.Meter).where(*filters)
+    rows = session.scalars(stmt.order_by(m.MeterCutoff.cutoff_at.desc(),
+        m.MeterCutoff.created_at.desc(),m.MeterCutoff.id)
+        .offset((page-1)*page_size).limit(page_size)).all()
+    return list(rows), int(session.scalar(count) or 0)
+
+
+def cutoff_reasons(session: Session, cutoff_id: UUID):
+    return list(session.scalars(select(m.MeterCutoffReason).where(
+        m.MeterCutoffReason.cutoff_id == cutoff_id)))
+
+
+def open_offline(session: Session, meter_id: UUID):
+    return session.scalar(select(m.MeterAlert).where(
+        m.MeterAlert.meter_id == meter_id,
+        m.MeterAlert.alert_type == 'OFFLINE',
+        m.MeterAlert.status == 'OPEN',
+    ).limit(1))
+
+
+def resolve_offline(session: Session, meter_id: UUID, now):
+    alert = open_offline(session, meter_id)
+    if alert is not None:
+        alert.status = 'RESOLVED'
+        alert.resolved_at = now
+        alert.resolution_note = 'Telemetry received'
+    return alert is not None
+
+
+def alert_for_cutoff(session: Session, cutoff_id: UUID, meter_id: UUID, kind: str):
+    return session.scalar(select(m.MeterAlert).where(
+        m.MeterAlert.meter_id == meter_id,
+        m.MeterAlert.related_cutoff_id == cutoff_id,
+        m.MeterAlert.alert_type == kind,
+        m.MeterAlert.status == 'OPEN',
+    ).limit(1))
+
+
 def latest_valid_reading(session: Session, meter_id: UUID):
-    return session.scalar(
-        select(m.MeterReading)
-        .where(
-            m.MeterReading.meter_id == meter_id,
-            m.MeterReading.validation_status == "VALID",
-        )
-        .order_by(m.MeterReading.measured_at.desc())
-        .limit(1)
-    )
+    return session.scalar(select(m.MeterReading).where(
+        m.MeterReading.meter_id == meter_id,
+        m.MeterReading.validation_status == 'VALID',
+    ).order_by(m.MeterReading.measured_at.desc()).limit(1))
+
+
+def active_cutoff_at_any_type(session: Session, meter_id: UUID, instant):
+    """One physical cutoff per meter+instant (handover/monthly may share it)."""
+    return session.scalar(select(m.MeterCutoff).where(
+        m.MeterCutoff.meter_id == meter_id,
+        m.MeterCutoff.cutoff_at == instant,
+        m.MeterCutoff.status != 'SUPERSEDED',
+    ).order_by(m.MeterCutoff.id).limit(1))
+
+
+def current_confirmed_near_reading(session: Session, meter_id: UUID, measured_at, window: timedelta):
+    return list(session.scalars(select(m.MeterCutoff).where(
+        m.MeterCutoff.meter_id == meter_id,
+        m.MeterCutoff.status == 'CONFIRMED',
+        m.MeterCutoff.source == 'AUTOMATIC',
+        m.MeterCutoff.cutoff_at >= measured_at - window,
+        m.MeterCutoff.cutoff_at <= measured_at + window,
+    )))
+
+
+def active_cutoff_times(session: Session, meter_id: UUID, from_at, to_at):
+    rows = session.scalars(select(m.MeterCutoff.cutoff_at).where(
+        m.MeterCutoff.meter_id == meter_id,
+        m.MeterCutoff.cutoff_at >= from_at,
+        m.MeterCutoff.cutoff_at <= to_at,
+        m.MeterCutoff.status != 'SUPERSEDED',
+    )).all()
+    return {db_utc(stamp) for stamp in rows}

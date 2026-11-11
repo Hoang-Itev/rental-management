@@ -24,10 +24,17 @@ def compile_jsonb_for_test(element, compiler, **kw):
 def make_session():
     engine = create_engine("sqlite+pysqlite:///:memory:",
                            connect_args={"check_same_thread": False}, poolclass=StaticPool)
-    # Match PostgreSQL partial UNIQUE index semantics on SQLite.
+    # The original P03 model defines this PostgreSQL partial unique index.
+    # SQLite would otherwise interpret it as a global UNIQUE(meter_id),
+    # incorrectly prohibiting multiple non-OFFLINE alerts in unit tests.
     for idx in models.MeterAlert.__table__.indexes:
         if idx.name == "uq_meter_alerts_open_offline":
             idx.dialect_options["sqlite"]["where"] = text("status = 'OPEN' AND alert_type = 'OFFLINE'")
+    # PostgreSQL uses an active-version partial UNIQUE index for cutoffs;
+    # SQLite unit tests must match the predicate to permit revisions.
+    for idx in models.MeterCutoff.__table__.indexes:
+        if idx.name == "uq_meter_cutoffs_active_scope":
+            idx.dialect_options["sqlite"]["where"] = text("status <> 'SUPERSEDED'")
     Base.metadata.create_all(engine)
     maker = sessionmaker(bind=engine, expire_on_commit=False, autoflush=False)
     yield maker
