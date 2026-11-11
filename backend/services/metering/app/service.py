@@ -114,6 +114,8 @@ class MeteringService:
                 raise UnknownMeter('Meter is unknown or INACTIVE')
             previous = repo.reading_at(self.session, sample.meter_id, sample.measured_at)
             if previous is not None:
+                meter.last_received_at = now
+                repo.resolve_offline(self.session, sample.meter_id, now)
                 if previous.reading_value == sample.reading_value:
                     return 'duplicate'
                 if not repo.existing_alert(self.session, sample.meter_id,
@@ -152,7 +154,30 @@ class MeteringService:
                             'before': str(older.reading_value) if older is not None else None,
                             'after': str(newer.reading_value) if newer is not None else None},
                 ))
+            # A late, *better* VALID sample raises an alert for manual review.
+            # Never mutate a CONFIRMED cutoff automatically after invoicing.
+            if not suspect:
+                from app.cutoffs import WINDOW, db_utc
+                for cutoff in repo.current_confirmed_near_reading(
+                    self.session, sample.meter_id, sample.measured_at, WINDOW
+                ):
+                    if (cutoff.source_reading_at is not None and
+                        db_utc(cutoff.confirmed_at) < now and
+                        abs(sample.measured_at - db_utc(cutoff.cutoff_at)) <
+                        abs(db_utc(cutoff.source_reading_at) - db_utc(cutoff.cutoff_at)) and
+                        repo.alert_for_cutoff(self.session, cutoff.id,
+                                              sample.meter_id, 'LATE_AFTER_CUTOFF') is None):
+                        self.session.add(m.MeterAlert(
+                            id=uuid4(), meter_id=sample.meter_id,
+                            alert_type='LATE_AFTER_CUTOFF', status='OPEN',
+                            related_measured_at=sample.measured_at,
+                            related_cutoff_id=cutoff.id,
+                            detail={'cutoff_id': str(cutoff.id),
+                                    'confirmed_value': str(cutoff.reading_value),
+                                    'late_value': str(sample.reading_value)},
+                        ))
             meter.last_received_at = now
+            repo.resolve_offline(self.session, sample.meter_id, now)
             self.session.flush()
         return 'suspect' if suspect else 'inserted'
 
@@ -174,27 +199,275 @@ class MeteringService:
         return repo.list_alerts(self.session, status=status, alert_type=alert_type,
                                 page=page, page_size=page_size)
 
-    
     def meter_baseline(self, meter_id: UUID):
         from app import models as m
         from app.telemetry import UnknownMeter
-
         meter = self.session.get(m.Meter, meter_id)
-
-        if meter is None or meter.status != "ACTIVE":
-            raise UnknownMeter("Meter not found or inactive")
-
+        if meter is None or meter.status != 'ACTIVE':
+            raise UnknownMeter('Meter not found or inactive')
         latest = repo.latest_valid_reading(self.session, meter_id)
-
         if latest is not None:
-            return {
-                "reading_value": latest.reading_value,
-                "measured_at": latest.measured_at,
-                "source": "LATEST_VALID",
-            }
+            return {'reading_value': latest.reading_value, 'measured_at': latest.measured_at,
+                    'source': 'LATEST_VALID'}
+        return {'reading_value': meter.initial_reading, 'measured_at': meter.created_at,
+                'source': 'INITIAL'}
 
-        return {
-        "reading_value": meter.initial_reading,
-        "measured_at": meter.created_at,
-        "source": "INITIAL",
-    }
+    # P07 cutoff lifecycle. All mutating operations lock the physical meter row,
+    # which serializes scheduler, owner corrections and telemetry on PostgreSQL.
+    def _cutoff(self, cutoff_id: UUID):
+        from app import models as m
+        from app.cutoffs import CutoffError
+        cutoff = self.session.get(m.MeterCutoff, cutoff_id)
+        if cutoff is None:
+            raise CutoffError('Cutoff not found', 404)
+        return cutoff
+
+    def cutoff(self, cutoff_id: UUID):
+        return self._cutoff(cutoff_id)
+
+    def cutoff_reasons(self, cutoff_id: UUID):
+        return repo.cutoff_reasons(self.session, cutoff_id)
+
+    def list_cutoffs(self, **filters):
+        return repo.list_cutoffs(self.session, **filters)
+
+    def _monotone_manual(self, cutoff, value):
+        """Reject manual values that contradict adjacent CONFIRMED boundaries."""
+        from sqlalchemy import select
+        from app import models as m
+        from app.cutoffs import CutoffError
+        prior = self.session.scalar(select(m.MeterCutoff).where(
+            m.MeterCutoff.meter_id == cutoff.meter_id,
+            m.MeterCutoff.id != cutoff.id,
+            m.MeterCutoff.status == 'CONFIRMED',
+            m.MeterCutoff.cutoff_at < cutoff.cutoff_at,
+        ).order_by(m.MeterCutoff.cutoff_at.desc()).limit(1))
+        later = self.session.scalar(select(m.MeterCutoff).where(
+            m.MeterCutoff.meter_id == cutoff.meter_id,
+            m.MeterCutoff.id != cutoff.id,
+            m.MeterCutoff.status == 'CONFIRMED',
+            m.MeterCutoff.cutoff_at > cutoff.cutoff_at,
+        ).order_by(m.MeterCutoff.cutoff_at.asc()).limit(1))
+        if prior is not None and value < prior.reading_value:
+            raise CutoffError('Manual reading is below previous confirmed cutoff', 409)
+        if later is not None and value > later.reading_value:
+            raise CutoffError('Manual reading exceeds next confirmed cutoff', 409)
+
+    def confirm_cutoff(self, cutoff_id: UUID, *, reading_value, reason: str,
+                       actor_id: UUID, now: datetime | None = None):
+        """Only PENDING can be manually confirmed; confirmed records never overwrite."""
+        from app.cutoffs import CutoffError, decimal_3, db_utc, utc
+        now = utc(now or datetime.now(timezone.utc))
+        value = decimal_3(reading_value)
+        if len(reason.strip()) < 8:
+            raise CutoffError('A manual reason of at least 8 characters is required', 422)
+        with self.atomic():
+            cutoff = self._cutoff(cutoff_id)
+            repo.meter_locked(self.session, cutoff.meter_id)
+            self.session.refresh(cutoff, with_for_update=True)
+            if cutoff.status != 'PENDING':
+                raise CutoffError('Only PENDING cutoffs can be confirmed', 409)
+            if db_utc(cutoff.cutoff_at) > now:
+                raise CutoffError('Future cutoff cannot be confirmed', 409)
+            self._monotone_manual(cutoff, value)
+            cutoff.reading_value = value
+            cutoff.source = 'MANUAL'
+            cutoff.source_reading_at = None
+            cutoff.manual_reason = reason.strip()
+            cutoff.confirmed_by = actor_id
+            cutoff.confirmed_at = now
+            cutoff.status = 'CONFIRMED'
+            self.session.flush()
+        return cutoff
+
+    def revise_cutoff(self, cutoff_id: UUID, *, reading_value, reason: str,
+                      actor_id: UUID, now: datetime | None = None):
+        """Explicit version: SUPERSEDED old row + fresh CONFIRMED manual row.
+
+        MeterCutoffReason rows remain on the historic version and are copied to
+        the current version so handovers remain queryable by contract.
+        """
+        from uuid import uuid4
+        from app import models as m
+        from app.cutoffs import CutoffError, decimal_3, db_utc, utc
+        now = utc(now or datetime.now(timezone.utc))
+        value = decimal_3(reading_value)
+        if len(reason.strip()) < 8:
+            raise CutoffError('A correction reason of at least 8 characters is required', 422)
+        with self.atomic():
+            old = self._cutoff(cutoff_id)
+            repo.meter_locked(self.session, old.meter_id)
+            self.session.refresh(old, with_for_update=True)
+            if old.status != 'CONFIRMED':
+                raise CutoffError('Only a current CONFIRMED cutoff can be revised', 409)
+            if old.reading_value == value:
+                raise CutoffError('New reading must differ from previous version', 409)
+            self._monotone_manual(old, value)
+            reasons = repo.cutoff_reasons(self.session, old.id)
+            old.status = 'SUPERSEDED'
+            self.session.flush()  # release partial unique key before creating replacement
+            replacement = m.MeterCutoff(
+                id=uuid4(), meter_id=old.meter_id, contract_id=old.contract_id,
+                cutoff_type=old.cutoff_type, cutoff_at=old.cutoff_at,
+                reading_value=value, source='MANUAL', source_reading_at=None,
+                manual_reason=reason.strip(), status='CONFIRMED', confirmed_at=now,
+                confirmed_by=actor_id, supersedes_id=old.id,
+            )
+            self.session.add(replacement)
+            self.session.flush()
+            for item in reasons:
+                self.session.add(m.MeterCutoffReason(
+                    id=uuid4(), cutoff_id=replacement.id,
+                    contract_id=item.contract_id, reason_type=item.reason_type,
+                ))
+            self.session.flush()
+        return replacement
+
+    def create_monthly_cutoffs(self, *, now: datetime | None = None, months_back: int = 24,
+                               target_boundary: datetime | None = None):
+        """Backfill at most 24 months, from meter creation, no duplicate active scope.
+
+        Period end-exclusive: a cutoff at 00:00 VN on the first of month N
+        closes month N-1. The meter itself need not have an active contract.
+        """
+        from uuid import uuid4
+        from app import models as m
+        from app.cutoffs import WINDOW, CutoffError, month_start, next_month, previous_month, db_utc, utc
+        now = utc(now or datetime.now(timezone.utc))
+        if not 1 <= months_back <= 120:
+            raise CutoffError('months_back must be between 1 and 120', 422)
+        boundary = month_start(now)
+        if target_boundary is not None:
+            target_boundary = utc(target_boundary)
+            if target_boundary != month_start(target_boundary):
+                raise CutoffError('cutoff_at must be the first of month at 00:00 Vietnam time', 422)
+            if target_boundary + WINDOW > now:
+                raise CutoffError('Monthly cutoff window has not ended', 409)
+            boundary = target_boundary
+        earliest = boundary
+        if target_boundary is None:
+            for _ in range(months_back - 1):
+                earliest = previous_month(earliest)
+        meters, _ = repo.list_meters(self.session, status='ACTIVE', page=1, page_size=100)
+        # pagination avoids silently ignoring projects with over 100 meters
+        all_meters = list(meters)
+        page = 2
+        while len(meters) == 100:
+            meters, _ = repo.list_meters(self.session, status='ACTIVE', page=page, page_size=100)
+            all_meters.extend(meters)
+            page += 1
+        count = 0
+        for item in all_meters:
+            meter = repo.meter_locked(self.session, item.id)
+            if meter.status != 'ACTIVE':
+                continue
+            occupied = repo.active_cutoff_times(self.session, meter.id, earliest, boundary)
+            current = earliest
+            while current <= boundary:
+                if current >= db_utc(meter.created_at) and current + WINDOW <= now:
+                    if current not in occupied:
+                        self.session.add(m.MeterCutoff(
+                            id=uuid4(), meter_id=meter.id, contract_id=None,
+                            cutoff_type='MONTHLY', cutoff_at=current,
+                            source='AUTOMATIC', status='PENDING',
+                        ))
+                        self.session.flush()
+                        occupied.add(current)
+                        count += 1
+                current = next_month(current)
+        return count
+
+    def finalize_due_cutoffs(self, *, now: datetime | None = None,
+                             only_at: datetime | None = None):
+        """After the grace period, use the latest eligible VALID reading at or before the cutoff."""
+        from app.cutoffs import WINDOW, db_utc, utc
+        now = utc(now or datetime.now(timezone.utc))
+        confirmed = 0
+        pending_ids = repo.pending_cutoff_ids(self.session, now - WINDOW)
+        only_at = utc(only_at) if only_at is not None else None
+        for cutoff_id in pending_ids:
+            cutoff = self._cutoff(cutoff_id)
+            if only_at is not None and db_utc(cutoff.cutoff_at) != only_at:
+                continue
+            repo.meter_locked(self.session, cutoff.meter_id)
+            self.session.refresh(cutoff, with_for_update=True)
+            if cutoff.status != 'PENDING' or db_utc(cutoff.cutoff_at) + WINDOW > now:
+                continue
+            candidate = repo.closest_valid(self.session, cutoff.meter_id,
+                                          db_utc(cutoff.cutoff_at), WINDOW)
+            if candidate is None:
+                continue
+            cutoff.reading_value = candidate.reading_value
+            cutoff.source_reading_at = candidate.measured_at
+            cutoff.source = 'AUTOMATIC'
+            cutoff.status = 'CONFIRMED'
+            cutoff.confirmed_at = now
+            confirmed += 1
+        self.session.flush()
+        return confirmed
+
+    def scan_offline(self, *, now: datetime | None = None, offline_minutes: int = 20):
+        """An OPEN OFFLINE alert is unique per meter; a new reading resolves it."""
+        from uuid import uuid4
+        from datetime import timedelta
+        from app import models as m
+        from app.cutoffs import CutoffError, db_utc, utc
+        now = utc(now or datetime.now(timezone.utc))
+        if not 1 <= offline_minutes <= 1440:
+            raise CutoffError('offline_minutes must be 1..1440', 422)
+        meters, total = repo.list_meters(self.session, status='ACTIVE', page=1, page_size=100)
+        pages = (total + 99) // 100
+        created = 0
+        # Unsorted iteration does not change correctness; meter row locks serialize.
+        for page in range(1, pages + 1):
+            if page > 1:
+                meters, _ = repo.list_meters(self.session, status='ACTIVE', page=page, page_size=100)
+            for meter in meters:
+                locked = repo.meter_locked(self.session, meter.id)
+                if locked.status != 'ACTIVE':
+                    continue
+                last = locked.last_received_at or locked.created_at
+                if db_utc(last) + timedelta(minutes=offline_minutes) > now:
+                    continue
+                if repo.open_offline(self.session, meter.id) is None:
+                    self.session.add(m.MeterAlert(
+                        id=uuid4(), meter_id=meter.id,
+                        alert_type='OFFLINE', status='OPEN',
+                        detail={'last_seen_at': db_utc(last).isoformat(),
+                                'offline_minutes': offline_minutes},
+                        detected_at=now,
+                    ))
+                    self.session.flush()
+                    created += 1
+        return created
+
+    def run_cutoff_jobs(self, *, now: datetime | None = None,
+                        offline_minutes: int = 20, months_back: int = 24):
+        now = now or datetime.now(timezone.utc)
+        with self.atomic():
+            new_monthly = self.create_monthly_cutoffs(now=now, months_back=months_back)
+            confirmed = self.finalize_due_cutoffs(now=now)
+            offline = self.scan_offline(now=now, offline_minutes=offline_minutes)
+        return {'monthly_created': new_monthly, 'auto_confirmed': confirmed,
+                'offline_alerts_created': offline}
+
+
+    def resolve_meter_alert(self, alert_id: UUID, *, note: str, now: datetime | None = None):
+        from app import models as m
+        from app.cutoffs import CutoffError, utc
+        now = utc(now or datetime.now(timezone.utc))
+        if len(note.strip()) < 8:
+            raise CutoffError('Resolution note must have at least 8 characters', 422)
+        with self.atomic():
+            alert = self.session.get(m.MeterAlert, alert_id)
+            if alert is None:
+                raise CutoffError('Alert not found', 404)
+            repo.meter_locked(self.session, alert.meter_id)
+            self.session.refresh(alert, with_for_update=True)
+            if alert.status != 'OPEN':
+                raise CutoffError('Alert is already resolved', 409)
+            alert.status = 'RESOLVED'
+            alert.resolved_at = now
+            alert.resolution_note = note.strip()
+            self.session.flush()
+        return alert

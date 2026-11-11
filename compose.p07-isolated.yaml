@@ -1,0 +1,16 @@
+# Disposable P07 E2E. Never use for regular `rental-management` Compose project.
+services:
+  rabbitmq:
+    ports: !reset []
+  metering:
+    volumes:
+      - ./tests/integration:/app/integration:ro
+      - ./requirements-test.txt:/app/requirements-test.txt:ro
+    environment:
+      P07_EPHEMERAL_TEST: "1"
+      P07_PROJECT_NAME: ${P07_PROJECT_NAME:?P07_PROJECT_NAME required}
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:?rabbit}:${RABBITMQ_DEFAULT_PASS:?rabbit}@rabbitmq:5672/
+      MQTT_HOST: rabbitmq
+      MQTT_PORT: "1883"
+      MQTT_USERNAME: ${RABBITMQ_DEFAULT_USER:?rabbit}
+      MQTT_PASSWORD: ${RABBITMQ_DEFAULT_PASS:?rabbit}

@@ -1,0 +1,55 @@
+name: P07 Meter Cutoffs
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [feat/meter-cutoffs]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: p07-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  metering-unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-test.txt -r backend/services/metering/requirements.txt
+      - name: P07 unit coverage
+        run: |
+          cd backend/services/metering
+          python -m pytest -q tests --ignore=tests/integration --cov=app.service --cov-report=term-missing --cov-fail-under=80
+  metering-cutoff-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs: [metering-unit]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate CI-only ephemeral credentials
+        shell: bash
+        run: |
+          cat > .env <<'EOF'
+          POSTGRES_USER=postgres
+          POSTGRES_PASSWORD=p07_ci_pg_local_only
+          AUTH_DB_PASSWORD=p07_ci_auth_local_only
+          ROOM_DB_PASSWORD=p07_ci_room_local_only
+          TENANT_DB_PASSWORD=p07_ci_tenant_local_only
+          METERING_DB_PASSWORD=p07_ci_metering_local_only
+          BILLING_DB_PASSWORD=p07_ci_billing_local_only
+          NOTIFICATION_DB_PASSWORD=p07_ci_notification_local_only
+          RABBITMQ_DEFAULT_USER=p07_ci_rabbit
+          RABBITMQ_DEFAULT_PASS=p07_ci_rabbit_local_only
+          SERVICE_TOKEN=p07_ci_service_token_32_char_test_only
+          JWT_SECRET=p07_ci_jwt_secret_32_char_test_only
+          OWNER_EMAIL=owner.demo@example.org
+          EOF
+      - name: Real AMQP + MQTT QoS 1 + PostgreSQL integration
+        shell: pwsh
+        env:
+          P07_CI_PROJECT_NAME: p07ci${{ github.run_id }}${{ github.run_attempt }}
+        run: ./scripts/test_p07_integration.ps1

@@ -89,6 +89,7 @@ def test_replayed_room_get_same_ids(make_session):
         ids2 = [r.id for r in svc.meters_for_room(UUID(event["data"]["room_id"]))]
         assert len(ids1) == 2 and ids1 == ids2
 
+
 # P06 MQTT cumulative telemetry regressions.
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -172,3 +173,278 @@ def test_p06_incoming_duplicate_of_suspect_is_still_idempotent(make_session):
         assert svc.record_telemetry(earlier) == 'duplicate'
         assert svc.readings_for_meter(meter.id)[1] == 2
         assert svc.alerts_for_meter(meter.id)[1] == 1
+
+# P07 monthly/contract cutoff selection, manual versioning and offline alarms.
+from app.cutoffs import CutoffError, WINDOW, month_start
+
+
+def _dt(day, hour=0, minute=0):
+    return datetime(2026, 11, day, hour, minute, tzinfo=timezone.utc)
+
+
+def _insert_reading(db, meter_id, stamp, value, status='VALID'):
+    db.add(m.MeterReading(meter_id=meter_id, measured_at=stamp,
+                          reading_value=Decimal(str(value)), validation_status=status))
+    db.flush()
+
+
+def _pending(db, meter_id, at, kind='MONTHLY', contract_id=None):
+    row = m.MeterCutoff(id=uuid4(), meter_id=meter_id,
+        contract_id=contract_id, cutoff_type=kind, cutoff_at=at,
+        source='AUTOMATIC', status='PENDING')
+    db.add(row)
+    db.flush()
+    return row
+
+
+def test_p07_select_valid_nearest_and_reject_outside_15_minutes(make_session):
+    with make_session() as db:
+        meter = new_meter(db)
+        instant = _dt(11, 12)
+        row = _pending(db, meter.id, instant)
+        _insert_reading(db, meter.id, instant - timedelta(minutes=16), '500')
+        _insert_reading(db, meter.id, instant - timedelta(minutes=10), '501', 'SUSPECT')
+        svc = MeteringService(db)
+        assert svc.finalize_due_cutoffs(now=instant + timedelta(minutes=15)) == 0
+        assert row.status == 'PENDING' and row.reading_value is None
+        _insert_reading(db, meter.id, instant + timedelta(minutes=1), '503')
+        _insert_reading(db, meter.id, instant - timedelta(minutes=15), '502')
+        assert svc.finalize_due_cutoffs(now=instant + timedelta(minutes=15)) == 1
+        assert row.status == 'CONFIRMED'
+        assert row.reading_value == Decimal('502')  
+        assert row.source_reading_at.replace(tzinfo=timezone.utc) == instant - timedelta(minutes=15)
+        _insert_reading(db, meter.id, instant, '502.5')
+        assert svc.finalize_due_cutoffs(now=instant + timedelta(days=1)) == 0
+        assert row.reading_value == Decimal('502')  # immutable
+
+
+
+def test_p07_future_sample_does_not_close_cutoff(make_session):
+    with make_session() as db:
+        meter = new_meter(db)
+        instant = _dt(11, 12)
+        row = _pending(db, meter.id, instant)
+
+        # Mẫu đo sau mốc không hợp lệ để chốt.
+        _insert_reading(
+            db,
+            meter.id,
+            instant + timedelta(minutes=1),
+            "101",
+        )
+
+        svc = MeteringService(db)
+
+        assert svc.finalize_due_cutoffs(
+            now=instant + timedelta(minutes=15)
+        ) == 0
+
+        assert row.status == "PENDING"
+        assert row.reading_value is None
+
+        # Mẫu đo đúng thời điểm chốt được chấp nhận.
+        _insert_reading(
+            db,
+            meter.id,
+            instant,
+            "100",
+        )
+
+        assert svc.finalize_due_cutoffs(
+            now=instant + timedelta(minutes=16)
+        ) == 1
+
+        assert row.status == "CONFIRMED"
+        assert row.reading_value == Decimal("100")
+
+
+
+def test_p07_manual_confirm_requires_actor_reason_and_version(make_session):
+    with make_session() as db:
+        meter = new_meter(db)
+        instant = _dt(11, 12)
+        row = _pending(db, meter.id, instant)
+        svc = MeteringService(db)
+        actor = uuid4()
+        with pytest.raises(CutoffError):
+            svc.confirm_cutoff(row.id, reading_value='100', reason='short', actor_id=actor,
+                               now=_dt(12))
+        confirmed = svc.confirm_cutoff(row.id, reading_value='100', reason='Manual meter reading',
+                                       actor_id=actor, now=_dt(12))
+        assert confirmed.reading_value == 100
+        assert confirmed.confirmed_by == actor and confirmed.source == 'MANUAL'
+        with pytest.raises(CutoffError) as err:
+            svc.confirm_cutoff(row.id, reading_value='101', reason='Manual meter reading',
+                               actor_id=actor, now=_dt(12))
+        assert err.value.status == 409
+        newer = svc.revise_cutoff(row.id, reading_value='102', reason='Corrected on inspection',
+                                 actor_id=actor, now=_dt(12))
+        assert row.status == 'SUPERSEDED'
+        assert newer.supersedes_id == row.id and newer.status == 'CONFIRMED'
+        assert newer.reading_value == 102
+        assert svc.revise_cutoff(newer.id, reading_value='103', reason='Another correction',
+                                actor_id=actor, now=_dt(12)).supersedes_id == newer.id
+        with pytest.raises(CutoffError):
+            svc.revise_cutoff(row.id, reading_value='104', reason='Stale revision is blocked',
+                              actor_id=actor, now=_dt(12))
+        assert db.scalar(select(func.count()).select_from(m.MeterCutoff).where(
+            m.MeterCutoff.status == 'CONFIRMED')) == 1
+
+
+def test_p07_manual_monotone_between_confirmed_boundaries(make_session):
+    with make_session() as db:
+        meter = new_meter(db)
+        before = _pending(db, meter.id, _dt(9))
+        middle = _pending(db, meter.id, _dt(10))
+        after = _pending(db, meter.id, _dt(11))
+        svc = MeteringService(db)
+        actor = uuid4()
+        for row, reading in ((before, '100'), (after, '200')):
+            svc.confirm_cutoff(row.id, reading_value=reading,
+                               reason='Observed on meter', actor_id=actor, now=_dt(12))
+        for reading in ('99', '201'):
+            with pytest.raises(CutoffError):
+                svc.confirm_cutoff(middle.id, reading_value=reading,
+                                   reason='Observed on meter', actor_id=actor, now=_dt(12))
+        assert svc.confirm_cutoff(middle.id, reading_value='150',
+                                  reason='Observed on meter', actor_id=actor, now=_dt(12)).status == 'CONFIRMED'
+
+
+def test_p07_handover_reasons_copied_into_correction(make_session):
+    from tests.test_lifecycle import message
+    with make_session() as db:
+        room, a, b = uuid4(), uuid4(), uuid4()
+        instant='2026-11-11T12:00:00+00:00'
+        svc=MeteringService(db)
+        svc.process_contract_event(message('ContractEnded',a,room,instant), now=_dt(12))
+        svc.process_contract_event(message('ContractStarted',b,room,instant), now=_dt(12))
+        cutoff = next(x for x in db.scalars(select(m.MeterCutoff)) if x.meter.meter_type == 'ELECTRICITY')
+        assert len(repo.cutoff_reasons(db, cutoff.id)) == 2
+        svc.confirm_cutoff(cutoff.id, reading_value='40', reason='Manual handover index',
+                           actor_id=uuid4(), now=_dt(12))
+        revision = svc.revise_cutoff(cutoff.id, reading_value='41', reason='Incorrect handover value',
+                                    actor_id=uuid4(), now=_dt(12))
+        assert {(r.contract_id, r.reason_type) for r in repo.cutoff_reasons(db, revision.id)} == {
+            (a, 'CONTRACT_END'), (b, 'CONTRACT_START')}
+        assert len(repo.cutoff_reasons(db, cutoff.id)) == 2
+
+
+def test_p07_monthly_vietnam_00_idempotent(make_session):
+    with make_session() as db:
+        meter = new_meter(db)
+        meter.created_at = datetime(2026, 9, 15, tzinfo=timezone.utc)
+        db.flush()
+        svc = MeteringService(db)
+        at = datetime(2026, 11, 2, tzinfo=timezone.utc)
+        expected = datetime(2026, 10, 31, 17, tzinfo=timezone.utc)
+        assert svc.create_monthly_cutoffs(now=at) == 2  # Oct 1 and Nov 1 VN
+        assert svc.create_monthly_cutoffs(now=at) == 0
+        rows=list(db.scalars(select(m.MeterCutoff)))
+        assert len(rows) == 2
+        assert any(row.cutoff_at.replace(tzinfo=timezone.utc) == expected for row in rows)
+        assert all(row.status == 'PENDING' for row in rows)
+        assert svc.finalize_due_cutoffs(now=at) == 0
+        assert all(row.status == 'PENDING' for row in rows)
+
+
+def test_p07_offline_open_once_resolved_by_mqtt_duplicate(make_session):
+    with make_session() as db:
+        meter = new_meter(db)
+        meter.created_at = _dt(10, 12)
+        db.flush()
+        svc = MeteringService(db)
+        now = _dt(11, 12)
+        assert svc.scan_offline(now=now) == 1
+        assert svc.scan_offline(now=now) == 0
+        alarm=repo.open_offline(db,meter.id)
+        assert alarm is not None and alarm.status == 'OPEN'
+        msg = sample(meter.id, stamp='2026-11-11T12:00:00Z', val='500')
+        assert svc.record_telemetry(msg, now=now) == 'inserted'
+        assert alarm.status == 'RESOLVED'
+        # Duplicate QoS1 delivery still counts as a recent heartbeat.
+        assert svc.record_telemetry(msg, now=now + timedelta(minutes=2)) == 'duplicate'
+        assert svc.scan_offline(now=now + timedelta(minutes=19)) == 0
+        assert svc.scan_offline(now=now + timedelta(minutes=23)) == 1
+        assert repo.open_offline(db,meter.id) is not None
+
+
+def test_p07_job_two_runs_no_duplicate_cutoff(make_session):
+    with make_session() as db:
+        meter = new_meter(db)
+        meter.created_at = _dt(1)
+        db.flush()
+        svc = MeteringService(db)
+        # first month boundary after creation -> Dec 1 (Nov 30 at 17:00 UTC)
+        now = datetime(2026, 12, 1, 18, tzinfo=timezone.utc)
+        boundary = datetime(2026, 11, 30, 17, tzinfo=timezone.utc)
+        _insert_reading(db, meter.id, boundary - timedelta(minutes=5), '600')
+        first = svc.run_cutoff_jobs(now=now)
+        second = svc.run_cutoff_jobs(now=now)
+        assert first['monthly_created'] == 1 and first['auto_confirmed'] == 1
+        assert second['monthly_created'] == 0 and second['auto_confirmed'] == 0
+        rows=list(db.scalars(select(m.MeterCutoff)))
+        assert len(rows) == 1 and rows[0].reading_value == 600
+        assert rows[0].status == 'CONFIRMED'
+
+
+def test_p07_late_better_reading_alert_does_not_rewrite_confirmed(make_session):
+    with make_session() as db:
+        meter = new_meter(db)
+        instant = _dt(11,12)
+        row = _pending(db, meter.id, instant)
+        _insert_reading(db, meter.id, instant - timedelta(minutes=10), '100')
+        svc = MeteringService(db)
+        assert svc.finalize_due_cutoffs(now=instant+timedelta(minutes=16))==1
+        assert row.reading_value==100
+        later = instant - timedelta(minutes=1)
+        assert svc.record_telemetry(sample(meter.id, later.isoformat(), '101'),
+                                    now=instant+timedelta(minutes=20))=='inserted'
+        assert row.reading_value==100 and row.status=='CONFIRMED'
+        alerts, n=svc.alerts_for_meter(meter.id)
+        assert n==1 and alerts[0].alert_type=='LATE_AFTER_CUTOFF'
+        assert alerts[0].related_cutoff_id==row.id
+        assert svc.record_telemetry(sample(meter.id,later.isoformat(),'101'),
+                                    now=instant+timedelta(minutes=21))=='duplicate'
+        assert svc.alerts_for_meter(meter.id)[1]==1
+        resolved=svc.resolve_meter_alert(alerts[0].id,note='Confirmed late telemetry review')
+        assert resolved.status=='RESOLVED'
+
+
+def test_p07_monthly_reuses_handover_same_instant_and_preserves_reasons(make_session):
+    from tests.test_lifecycle import message
+    from app.cutoffs import VN
+    with make_session() as db:
+        room, cid = uuid4(), uuid4()
+        boundary = datetime(2026, 11, 30, 17, tzinfo=timezone.utc)  # Dec 1 in VN
+        svc=MeteringService(db)
+        # Room created weeks before the month boundary.
+        repo.ensure_meter(db,room,'ELECTRICITY')
+        repo.ensure_meter(db,room,'WATER')
+        meters=repo.meters_for_room(db,room)
+        for meter in meters:
+            meter.created_at = _dt(1)
+        db.flush()
+        assert svc.process_contract_event(message('ContractStarted', cid, room,
+            boundary.isoformat()), now=datetime(2026,12,2,tzinfo=timezone.utc))
+        assert svc.create_monthly_cutoffs(now=datetime(2026,12,2,tzinfo=timezone.utc)) == 0
+        cutoffs=list(db.scalars(select(m.MeterCutoff)))
+        assert len(cutoffs)==2
+        assert all(c.cutoff_type=='CONTRACT_START' for c in cutoffs)
+        assert all(len(repo.cutoff_reasons(db,c.id))==1 for c in cutoffs)
+
+
+def test_p07_late_contract_start_does_not_rewrite_confirmed_end(make_session):
+    from tests.test_lifecycle import message
+    with make_session() as db:
+        room, previous, following = uuid4(),uuid4(),uuid4()
+        instant = _dt(11,12).isoformat()
+        svc=MeteringService(db)
+        svc.process_contract_event(message('ContractEnded', previous, room, instant), now=_dt(12))
+        first = next(c for c in db.scalars(select(m.MeterCutoff))
+                     if c.meter.meter_type=='ELECTRICITY')
+        svc.confirm_cutoff(first.id, reading_value='120', reason='Handover counter photographed',
+                           actor_id=uuid4(), now=_dt(12))
+        svc.process_contract_event(message('ContractStarted', following, room, instant), now=_dt(12))
+        assert first.cutoff_type=='CONTRACT_END'
+        assert first.status=='CONFIRMED'
+        assert len(repo.cutoff_reasons(db,first.id))==2
