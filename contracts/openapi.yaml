@@ -414,6 +414,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+    delete:
+      tags: [Room]
+      operationId: room_delete_property
+      summary: Vô hiệu hóa khu trọ; không xóa dữ liệu lịch sử
+      description: 204 khi vô hiệu hóa hoặc đã vô hiệu hóa; 409 khi còn phần tử active/hợp đồng.
+      responses:
+        '204':
+          description: Đã vô hiệu hóa (soft-delete)
+        '404':
+          description: Không tìm thấy
+        '409':
+          description: Không thể vô hiệu hóa khi còn phụ thuộc
   /api/v1/properties/{property_id}/buildings:
     get:
       tags:
@@ -973,6 +985,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+    delete:
+      tags: [Room]
+      operationId: room_delete_room
+      summary: Vô hiệu hóa phòng; giữ lịch sử và hợp đồng
+      description: 204 khi vô hiệu hóa hoặc đã vô hiệu hóa; 409 khi còn phần tử active/hợp đồng.
+      responses:
+        '204':
+          description: Đã vô hiệu hóa (soft-delete)
+        '404':
+          description: Không tìm thấy
+        '409':
+          description: Không thể vô hiệu hóa khi còn phụ thuộc
   /internal/v1/rooms/{room_id}/validation:
     get:
       tags:
@@ -4556,6 +4580,38 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+    delete:
+      tags: [Room]
+      operationId: room_delete_building
+      summary: Vô hiệu hóa dãy nhà; không xóa dữ liệu lịch sử
+      description: 204 khi vô hiệu hóa hoặc đã vô hiệu hóa; 409 khi còn phần tử active/hợp đồng.
+      responses:
+        '204':
+          description: Đã vô hiệu hóa (soft-delete)
+        '404':
+          description: Không tìm thấy
+        '409':
+          description: Không thể vô hiệu hóa khi còn phụ thuộc
+    get:
+      tags: [Room]
+      operationId: room_get_building
+      summary: Chi tiết dãy nhà
+      parameters:
+      - name: building_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Building'
+        '404':
+          description: Không tìm thấy
+        '409':
+          description: Xung đột nghiệp vụ
   /api/v1/floors/{floor_id}:
     patch:
       tags:
@@ -4631,6 +4687,38 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+    delete:
+      tags: [Room]
+      operationId: room_delete_floor
+      summary: Vô hiệu hóa tầng; không xóa dữ liệu lịch sử
+      description: 204 khi vô hiệu hóa hoặc đã vô hiệu hóa; 409 khi còn phần tử active/hợp đồng.
+      responses:
+        '204':
+          description: Đã vô hiệu hóa (soft-delete)
+        '404':
+          description: Không tìm thấy
+        '409':
+          description: Không thể vô hiệu hóa khi còn phụ thuộc
+    get:
+      tags: [Room]
+      operationId: room_get_floor
+      summary: Chi tiết tầng
+      parameters:
+      - name: floor_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Floor'
+        '404':
+          description: Không tìm thấy
+        '409':
+          description: Xung đột nghiệp vụ
   /api/v1/final-invoices:
     post:
       tags:
@@ -4722,6 +4810,33 @@ paths:
         '401': *id008
         '403': *id008
         '503': *id008
+  /api/v1/floors/{floor_id}/rooms:
+    post:
+      tags: [Room]
+      operationId: room_post_single_room
+      summary: Tạo một phòng
+      parameters:
+      - name: floor_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoomCreateItem'
+      responses:
+        '201':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Room'
+        '404':
+          description: Không tìm thấy
+        '409':
+          description: Xung đột nghiệp vụ
 components:
   securitySchemes:
     BearerAuth:
@@ -4881,6 +4996,10 @@ components:
           type: number
           exclusiveMinimum: 0
         listed_rent: *id006
+        property_id:
+          type: string
+          format: uuid
+          description: Optional property assertion; server derives authoritative property from floor.
       required:
       - room_code
       - area_m2

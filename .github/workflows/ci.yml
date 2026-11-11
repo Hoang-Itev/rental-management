@@ -32,7 +32,7 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           import yaml
-          required = [Path('compose.yaml'), Path('compose.dev.yaml'), Path('compose.seed.yaml'), Path('compose.auth-test.yaml'), Path('.github/workflows/ci.yml')]
+          required = [Path('compose.yaml'), Path('compose.dev.yaml'), Path('compose.seed.yaml'), Path('compose.auth-test.yaml'), Path('compose.room-test.yaml'), Path('.github/workflows/ci.yml')]
           for path in required:
               assert path.exists(), f'Missing {path}'
               yaml.safe_load(path.read_text(encoding='utf-8'))
@@ -44,6 +44,8 @@ jobs:
           PY
       - name: Test deterministic seed dataset
         run: python -m pytest -q scripts/seed/tests
+      - name: Ensure Room OpenAPI extensions are committed
+        run: python scripts/room/sync_openapi.py --check contracts/openapi.yaml
 
   service-unit-tests:
     runs-on: ubuntu-latest
@@ -75,7 +77,7 @@ jobs:
           if [[ "${{ matrix.service }}" == "auth" ]]; then path="backend/auth"; else path="backend/services/${{ matrix.service }}"; fi
           cd "$path"
           if grep -r -E -q '^[[:space:]]*(async[[:space:]]+)?def[[:space:]]+test_' tests --include='test_*.py'; then
-            if [[ "${{ matrix.service }}" == "auth" ]]; then
+            if [[ "${{ matrix.service }}" == "auth" || "${{ matrix.service }}" == "room" ]]; then
               python -m pytest tests -q --cov=app --cov-report=term-missing --cov-fail-under=95
             elif grep -E -q '^[[:space:]]*(async[[:space:]]+)?def[[:space:]]+test_' tests/test_service.py; then
               python -m pytest tests -q --cov=app.service --cov-report=term-missing --cov-fail-under=80
@@ -146,6 +148,11 @@ jobs:
       - name: Verify room_v3_003 hierarchy immutability (rollback-only)
         run: |
           docker compose -f compose.yaml -f compose.seed.yaml run --rm --no-deps room python /seed/verify_room_immutability.py
+      - name: PostgreSQL P02 Room integration, real triggers and rollback (CI disposable DB)
+        run: |
+          set -euo pipefail
+          docker compose -f compose.yaml -f compose.room-test.yaml run --rm --no-deps room \
+            sh -c 'python -m pip install --disable-pip-version-check -q -r /app/requirements-test.txt && python -m pytest integration -q'
       - name: Run seed again to prove idempotence
         run: |
           set -euo pipefail
@@ -207,6 +214,11 @@ jobs:
           TEST_AUTH_EMAIL: owner.demo@example.com
           TEST_AUTH_PASSWORD: CI_Demo_Auth_Only_2026_Strong_Password
         run: python3 scripts/auth/gateway_check.py
+      - name: Test Room read-only routes via real Auth and Nginx
+        env:
+          TEST_AUTH_EMAIL: owner.demo@example.com
+          TEST_AUTH_PASSWORD: CI_Demo_Auth_Only_2026_Strong_Password
+        run: python3 scripts/room/gateway_check.py
       - name: Diagnose failed Compose startup
         if: failure()
         run: |

@@ -1,0 +1,9 @@
+# P02 test overlay: unit tests and Postgres integration. NEVER include in normal up.
+services:
+  room:
+    volumes:
+      - ./backend/services/room/tests:/app/tests:ro
+      - ./backend/services/room/integration:/app/integration:ro
+      - ./requirements-test.txt:/app/requirements-test.txt:ro
+    environment:
+      ROOM_P02_EPHEMERAL_TEST: "1"
