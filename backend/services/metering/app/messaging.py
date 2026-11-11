@@ -96,3 +96,70 @@ async def process_delivery(message, channel, sessions: sessionmaker[Session]) ->
     # ACK only after process_room_created commits its database transaction.
     await message.ack()
     return "processed" if applied else "duplicate"
+
+TELEMETRY_QUEUE = 'metering.telemetry.q'
+
+async def process_telemetry_delivery(message, channel, sessions: sessionmaker[Session]) -> str:
+    """Handle MQTT->Rabbit AMQP telemetry with durable manual ACK/retry/DLQ.
+
+    Retry round-tripping through default-exchange TTL queues rewrites the
+    routing key; x-p06-original-key preserves the MQTT topic for validation.
+    """
+    from app import schemas as s
+    from app.telemetry import InvalidTelemetry
+    headers = dict(message.headers or {})
+    original_key = headers.get('x-p06-original-key') or message.routing_key
+    try:
+        body = json.loads(message.body)
+        if not isinstance(body, dict):
+            raise ValueError('JSON object required')
+        sample = s.Telemetry.model_validate(body)
+        if original_key != f'meters.{sample.meter_id}.reading':
+            raise InvalidTelemetry('MQTT routing key must match meter_id')
+    except (ValueError, UnicodeDecodeError, json.JSONDecodeError, ValidationError) as exc:
+        try:
+            await transfer(channel, TELEMETRY_QUEUE + '.dlq', message.body,
+                           {**headers, 'x-p06-error': 'invalid-telemetry',
+                            'x-p06-original-key': str(original_key)[:180]})
+        except Exception:
+            await message.reject(requeue=True)
+            raise
+        await message.ack()
+        logger.warning('Quarantined invalid MQTT telemetry (%s)', type(exc).__name__)
+        return 'deadletter'
+
+    try:
+        with sessions() as session:
+            result = MeteringService(session).record_telemetry(body,
+                routing_key=str(original_key))
+    except InvalidTelemetry as exc:
+        try:
+            await transfer(channel, TELEMETRY_QUEUE + '.dlq', message.body,
+                           {**headers, 'x-p06-error': type(exc).__name__[:80],
+                            'x-p06-original-key': str(original_key)[:180]})
+        except Exception:
+            await message.reject(requeue=True)
+            raise
+        await message.ack()
+        return 'deadletter'
+    except Exception as exc:
+        try:
+            attempt = max(0, int(headers.get('x-p06-retry', 0)))
+        except (ValueError, TypeError):
+            attempt = 0
+        dest = (TELEMETRY_QUEUE + '.dlq' if attempt >= len(RETRY_DELAYS) else
+                f'{TELEMETRY_QUEUE}.retry.{RETRY_DELAYS[attempt]}s')
+        try:
+            await transfer(channel, dest, message.body, {
+                **headers, 'x-p06-retry': attempt + 1,
+                'x-p06-error': type(exc).__name__[:80],
+                'x-p06-original-key': str(original_key)[:180],
+            })
+        except Exception:
+            await message.reject(requeue=True)
+            raise
+        await message.ack()
+        logger.warning('MQTT DB failure (%s) transferred to %s', type(exc).__name__, dest)
+        return 'deadletter' if attempt >= len(RETRY_DELAYS) else 'retry'
+    await message.ack()
+    return result

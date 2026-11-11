@@ -4,10 +4,13 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.api_internal import router as internal_router
+from app.api import router as public_router, alerts_router
 from app.db import get_engine
 
 app = FastAPI(title="metering", version="0.3.0")
 app.include_router(internal_router)
+app.include_router(public_router)
+app.include_router(alerts_router)
 
 
 @app.get("/health", include_in_schema=False)
