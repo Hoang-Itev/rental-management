@@ -69,14 +69,56 @@ def test_01_simulator_listing_and_real_snapshot_persisted():
         assert resp.status_code==200,resp.text
         items=resp.json()['items']
         assert len(items)==2 and {m['meter_type'] for m in items}=={'ELECTRICITY','WATER'}
-        ids={item['id'] for item in items}
+        
+        meter_ids = {
+            item["meter_type"]: item["id"]
+            for item in items
+        }
+
     def check(db):
-        rows=list(db.scalars(select(m.MeterReading).where(m.MeterReading.meter_id.in_(ids))))
-        if len(rows)!=2:return None
-        return rows
-    rows=until(check,'the two Simulator --once MQTT readings')
-    assert all(r.validation_status=='VALID' and r.reading_value>=0 for r in rows)
-    assert rows[0].measured_at.tzinfo is not None
+        rows = list(
+            db.scalars(
+                select(m.MeterReading)
+                .where(
+                    m.MeterReading.meter_id.in_(
+                        meter_ids.values()
+                    )
+                )
+                .order_by(m.MeterReading.measured_at)
+            )
+        )
+
+        electricity = [
+            row for row in rows
+            if str(row.meter_id) == meter_ids["ELECTRICITY"]
+        ]
+
+        water = [
+            row for row in rows
+            if str(row.meter_id) == meter_ids["WATER"]
+        ]
+
+        if len(electricity) == 2 and len(water) == 1:
+            return electricity, water[0]
+
+        return None
+
+    electricity, water = until(
+        check,
+        "Simulator readings for seeded meters"
+    )
+
+    historical, new = electricity
+
+    assert historical.reading_value == Decimal("1000000.000")
+    assert new.measured_at > historical.measured_at
+    assert new.validation_status == "VALID"
+    assert new.reading_value > historical.reading_value
+
+    assert water.validation_status == "VALID"
+    assert water.reading_value >= 0
+    assert water.measured_at.tzinfo is not None
+
 
 
 def test_02_real_mqtt_duplicate_conflict_and_out_of_order():
