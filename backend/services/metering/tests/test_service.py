@@ -88,3 +88,87 @@ def test_replayed_room_get_same_ids(make_session):
         svc.process_room_created(event)
         ids2 = [r.id for r in svc.meters_for_room(UUID(event["data"]["room_id"]))]
         assert len(ids1) == 2 and ids1 == ids2
+
+# P06 MQTT cumulative telemetry regressions.
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
+from app.telemetry import InvalidTelemetry, UnknownMeter
+
+
+def sample(meter_id, stamp='2026-11-11T10:00:00Z', val='100.000'):
+    return {'meter_id': str(meter_id), 'measured_at': stamp, 'reading_value': val}
+
+
+def new_meter(db):
+    rid = uuid4()
+    repo.ensure_meter(db, rid, 'ELECTRICITY')
+    db.flush()
+    return MeteringService(db).meters_for_room(rid)[0]
+
+
+def test_p06_insert_duplicate_conflict_alert_once(make_session):
+    with make_session() as db:
+        meter = new_meter(db)
+        svc = MeteringService(db)
+        msg = sample(meter.id)
+        assert svc.record_telemetry(msg, routing_key=f'meters.{meter.id}.reading') == 'inserted'
+        assert svc.record_telemetry(msg) == 'duplicate'
+        changed = {**msg, 'reading_value':'101.000'}
+        assert svc.record_telemetry(changed) == 'conflict'
+        assert svc.record_telemetry(changed) == 'conflict'
+        rows, total = svc.readings_for_meter(meter.id)
+        assert total == 1 and rows[0].reading_value == Decimal('100.000')
+        alerts, total = svc.alerts_for_meter(meter.id)
+        assert total == 1 and alerts[0].alert_type == 'CONFLICTING_DUPLICATE'
+        assert alerts[0].detail['stored'] == '100.000'
+
+
+def test_p06_out_of_order_valid_then_suspect_by_neighbours(make_session):
+    with make_session() as db:
+        meter = new_meter(db)
+        svc = MeteringService(db)
+        assert svc.record_telemetry(sample(meter.id, '2026-11-11T12:00:00Z', '120')) == 'inserted'
+        assert svc.record_telemetry(sample(meter.id, '2026-11-11T10:00:00Z', '100')) == 'inserted'
+        assert svc.record_telemetry(sample(meter.id, '2026-11-11T11:00:00Z', '110')) == 'inserted'
+        assert svc.record_telemetry(sample(meter.id, '2026-11-11T09:00:00Z', '130')) == 'suspect'
+        assert svc.record_telemetry(sample(meter.id, '2026-11-11T13:00:00Z', '115')) == 'suspect'
+        rows, count = svc.readings_for_meter(meter.id)
+        assert count == 5
+        valid = [r for r in rows if r.validation_status == 'VALID']
+        suspect = [r for r in rows if r.validation_status == 'SUSPECT']
+        assert len(valid) == 3 and len(suspect) == 2
+        assert svc.alerts_for_meter(meter.id)[1] == 2
+
+
+def test_p06_routing_validation_unknown_future_and_precision(make_session):
+    with make_session() as db:
+        meter = new_meter(db)
+        svc = MeteringService(db)
+        with pytest.raises(InvalidTelemetry):
+            svc.record_telemetry(sample(meter.id), routing_key=f'meters.{uuid4()}.reading')
+        with pytest.raises(UnknownMeter):
+            svc.record_telemetry(sample(uuid4()))
+        with pytest.raises(InvalidTelemetry):
+            svc.record_telemetry(sample(meter.id, '2026-11-11T10:10:00Z'),
+                                 now=datetime(2026,11,11,10,tzinfo=timezone.utc))
+        with pytest.raises(ValueError):
+            svc.record_telemetry(sample(meter.id, val='1.9999'))
+        with pytest.raises(ValueError):
+            svc.record_telemetry(sample(meter.id, val='-1'))
+        db.get(m.Meter, meter.id).status = 'INACTIVE'
+        db.flush()
+        with pytest.raises(UnknownMeter):
+            svc.record_telemetry(sample(meter.id))
+        assert svc.readings_for_meter(meter.id)[1] == 0
+
+
+def test_p06_incoming_duplicate_of_suspect_is_still_idempotent(make_session):
+    with make_session() as db:
+        meter = new_meter(db)
+        svc = MeteringService(db)
+        svc.record_telemetry(sample(meter.id, val='200'))
+        earlier = sample(meter.id, '2026-11-11T09:00:00Z', '220')
+        assert svc.record_telemetry(earlier) == 'suspect'
+        assert svc.record_telemetry(earlier) == 'duplicate'
+        assert svc.readings_for_meter(meter.id)[1] == 2
+        assert svc.alerts_for_meter(meter.id)[1] == 1

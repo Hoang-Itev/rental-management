@@ -1,0 +1,9 @@
+# No services boot for P06 unit tests.
+services:
+  metering:
+    volumes:
+      - ./backend/services/metering/tests:/app/tests:ro
+      - ./requirements-test.txt:/app/requirements-test.txt:ro
+  simulator:
+    volumes:
+      - ./simulator/tests:/app/tests:ro

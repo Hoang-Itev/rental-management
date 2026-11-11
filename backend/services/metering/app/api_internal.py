@@ -45,3 +45,26 @@ def internal_meters(
     rows, total = MeteringService(db).list_meters(status, page, page_size)
     return {"items": [meter_view(r) for r in rows],
             "meta": {"page": page, "page_size": page_size, "total": total}}
+
+
+@router.get(
+    "/meters/{meter_id}/baseline",
+    dependencies=[Depends(require_service_token)]
+)
+def meter_baseline(
+    meter_id: UUID,
+    db: Session = Depends(get_db)
+):
+    from app.telemetry import UnknownMeter
+
+    try:
+        data = MeteringService(db).meter_baseline(meter_id)
+    except UnknownMeter as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return {
+        "meter_id": str(meter_id),
+        "reading_value": str(data["reading_value"]),
+        "measured_at": data["measured_at"].isoformat(),
+        "source": data["source"],
+    }

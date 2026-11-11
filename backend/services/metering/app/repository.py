@@ -84,3 +84,72 @@ def ensure_handover_cutoffs(session: Session, room_id: UUID, contract_id: UUID,
                    .values(id=uuid4(),cutoff_id=cutoff.id,contract_id=contract_id,reason_type=reason)
                    .on_conflict_do_nothing(index_elements=['cutoff_id','contract_id','reason_type']))
         session.execute(statement)
+
+def meter_locked(session: Session, meter_id: UUID):
+    """Serialize insert + conflict-alert creation by physical meter."""
+    return session.get(m.Meter, meter_id, with_for_update=True)
+
+
+def reading_at(session: Session, meter_id: UUID, measured_at):
+    return session.get(m.MeterReading, (meter_id, measured_at))
+
+
+def nearest_valid(session: Session, meter_id: UUID, measured_at, *, before: bool):
+    stamp = m.MeterReading.measured_at
+    criterion = stamp < measured_at if before else stamp > measured_at
+    order = stamp.desc() if before else stamp.asc()
+    return session.scalar(select(m.MeterReading).where(
+        m.MeterReading.meter_id == meter_id,
+        m.MeterReading.validation_status == 'VALID', criterion,
+    ).order_by(order).limit(1))
+
+
+def existing_alert(session: Session, meter_id: UUID, measured_at, alert_type: str):
+    return session.scalar(select(m.MeterAlert.id).where(
+        m.MeterAlert.meter_id == meter_id,
+        m.MeterAlert.related_measured_at == measured_at,
+        m.MeterAlert.alert_type == alert_type,
+    ).limit(1)) is not None
+
+
+def readings_for_meter(session: Session, meter_id: UUID, *, page=1, page_size=100,
+                       from_at=None, to_at=None):
+    clauses = [m.MeterReading.meter_id == meter_id]
+    if from_at is not None: clauses.append(m.MeterReading.measured_at >= from_at)
+    if to_at is not None: clauses.append(m.MeterReading.measured_at <= to_at)
+    stmt = select(m.MeterReading).where(*clauses)
+    return (list(session.scalars(stmt.order_by(m.MeterReading.measured_at.desc())
+                 .limit(page_size).offset((page-1)*page_size))),
+            int(session.scalar(select(func.count()).select_from(m.MeterReading)
+                .where(*clauses)) or 0))
+
+
+def alerts_for_meter(session: Session, meter_id: UUID, *, page=1, page_size=100):
+    stmt = select(m.MeterAlert).where(m.MeterAlert.meter_id == meter_id)
+    return (list(session.scalars(stmt.order_by(m.MeterAlert.detected_at.desc(),m.MeterAlert.id)
+                 .limit(page_size).offset((page-1)*page_size))),
+            int(session.scalar(select(func.count()).select_from(m.MeterAlert)
+                .where(m.MeterAlert.meter_id == meter_id)) or 0))
+
+
+def list_alerts(session: Session, *, status=None, alert_type=None,
+                page=1, page_size=100):
+    conditions=[]
+    if status:conditions.append(m.MeterAlert.status==status)
+    if alert_type:conditions.append(m.MeterAlert.alert_type==alert_type)
+    stmt=select(m.MeterAlert).where(*conditions)
+    return (list(session.scalars(stmt.order_by(m.MeterAlert.detected_at.desc(),m.MeterAlert.id)
+                 .limit(page_size).offset((page-1)*page_size))),
+            int(session.scalar(select(func.count()).select_from(m.MeterAlert).where(*conditions)) or 0))
+
+
+def latest_valid_reading(session: Session, meter_id: UUID):
+    return session.scalar(
+        select(m.MeterReading)
+        .where(
+            m.MeterReading.meter_id == meter_id,
+            m.MeterReading.validation_status == "VALID",
+        )
+        .order_by(m.MeterReading.measured_at.desc())
+        .limit(1)
+    )

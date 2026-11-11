@@ -1,0 +1,15 @@
+# For random disposable P06 test project ONLY. Compose >=2.24 required.
+services:
+  rabbitmq:
+    ports: !reset []
+  metering:
+    volumes:
+      - ./tests/integration:/app/integration:ro
+      - ./requirements-test.txt:/app/requirements-test.txt:ro
+    environment:
+      P06_EPHEMERAL_TEST: "1"
+      P06_PROJECT_NAME: ${P06_PROJECT_NAME:?Set disposable P06_PROJECT_NAME}
+      MQTT_HOST: rabbitmq
+      MQTT_PORT: "1883"
+      MQTT_USERNAME: ${RABBITMQ_DEFAULT_USER:?RabbitMQ username required}
+      MQTT_PASSWORD: ${RABBITMQ_DEFAULT_PASS:?RabbitMQ password required}
