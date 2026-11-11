@@ -32,6 +32,16 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           import yaml
+          # Docker Compose supports custom YAML tags.
+          # PyYAML needs explicit constructors for validation.
+          def compose_tag(loader, tag_suffix, node):
+              if isinstance(node, yaml.SequenceNode):
+                  return loader.construct_sequence(node)
+              if isinstance(node, yaml.MappingNode):
+                  return loader.construct_mapping(node)
+              return loader.construct_scalar(node)
+
+          yaml.SafeLoader.add_multi_constructor("!", compose_tag)
           required = [Path('compose.yaml'), Path('compose.dev.yaml'), Path('compose.seed.yaml'), Path('compose.auth-test.yaml'), Path('compose.room-test.yaml'), Path('compose.p03.yaml'), Path('compose.p03-unit.yaml'), Path('compose.p04-unit.yaml'), Path('compose.p04-isolated.yaml'), Path('.github/workflows/ci.yml')]
           for path in required:
               assert path.exists(), f'Missing {path}'
