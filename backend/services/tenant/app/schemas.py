@@ -85,6 +85,7 @@ class ContractCreate(Strict):
     start_date: date
     end_date: date  # INCLUSIVE
     initial_terms: TermInput
+    deposit_amount: Money | None = None
     @model_validator(mode='after')
     def date_order(self):
         if self.end_date < self.start_date or self.end_date == date.max:
@@ -100,9 +101,14 @@ class ContractPatch(Patch):
     representative_tenant_id: UUID | None = None
     start_date: date | None = None
     end_date: date | None = None
+    deposit_amount: Money | None = None
     @model_validator(mode='after')
     def required_fields(self):
-        if any(getattr(self,field) is None for field in self.model_fields_set):
+        if any(
+            getattr(self, field) is None
+            for field in self.model_fields_set
+            if field != 'deposit_amount'
+        ):
             raise ValueError('contract fields cannot be null')
         return self
 

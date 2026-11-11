@@ -121,11 +121,66 @@ def test_contract_term_version_rules(env,room,tenant_payload,make_contract):
     assert act(env,'confirm',draft.id).status=='SCHEDULED'
 
 
-def test_contract_patch_date_still_requires_terms_cover(env,room,tenant_payload,make_contract):
-    payer,rid,draft=seeded(env,room,tenant_payload,make_contract)
-    act(env,'patch_contract',draft.id,s.ContractPatch(start_date='2026-12-02',end_date='2027-02-28'))
-    err(409,lambda:act(env,'confirm',draft.id))
-    err(409,lambda:act(env,'patch_contract',draft.id,s.ContractPatch(end_date='2026-11-30')))
+
+def test_patch_start_date_keeps_terms_valid(
+    env, room, tenant_payload, make_contract
+):
+    payer, rid, draft = seeded(
+        env, room, tenant_payload, make_contract
+    )
+
+    changed = act(
+        env, 'patch_contract', draft.id,
+        s.ContractPatch(start_date='2026-12-05')
+    )
+
+    assert changed.start_date == date(2026, 12, 5)
+
+    terms = act(env, 'terms', draft.id)
+    assert terms[0].effective_from == date(2026, 12, 5)
+
+    assert act(env, 'confirm', draft.id).status == 'SCHEDULED'
+
+
+def test_patch_date_crosses_price_version_rolls_back(
+    env, room, tenant_payload, make_contract
+):
+    payer, rid, draft = seeded(
+        env, room, tenant_payload, make_contract
+    )
+
+    act(
+        env, 'add_term', draft.id,
+        s.TermInput(
+            effective_from='2027-01-01',
+            monthly_rent=3000000,
+            electricity_unit_price=3500,
+            water_unit_price=18000,
+        )
+    )
+
+    err(
+        409,
+        lambda: act(
+            env, 'patch_contract', draft.id,
+            s.ContractPatch(start_date='2027-01-01')
+        )
+    )
+
+    assert act(env, 'contract', draft.id).start_date == date(2026, 12, 1)
+    assert act(env, 'terms', draft.id)[0].effective_from == date(2026, 12, 1)
+
+    err(
+        409,
+        lambda: act(
+            env, 'patch_contract', draft.id,
+            s.ContractPatch(end_date='2026-12-15')
+        )
+    )
+
+    assert act(env, 'contract', draft.id).end_date == date(2027, 1, 31)
+    assert act(env, 'confirm', draft.id).status == 'SCHEDULED'
+
 
 
 def test_draft_invalid_payer_email(env,room,make_contract):
@@ -170,3 +225,35 @@ def test_draft_reject_confirm_when_room_turns_inactive(env,room,tenant_payload,m
     payer,rid,draft=seeded(env,room,tenant_payload,make_contract)
     room.available[rid]=False
     err(409,lambda:act(env,'confirm',draft.id))
+
+
+def test_contract_deposit_create_patch_and_clear(
+    env, room, tenant_payload, make_contract
+):
+    payer = act(env, 'create_tenant', tenant_payload)
+    rid = uuid4()
+    room.available[rid] = True
+
+    payload = make_contract(payer.id, rid).model_copy(
+        update={'deposit_amount': 1000000}
+    )
+
+    draft = act(env, 'create_contract', payload)
+    assert draft.deposit_amount == 1000000
+
+    changed = act(
+        env, 'patch_contract', draft.id,
+        s.ContractPatch(deposit_amount=1500000)
+    )
+    assert changed.deposit_amount == 1500000
+
+    cleared = act(
+        env, 'patch_contract', draft.id,
+        s.ContractPatch(deposit_amount=None)
+    )
+    assert cleared.deposit_amount is None
+
+    assert act(env, 'contract', draft.id).deposit_amount is None
+
+    with pytest.raises(ValueError):
+        s.ContractPatch(deposit_amount=-1)

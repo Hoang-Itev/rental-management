@@ -84,7 +84,8 @@ class TenantService:
                 row=repo.add(self.db,m.Contract(
                     id=uuid4(), contract_code=data.contract_code,room_id=data.room_id,
                     room_code_snapshot=room.room_code, representative_tenant_id=data.representative_tenant_id,
-                    start_date=data.start_date,end_date=data.end_date,status='DRAFT'))
+                    start_date=data.start_date, end_date=data.end_date,
+                    status='DRAFT', deposit_amount=data.deposit_amount))
                 item=data.initial_terms
                 repo.add(self.db,m.ContractTerm(id=uuid4(),contract_id=row.id,**item.model_dump()))
                 self._event(self.db,row.id,'CREATED',actor_id=actor_id)
@@ -92,22 +93,68 @@ class TenantService:
         except IntegrityError as exc:
             raise invalid('Duplicate contract code or invalid database constraint') from exc
 
-    def patch_contract(self,contract_id:UUID,data:s.ContractPatch):
+    
+    def patch_contract(self, contract_id: UUID, data: s.ContractPatch):
         try:
             with self.db.begin():
-                row=self._get(m.Contract,contract_id,lock=True)
-                if row.status!='DRAFT': raise invalid('Only DRAFT contracts can be edited')
-                changes=data.model_dump(exclude_unset=True)
-                start=changes.get('start_date',row.start_date)
-                end=changes.get('end_date',row.end_date)
-                if end<start or end==date.max: raise invalid('Invalid contract date interval')
+                row = self._get(m.Contract, contract_id, lock=True)
+
+                if row.status != 'DRAFT':
+                    raise invalid('Only DRAFT contracts can be edited')
+
+                changes = data.model_dump(exclude_unset=True)
+                start = changes.get('start_date', row.start_date)
+                end = changes.get('end_date', row.end_date)
+
+                if end < start or end == date.max:
+                    raise invalid('Invalid contract date interval')
+
                 if 'representative_tenant_id' in changes:
-                    self._get(m.Tenant,changes['representative_tenant_id'])
-                for k,v in changes.items(): setattr(row,k,v)
+                    self._get(m.Tenant, changes['representative_tenant_id'])
+
+                terms = repo.terms(self.db, contract_id)
+
+                if 'start_date' in changes:
+                    if not terms:
+                        raise invalid('Missing initial term')
+
+                    first = terms[0]
+
+                    # The first price interval must remain non-empty.
+                    if first.effective_to is not None and start >= first.effective_to:
+                        raise invalid('New start date invalidates first price term')
+
+                    # Do not move the initial term across later versions.
+                    if len(terms) > 1 and start >= terms[1].effective_from:
+                        raise invalid('New start date crosses the next price term')
+
+                    first.effective_from = start
+
+                if 'end_date' in changes:
+                    exclusive_end = _end_exclusive(end)
+
+                    for term in terms:
+                        if term.effective_from >= exclusive_end:
+                            raise invalid('Price term starts after new contract end')
+
+                        if (
+                            term.effective_to is not None
+                            and term.effective_to > exclusive_end
+                        ):
+                            raise invalid('Price term extends beyond new contract end')
+
+                for key, value in changes.items():
+                    setattr(row, key, value)
+
                 self.db.flush()
+
             return row
+
         except IntegrityError as exc:
-            raise invalid('Duplicate contract code or invalid database constraint') from exc
+            raise invalid(
+                'Duplicate contract code or invalid database constraint'
+            ) from exc
+
 
     def terms(self,contract_id):
         self._get(m.Contract,contract_id)
