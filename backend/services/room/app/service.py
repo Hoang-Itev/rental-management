@@ -196,6 +196,13 @@ class RoomService:
                     if replay is not None:
                         return replay
                 floor, building, prop = self._floor_lineage(floor_id)
+                # Re-check after acquiring the floor row lock.
+                # A concurrent request may have committed the same batch
+                # while this transaction was waiting for the lock.
+                if key is not None:
+                    replay = self._replay(key, fingerprint)
+                    if replay is not None:
+                        return replay
                 for item in data.rooms:
                     if item.property_id is not None and item.property_id != prop.id:
                         raise conflict("Floor does not belong to requested property")

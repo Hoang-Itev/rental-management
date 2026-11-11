@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app import models as m, schemas as s, repository as repo
 from app.db import get_engine
 from app.service import RoomError, RoomService
+from sqlalchemy import delete, func, select
 
 if os.getenv('ROOM_P02_EPHEMERAL_TEST') != '1':
     raise RuntimeError('P02 PostgreSQL tests require isolated project and ROOM_P02_EPHEMERAL_TEST=1')
@@ -56,6 +57,61 @@ def test_postgres_real_bulk_commit_and_idempotency(pg_session):
     assert pg_session.scalar(select(func.count()).select_from(m.OutboxEvent).where(m.OutboxEvent.aggregate_type=='Room'))==2
     assert pg_session.scalar(select(func.count()).select_from(m.Room).where(m.Room.property_id==prop.id))==2
 
+def test_retry_rechecks_outbox_after_lock(monkeypatch):
+    engine = get_engine()
+    batch = s.RoomBulkCreate(rooms=[item("P1"), item("P2")])
+    key = str(uuid4())
+    winner_ids = []
+
+    # Commit fixture để cả hai session nhìn thấy cùng khu, dãy và tầng.
+    with Session(engine, expire_on_commit=False) as setup:
+        _, prop, building, floor = setup_tree(setup)
+        property_id, building_id, floor_id = prop.id, building.id, floor.id
+        setup.commit()
+
+    try:
+        with Session(engine, expire_on_commit=False) as retry_session:
+            retry = RoomService(retry_session)
+            original_replay = retry._replay
+
+            def replay_with_interleaving(dedupe_key, fingerprint):
+                result = original_replay(dedupe_key, fingerprint)
+                if not winner_ids:
+                    assert result is None
+                    with Session(engine, expire_on_commit=False) as winner_session:
+                        rooms = RoomService(winner_session).create_rooms(
+                            floor_id, batch, key
+                        )
+                        winner_session.commit()
+                        winner_ids.extend(room.id for room in rooms)
+                return result
+
+            monkeypatch.setattr(retry, "_replay", replay_with_interleaving)
+            rooms = retry.create_rooms(floor_id, batch, key)
+            assert [room.id for room in rooms] == winner_ids
+            retry_session.commit()
+
+        with Session(engine) as check:
+            room_ids = select(m.Room.id).where(m.Room.floor_id == floor_id)
+            assert set(check.scalars(room_ids)) == set(winner_ids)
+            event_room_ids = check.scalars(
+                select(m.OutboxEvent.aggregate_id).where(
+                    m.OutboxEvent.event_type == "RoomCreated",
+                    m.OutboxEvent.aggregate_id.in_(room_ids),
+                )
+            ).all()
+            assert sorted(event_room_ids) == sorted(winner_ids)
+    finally:
+        # Hai session đã commit nên dọn riêng dữ liệu test theo ID fixture.
+        with Session(engine) as cleanup, cleanup.begin():
+            room_ids = select(m.Room.id).where(m.Room.floor_id == floor_id)
+            cleanup.execute(
+                delete(m.OutboxEvent).where(m.OutboxEvent.aggregate_id.in_(room_ids))
+            )
+            cleanup.execute(delete(m.Room).where(m.Room.floor_id == floor_id))
+            cleanup.execute(delete(m.Floor).where(m.Floor.id == floor_id))
+            cleanup.execute(delete(m.Building).where(m.Building.id == building_id))
+            cleanup.execute(delete(m.Property).where(m.Property.id == property_id))
 
 def test_real_unique_constraint_and_rollback(pg_session):
     svc,prop,building,floor=setup_tree(pg_session)
