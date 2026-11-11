@@ -1,0 +1,19 @@
+# For randomized isolated test project only. Docker Compose v2.24+ !reset tag.
+services:
+  rabbitmq:
+    ports: !reset []
+  room:
+    volumes:
+      - ./backend/services/room/integration:/app/integration:ro
+      - ./requirements-test.txt:/app/requirements-test.txt:ro
+    environment:
+      ROOM_P03_EPHEMERAL_TEST: "1"
+      P03_PROJECT_NAME: ${P03_PROJECT_NAME:?Set randomized P03_PROJECT_NAME}
+  metering:
+    volumes:
+      - ./backend/services/metering/tests:/app/tests:ro
+      - ./requirements-test.txt:/app/requirements-test.txt:ro
+    environment:
+      P03_EPHEMERAL_TEST: "1"
+      P03_PROJECT_NAME: ${P03_PROJECT_NAME:?Set randomized P03_PROJECT_NAME}
+      ROOM_DATABASE_URL: postgresql+psycopg://room_app:${ROOM_DB_PASSWORD:?ROOM_DB_PASSWORD required}@postgres:5432/room_db

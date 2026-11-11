@@ -32,7 +32,7 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           import yaml
-          required = [Path('compose.yaml'), Path('compose.dev.yaml'), Path('compose.seed.yaml'), Path('compose.auth-test.yaml'), Path('compose.room-test.yaml'), Path('.github/workflows/ci.yml')]
+          required = [Path('compose.yaml'), Path('compose.dev.yaml'), Path('compose.seed.yaml'), Path('compose.auth-test.yaml'), Path('compose.room-test.yaml'), Path('compose.p03.yaml'), Path('compose.p03-unit.yaml'), Path('.github/workflows/ci.yml')]
           for path in required:
               assert path.exists(), f'Missing {path}'
               yaml.safe_load(path.read_text(encoding='utf-8'))
@@ -227,3 +227,43 @@ jobs:
       - name: Destroy ONLY disposable GitHub CI volumes
         if: always()
         run: docker compose down -v --remove-orphans
+
+  # P03: real RabbitMQ + two independent PostgreSQL logical databases.
+  # Every CI run uses a disposable project, never a shared/local Docker volume.
+  room-meter-events-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    needs: static-checks
+    steps:
+      - uses: actions/checkout@v4
+      - name: Write isolated P03 CI-only credentials
+        shell: bash
+        run: |
+          cat > .env <<'EOF'
+          POSTGRES_USER=postgres
+          POSTGRES_PASSWORD=p03_ci_pg_temporary
+          AUTH_DB_PASSWORD=p03_ci_auth_temporary
+          ROOM_DB_PASSWORD=p03_ci_room_temporary
+          TENANT_DB_PASSWORD=p03_ci_tenant_temporary
+          METERING_DB_PASSWORD=p03_ci_metering_temporary
+          BILLING_DB_PASSWORD=p03_ci_billing_temporary
+          NOTIFICATION_DB_PASSWORD=p03_ci_notification_temporary
+          RABBITMQ_DEFAULT_USER=p03_ci_rabbit
+          RABBITMQ_DEFAULT_PASS=p03_ci_rabbit_temporary
+          SERVICE_TOKEN=p03_ci_service_token_is_long_enough
+          JWT_SECRET=p03_ci_jwt_secret_is_long_enough
+          OWNER_EMAIL=owner.demo@example.com
+          EOF
+      - name: Test actual Room outbox delivery, retry and Metering consumer
+        shell: pwsh
+        env:
+          P03_CI_PROJECT_NAME: p03ci${{ github.run_id }}${{ github.run_attempt }}
+        run: ./scripts/test_p03_integration.ps1
+      - name: Inspect P03 failures
+        if: failure()
+        shell: bash
+        env:
+          P03_PROJECT_NAME: p03ci${{ github.run_id }}${{ github.run_attempt }}
+        run: |
+          docker compose -p "$P03_PROJECT_NAME" -f compose.yaml -f compose.p03.yaml -f compose.p03-isolated.yaml ps -a || true
+          docker compose -p "$P03_PROJECT_NAME" -f compose.yaml -f compose.p03.yaml -f compose.p03-isolated.yaml logs --tail=120 || true

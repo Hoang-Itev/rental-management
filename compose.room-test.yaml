@@ -3,6 +3,7 @@ services:
   room:
     volumes:
       - ./backend/services/room/tests:/app/tests:ro
+      - ./backend/services/room/.coveragerc:/app/.coveragerc:ro
       - ./backend/services/room/integration:/app/integration:ro
       - ./requirements-test.txt:/app/requirements-test.txt:ro
     environment:

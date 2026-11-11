@@ -1,0 +1,11 @@
+# Never used for normal app startup. Mount tests into disposable service runs.
+services:
+  room:
+    volumes:
+      - ./backend/services/room/tests:/app/tests:ro
+      - ./backend/services/room/.coveragerc:/app/.coveragerc:ro
+      - ./requirements-test.txt:/app/requirements-test.txt:ro
+  metering:
+    volumes:
+      - ./backend/services/metering/tests:/app/tests:ro
+      - ./requirements-test.txt:/app/requirements-test.txt:ro
