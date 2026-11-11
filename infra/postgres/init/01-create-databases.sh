@@ -24,3 +24,16 @@ create_service_db billing_db billing_app "$BILLING_DB_PASSWORD"
 create_service_db notification_db notification_app "$NOTIFICATION_DB_PASSWORD"
 
 echo 'Created six service-owned databases.'
+
+# Default PUBLIC CONNECT allows cross-service DB login, even without table access.
+# Restrict both CONNECT and TEMPORARY for fresh clusters.
+restrict_service_db() {
+  db_name="$1"
+  psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d postgres \
+    -v app_db="$db_name" <<'SQL'
+SELECT format('REVOKE CONNECT, TEMPORARY ON DATABASE %I FROM PUBLIC', :'app_db') \gexec
+SQL
+}
+for db in auth_db room_db tenant_db metering_db billing_db notification_db; do
+  restrict_service_db "$db"
+done

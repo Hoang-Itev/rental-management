@@ -95,11 +95,10 @@ class MeterCutoff(UUIDPK, Base):
         CheckConstraint("reading_value IS NULL OR reading_value >= 0", name="reading_nonnegative"),
         CheckConstraint("status <> 'CONFIRMED' OR (reading_value IS NOT NULL AND confirmed_at IS NOT NULL)", name="confirmed_complete"),
         CheckConstraint("source <> 'MANUAL' OR (manual_reason IS NOT NULL AND confirmed_by IS NOT NULL)", name="manual_audit_required"),
-        # PG17 NULLS NOT DISTINCT: monthly contract_id NULL must still be unique.
+        # One effective physical reading per meter/time, shared by all business reasons.
         Index(
-            "uq_meter_cutoffs_active_scope", "meter_id", "cutoff_type", "cutoff_at", "contract_id",
+            "uq_meter_cutoffs_active_time", "meter_id", "cutoff_at",
             unique=True, postgresql_where=text("status <> 'SUPERSEDED'"),
-            postgresql_nulls_not_distinct=True,
         ),
     )
 

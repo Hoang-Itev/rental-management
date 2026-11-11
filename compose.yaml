@@ -3,11 +3,6 @@ name: rental-management
 x-service-common: &service-common
   restart: unless-stopped
   networks: [internal]
-  depends_on:
-    postgres:
-      condition: service_healthy
-    rabbitmq-init:
-      condition: service_completed_successfully
 
 services:
   postgres:
@@ -76,56 +71,184 @@ services:
       - "127.0.0.1:8025:8025"  # Mailpit UI, local only
     networks: [internal]
 
-  auth:
+  auth-migrate:
     build: ./backend/auth
-    restart: unless-stopped
+    restart: "no"
+    command: ["python", "-m", "alembic", "upgrade", "head"]
     environment:
-      DATABASE_URL: postgresql+psycopg://auth_app:${AUTH_DB_PASSWORD}@postgres:5432/auth_db
-      SERVICE_TOKEN: ${SERVICE_TOKEN}
-      JWT_SECRET: ${JWT_SECRET}
+      DATABASE_URL: postgresql+psycopg://auth_app:${AUTH_DB_PASSWORD:?Set AUTH_DB_PASSWORD in .env}@postgres:5432/auth_db
     depends_on:
       postgres:
         condition: service_healthy
     networks: [internal]
 
+  room-migrate:
+    build: ./backend/services/room
+    restart: "no"
+    command: ["python", "-m", "alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://room_app:${ROOM_DB_PASSWORD:?Set ROOM_DB_PASSWORD in .env}@postgres:5432/room_db
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [internal]
+
+  tenant-migrate:
+    build: ./backend/services/tenant
+    restart: "no"
+    command: ["python", "-m", "alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://tenant_app:${TENANT_DB_PASSWORD:?Set TENANT_DB_PASSWORD in .env}@postgres:5432/tenant_db
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [internal]
+
+  metering-migrate:
+    build: ./backend/services/metering
+    restart: "no"
+    command: ["python", "-m", "alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://metering_app:${METERING_DB_PASSWORD:?Set METERING_DB_PASSWORD in .env}@postgres:5432/metering_db
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [internal]
+
+  billing-migrate:
+    build: ./backend/services/billing
+    restart: "no"
+    command: ["python", "-m", "alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://billing_app:${BILLING_DB_PASSWORD:?Set BILLING_DB_PASSWORD in .env}@postgres:5432/billing_db
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [internal]
+
+  notification-migrate:
+    build: ./backend/services/notification
+    restart: "no"
+    command: ["python", "-m", "alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://notification_app:${NOTIFICATION_DB_PASSWORD:?Set NOTIFICATION_DB_PASSWORD in .env}@postgres:5432/notification_db
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [internal]
+
+  auth:
+    build: ./backend/auth
+    depends_on:
+      postgres:
+        condition: service_healthy
+      auth-migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://auth_app:${AUTH_DB_PASSWORD}@postgres:5432/auth_db
+      SERVICE_TOKEN: ${SERVICE_TOKEN:?Set SERVICE_TOKEN in .env}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
   room:
     <<: *service-common
     build: ./backend/services/room
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq-init:
+        condition: service_completed_successfully
+      room-migrate:
+        condition: service_completed_successfully
     environment:
       DATABASE_URL: postgresql+psycopg://room_app:${ROOM_DB_PASSWORD}@postgres:5432/room_db
       RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/
-      SERVICE_TOKEN: ${SERVICE_TOKEN}
-
+      SERVICE_TOKEN: ${SERVICE_TOKEN:?Set SERVICE_TOKEN in .env}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
   tenant:
     <<: *service-common
     build: ./backend/services/tenant
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq-init:
+        condition: service_completed_successfully
+      tenant-migrate:
+        condition: service_completed_successfully
     environment:
       DATABASE_URL: postgresql+psycopg://tenant_app:${TENANT_DB_PASSWORD}@postgres:5432/tenant_db
       RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/
       ROOM_URL: http://room:8000
-      SERVICE_TOKEN: ${SERVICE_TOKEN}
-
+      SERVICE_TOKEN: ${SERVICE_TOKEN:?Set SERVICE_TOKEN in .env}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
   metering:
     <<: *service-common
     build: ./backend/services/metering
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq-init:
+        condition: service_completed_successfully
+      metering-migrate:
+        condition: service_completed_successfully
     environment:
       DATABASE_URL: postgresql+psycopg://metering_app:${METERING_DB_PASSWORD}@postgres:5432/metering_db
       RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/
-      SERVICE_TOKEN: ${SERVICE_TOKEN}
-
+      SERVICE_TOKEN: ${SERVICE_TOKEN:?Set SERVICE_TOKEN in .env}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
   billing:
     <<: *service-common
     build: ./backend/services/billing
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq-init:
+        condition: service_completed_successfully
+      billing-migrate:
+        condition: service_completed_successfully
     environment:
       DATABASE_URL: postgresql+psycopg://billing_app:${BILLING_DB_PASSWORD}@postgres:5432/billing_db
       RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/
       TENANT_URL: http://tenant:8000
       METERING_URL: http://metering:8000
-      SERVICE_TOKEN: ${SERVICE_TOKEN}
-
+      SERVICE_TOKEN: ${SERVICE_TOKEN:?Set SERVICE_TOKEN in .env}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
   notification:
     <<: *service-common
     build: ./backend/services/notification
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq-init:
+        condition: service_completed_successfully
+      notification-migrate:
+        condition: service_completed_successfully
     environment:
       DATABASE_URL: postgresql+psycopg://notification_app:${NOTIFICATION_DB_PASSWORD}@postgres:5432/notification_db
       RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/
@@ -133,24 +256,35 @@ services:
       SMTP_HOST: mailpit
       SMTP_PORT: "1025"
       OWNER_EMAIL: ${OWNER_EMAIL}
-      SERVICE_TOKEN: ${SERVICE_TOKEN}
-
+      SERVICE_TOKEN: ${SERVICE_TOKEN:?Set SERVICE_TOKEN in .env}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
   nginx:
     build:
       context: .
       dockerfile: infra/nginx/Dockerfile
     restart: unless-stopped
     environment:
-      SERVICE_TOKEN: ${SERVICE_TOKEN}
+      SERVICE_TOKEN: ${SERVICE_TOKEN:?Set SERVICE_TOKEN in .env}
     ports:
       - "127.0.0.1:8080:80"  # Gateway local only; configure TLS later on EC2
     depends_on:
-      - auth
-      - room
-      - tenant
-      - metering
-      - billing
-      - notification
+      auth:
+        condition: service_healthy
+      room:
+        condition: service_healthy
+      tenant:
+        condition: service_healthy
+      metering:
+        condition: service_healthy
+      billing:
+        condition: service_healthy
+      notification:
+        condition: service_healthy
     networks: [internal]
 
   # Simulator stays disabled until app/main.py is implemented.
@@ -163,7 +297,7 @@ services:
       MQTT_PORT: "1883"
       MQTT_USERNAME: ${RABBITMQ_DEFAULT_USER}
       MQTT_PASSWORD: ${RABBITMQ_DEFAULT_PASS}
-      SERVICE_TOKEN: ${SERVICE_TOKEN}
+      SERVICE_TOKEN: ${SERVICE_TOKEN:?Set SERVICE_TOKEN in .env}
     depends_on:
       rabbitmq-init:
         condition: service_completed_successfully

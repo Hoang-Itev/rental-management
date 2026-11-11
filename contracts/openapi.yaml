@@ -1038,7 +1038,7 @@ paths:
       security:
       - ServiceToken: []
       servers:
-      - url: http://room-service:8000
+      - url: http://room:8000
         description: Internal only
   /api/v1/tenants:
     get:
@@ -2251,7 +2251,7 @@ paths:
       security:
       - ServiceToken: []
       servers:
-      - url: http://tenant-service:8000
+      - url: http://tenant:8000
         description: Internal only
   /api/v1/rooms/{room_id}/meters:
     get:
@@ -2743,8 +2743,12 @@ paths:
       - Metering
       summary: Chạy chốt chỉ số tháng (demo)
       operationId: metering_post_api_v1_jobs_meters_monthly_cutoffs_run
-      description: Chốt chỉ số tại 00:00 ngày 1 giờ VN cho mọi meter ACTIVE, cả phòng trống. UNIQUE(meter_id, cutoff_at)
-        WHERE status <> SUPERSEDED. Nếu cùng thời điểm đã có cutoff, dùng lại; không ghi đè số CONFIRMED.
+      description: >-
+        Chốt chỉ số lúc 00:00 ngày 1 theo giờ Việt Nam cho mọi meter ACTIVE, kể cả phòng trống.
+        Chỉ một cutoff chưa SUPERSEDED cho mỗi (meter_id, cutoff_at), không phân biệt
+        cutoff_type hay contract_id. Nếu mốc MONTHLY trùng CONTRACT_END/CONTRACT_START,
+        dùng cùng cutoff.id và reading_value; không tạo bản chốt khác.
+        Không sửa trực tiếp chỉ số CONFIRMED.
       requestBody:
         required: true
         content:
@@ -2869,7 +2873,7 @@ paths:
       security:
       - ServiceToken: []
       servers:
-      - url: http://metering-service:8000
+      - url: http://metering:8000
         description: Internal only
   /internal/v1/rooms/{room_id}/usage:
     get:
@@ -2960,7 +2964,7 @@ paths:
       security:
       - ServiceToken: []
       servers:
-      - url: http://metering-service:8000
+      - url: http://metering:8000
         description: Internal only
   /api/v1/invoices:
     get:
@@ -4076,7 +4080,7 @@ paths:
       security:
       - ServiceToken: []
       servers:
-      - url: http://billing-service:8000
+      - url: http://billing:8000
         description: Internal only
   /internal/v1/invoices/{invoice_id}/access-links:
     post:
@@ -4152,7 +4156,7 @@ paths:
       security:
       - ServiceToken: []
       servers:
-      - url: http://billing-service:8000
+      - url: http://billing:8000
         description: Internal only
   /api/v1/email-jobs:
     get:
@@ -4475,7 +4479,7 @@ paths:
       security:
       - ServiceToken: []
       servers:
-      - url: http://tenant-service:8000
+      - url: http://tenant:8000
         description: Internal only
   /api/v1/buildings/{building_id}:
     patch:
