@@ -173,3 +173,28 @@ class MeteringService:
     def list_alerts(self, *, status=None, alert_type=None, page=1, page_size=100):
         return repo.list_alerts(self.session, status=status, alert_type=alert_type,
                                 page=page, page_size=page_size)
+
+    
+    def meter_baseline(self, meter_id: UUID):
+        from app import models as m
+        from app.telemetry import UnknownMeter
+
+        meter = self.session.get(m.Meter, meter_id)
+
+        if meter is None or meter.status != "ACTIVE":
+            raise UnknownMeter("Meter not found or inactive")
+
+        latest = repo.latest_valid_reading(self.session, meter_id)
+
+        if latest is not None:
+            return {
+                "reading_value": latest.reading_value,
+                "measured_at": latest.measured_at,
+                "source": "LATEST_VALID",
+            }
+
+        return {
+        "reading_value": meter.initial_reading,
+        "measured_at": meter.created_at,
+        "source": "INITIAL",
+    }

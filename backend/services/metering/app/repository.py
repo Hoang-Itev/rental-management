@@ -141,3 +141,15 @@ def list_alerts(session: Session, *, status=None, alert_type=None,
     return (list(session.scalars(stmt.order_by(m.MeterAlert.detected_at.desc(),m.MeterAlert.id)
                  .limit(page_size).offset((page-1)*page_size))),
             int(session.scalar(select(func.count()).select_from(m.MeterAlert).where(*conditions)) or 0))
+
+
+def latest_valid_reading(session: Session, meter_id: UUID):
+    return session.scalar(
+        select(m.MeterReading)
+        .where(
+            m.MeterReading.meter_id == meter_id,
+            m.MeterReading.validation_status == "VALID",
+        )
+        .order_by(m.MeterReading.measured_at.desc())
+        .limit(1)
+    )

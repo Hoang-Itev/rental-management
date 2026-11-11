@@ -18,10 +18,26 @@ def emit_once(settings: Settings, client: MeterClient, publisher: MqttPublisher,
         meters = client.list_active()
     timestamp = canonical_time(instant or datetime.now(timezone.utc))
     clock = VirtualClock(settings)
+    
     for meter in meters:
-        value = clock.reading(meter.id, meter.meter_type, timestamp)
-        publisher.publish(meter.id, timestamp.isoformat(), str(value))
+        baseline = client.get_baseline(meter.id)
+
+        value = clock.reading(
+            meter.id,
+            meter.meter_type,
+            timestamp,
+            base_reading=baseline.reading_value,
+            base_time=baseline.measured_at,
+        )
+
+        publisher.publish(
+            meter.id,
+            timestamp.isoformat(),
+            str(value),
+        )
+
     return len(meters)
+
 
 def run(settings: Settings, *, once=False):
     client = MeterClient(settings)

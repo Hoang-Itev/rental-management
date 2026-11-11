@@ -11,6 +11,7 @@ from app.meter_client import MeterClient
 from app.virtual_clock import VirtualClock, canonical_time
 from app.main import emit_once
 
+
 @pytest.fixture
 def config(monkeypatch):
     monkeypatch.setenv('SERVICE_TOKEN','a'*32)
@@ -54,8 +55,24 @@ def test_http_bad_data_rejected_before_publish(config):
 def test_emit_once_uses_same_real_timestamp_and_qos_pub_api(config):
     mid1,mid2=uuid4(),uuid4()
     from app.meter_client import Meter
+
     class M:
-        def list_active(self):return [Meter(mid1,uuid4(),'ELECTRICITY'),Meter(mid2,uuid4(),'WATER')]
+        def list_active(self):
+            return [
+                Meter(mid1, uuid4(), 'ELECTRICITY'),
+                Meter(mid2, uuid4(), 'WATER'),
+            ]
+
+        def get_baseline(self, meter_id):
+            from app.meter_client import MeterBaseline
+
+            return MeterBaseline(
+                reading_value=Decimal("1000.000"),
+                measured_at=datetime(
+                    2026, 11, 1, tzinfo=timezone.utc
+                ),
+            )
+
     class P:
         def __init__(self):self.events=[]
         def publish(self,*args):self.events.append(args)
@@ -73,3 +90,46 @@ def test_settings_rejects_invalid_scale(monkeypatch):
     monkeypatch.setenv('MQTT_PASSWORD','testsecret')
     monkeypatch.setenv('SIM_TIME_SCALE','0')
     with pytest.raises(ValueError):Settings.from_env()
+
+
+def test_seeded_meter_baseline_and_restart(config):
+    meter_id = uuid4()
+    baseline_value = Decimal("2430.000")
+    baseline_time = datetime(
+        2026, 11, 1, tzinfo=timezone.utc
+    )
+    first_time = datetime(
+        2026, 11, 11, 10, tzinfo=timezone.utc
+    )
+    second_time = first_time + timedelta(minutes=5)
+
+    clock = VirtualClock(config)
+
+    first = clock.reading(
+        meter_id,
+        "ELECTRICITY",
+        first_time,
+        base_reading=baseline_value,
+        base_time=baseline_time,
+    )
+
+    # Giả lập khởi động lại với cùng mốc dữ liệu.
+    restarted_clock = VirtualClock(config)
+
+    second = restarted_clock.reading(
+        meter_id,
+        "ELECTRICITY",
+        second_time,
+        base_reading=baseline_value,
+        base_time=baseline_time,
+    )
+
+    assert first > baseline_value
+    assert second > first
+    assert second == clock.reading(
+        meter_id,
+        "ELECTRICITY",
+        second_time,
+        base_reading=baseline_value,
+        base_time=baseline_time,
+    )

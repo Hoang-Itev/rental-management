@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from uuid import UUID
 import httpx
 from app.config import Settings
+from datetime import datetime
+from decimal import Decimal
 
 @dataclass(frozen=True)
 class Meter:
@@ -16,6 +18,13 @@ class Meter:
         if row.get('meter_type') not in ('ELECTRICITY','WATER') or row.get('status') != 'ACTIVE':
             raise ValueError('Invalid/non-active meter from Metering')
         return cls(id=UUID(row['id']), room_id=UUID(row['room_id']), meter_type=row['meter_type'])
+
+
+@dataclass(frozen=True)
+class MeterBaseline:
+    reading_value: Decimal
+    measured_at: datetime
+
 
 class MeterClient:
     def __init__(self, settings: Settings, *, transport=None):
@@ -57,3 +66,35 @@ class MeterClient:
                 page += 1
                 if page > 10000:
                     raise ValueError('Meter listing pagination exceeded safety cap')
+
+    def get_baseline(self, meter_id: UUID) -> MeterBaseline:
+        with httpx.Client(
+            base_url=self.settings.metering_url.rstrip("/"),
+            timeout=8,
+            transport=self.transport,
+            trust_env=False,
+        ) as client:
+            response = client.get(
+                f"/internal/v1/meters/{meter_id}/baseline",
+                headers={
+                    "X-Service-Token": self.settings.service_token
+                },
+            )
+            response.raise_for_status()
+            body = response.json()
+
+        value = Decimal(str(body["reading_value"]))
+        measured_at = datetime.fromisoformat(
+            body["measured_at"].replace("Z", "+00:00")
+        )
+
+        if not value.is_finite() or value < 0:
+            raise ValueError("Invalid baseline value")
+
+        if measured_at.tzinfo is None:
+            raise ValueError("Baseline timestamp must include timezone")
+
+        return MeterBaseline(
+            reading_value=value,
+            measured_at=measured_at,
+        )
