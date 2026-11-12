@@ -220,3 +220,40 @@ class BillingRunView(BaseModel):
 class BillingRunList(BaseModel):
     items: list[BillingRunView]
     meta: PageMeta
+
+
+class AccessLinkRequest(StrictSnapshot):
+    source_event_id: UUID
+    recipient_email: str = Field(min_length=3, max_length=254)
+
+
+class AccessLink(BaseModel):
+    url: str
+    expires_at: datetime
+
+
+class PublicInvoiceItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    item_type: LineType
+    description: str
+    quantity: Decimal
+    unit: str
+    unit_price: Decimal
+    amount: int
+
+    @field_serializer("quantity", "unit_price")
+    def serialize_decimal(self, value: Decimal):
+        return float(value)
+
+
+class PublicInvoiceView(BaseModel):
+    invoice_code: str
+    room_code: str
+    tenant_name: str
+    period_start: date
+    period_end: date
+    status: Literal["ISSUED", "PAID"]
+    total_amount: int
+    due_date: date
+    items: list[PublicInvoiceItem]

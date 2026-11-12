@@ -1,0 +1,19 @@
+services:
+  rabbitmq:
+    ports: !reset []
+  mailpit:
+    ports: !reset []
+  nginx:
+    ports: !reset []
+  billing:
+    environment:
+      PUBLIC_BASE_URL: http://nginx
+  notification:
+    environment:
+      P10_EPHEMERAL_TEST: "1"
+      P10_BILLING_DATABASE_URL: postgresql+psycopg://billing_app:${BILLING_DB_PASSWORD}@postgres:5432/billing_db
+      NOTIFICATION_RETRY_SECONDS: "1"
+    volumes:
+      - ./tests/integration:/p10/integration:ro
+      - ./backend/services/notification/tests:/app/tests:ro
+      - ./requirements-test.txt:/p10/requirements-test.txt:ro

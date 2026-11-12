@@ -29,3 +29,14 @@ def claim_outbox(db):
     return db.scalar(select(OutboxEvent).where(
         OutboxEvent.event_type == "InvoiceIssued", OutboxEvent.published_at.is_(None),
     ).order_by(OutboxEvent.attempts, OutboxEvent.created_at, OutboxEvent.id).limit(1).with_for_update(skip_locked=True))
+
+
+def usable_invoice_link(db, token_hash, now):
+    from app.models import InvoiceAccessToken
+
+    return db.scalar(select(InvoiceAccessToken).join(InvoiceAccessToken.invoice).where(
+        InvoiceAccessToken.token_hash == token_hash,
+        InvoiceAccessToken.revoked_at.is_(None),
+        InvoiceAccessToken.expires_at > now,
+        Invoice.status.in_(("ISSUED", "PAID")),
+    ))
