@@ -13,6 +13,17 @@ class Settings(BaseSettings):
     billing_poll_seconds: int = Field(default=300, ge=10)
     public_base_url: AnyHttpUrl = "http://localhost:8080"
     invoice_link_ttl_seconds: int = Field(default=259200, ge=60, le=604800)
+    momo_partner_code: str = ""
+    momo_access_key: SecretStr = SecretStr("")
+    momo_secret_key: SecretStr = SecretStr("")
+    momo_ipn_url: AnyHttpUrl | None = None
+    momo_timeout_seconds: float = Field(default=30, ge=30, le=90)
+    momo_reconcile_seconds: int = Field(default=300, ge=15)
+
+    @field_validator("momo_ipn_url", mode="before")
+    @classmethod
+    def optional_ipn(cls, value):
+        return value or None
 
     @field_validator("public_base_url")
     @classmethod

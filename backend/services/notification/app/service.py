@@ -9,6 +9,19 @@ def record_invoice_event(sessions, event):
         repo.insert_once(db, event, f"Hóa đơn {event.data.invoice_code}")
 
 
+def record_payment_event(sessions, event):
+    with sessions.begin() as db:
+        repo.insert_once(db, event, f"Biên nhận {event.data.invoice_code}", email_type="PAYMENT_RECEIPT")
+
+
+def receipt_body(data):
+    return (
+        f"Chào {data['tenant_name']},\n\n"
+        f"Đã nhận thanh toán cho hóa đơn {data['invoice_code']} của phòng {data['room_code']}.\n"
+        f"Số tiền: {data['paid_amount']:,} VND. Mã giao dịch MoMo: {data['provider_transaction_id']}.\n"
+    )
+
+
 def invoice_body(data, link):
     return (
         f"Chào {data['tenant_name']},\n\n"
@@ -29,8 +42,11 @@ def send_next(sessions, billing, smtp, settings, *, clock=lambda: datetime.now(t
         job.attempt_count += 1
         job.next_attempt_at = None
         try:
-            link = billing.access_link(job)
-            job.provider_message_id = smtp.send(job, invoice_body(job.template_data, link))
+            if job.email_type == "PAYMENT_RECEIPT":
+                body = receipt_body(job.template_data)
+            else:
+                body = invoice_body(job.template_data, billing.access_link(job))
+            job.provider_message_id = smtp.send(job, body)
         except InvoiceNotIssued:
             job.status = "SKIPPED"
             job.last_error = "INVOICE_NOT_ISSUED"
@@ -49,7 +65,7 @@ def send_next(sessions, billing, smtp, settings, *, clock=lambda: datetime.now(t
 
 
 def reset_failed_job(job):
-    if job.email_type != "INVOICE" or job.status != "FAILED":
+    if job.email_type not in ("INVOICE", "PAYMENT_RECEIPT") or job.status != "FAILED":
         return False
     job.status = "PENDING"
     job.attempt_count = 0

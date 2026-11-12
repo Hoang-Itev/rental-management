@@ -257,3 +257,68 @@ class PublicInvoiceView(BaseModel):
     total_amount: int
     due_date: date
     items: list[PublicInvoiceItem]
+
+
+class MomoPaymentSession(BaseModel):
+    payment_attempt_id: UUID
+    status: Literal["PENDING", "SUCCESS"]
+    reused_pending_attempt: bool
+    pay_url: str | None = None
+    expires_at: datetime | None = None
+
+
+class MomoResult(BaseModel):
+    model_config = ConfigDict(strict=True)
+
+    partnerCode: str
+    orderId: str
+    requestId: str
+    resultCode: int
+    amount: int | None = None
+    transId: int | None = None
+    payUrl: str | None = None
+
+
+class MomoIPN(StrictSnapshot):
+    model_config = ConfigDict(extra="ignore", strict=True)
+
+    partnerCode: str = Field(max_length=50)
+    orderId: str = Field(min_length=1, max_length=120)
+    requestId: str = Field(min_length=1, max_length=120)
+    amount: int = Field(ge=0, le=9223372036854775807)
+    resultCode: int
+    transId: int
+    message: str = Field(max_length=2048)
+    orderInfo: str = Field(max_length=1024)
+    orderType: str = Field(max_length=100)
+    payType: str = Field(max_length=100)
+    responseTime: int
+    extraData: str = Field(max_length=4096)
+    signature: str = Field(pattern=r"^[A-Fa-f0-9]{64}$")
+
+
+class ReconcilePayments(StrictSnapshot):
+    payment_attempt_id: UUID | None = None
+    limit: int = Field(default=50, ge=1, le=100)
+
+
+class PaymentAttemptView(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    invoice_id: UUID
+    provider: str
+    order_id: str
+    request_id: str
+    provider_transaction_id: str | None
+    amount: int
+    status: str
+    pay_url: str | None
+    expires_at: datetime | None
+    result_code: str | None
+    confirmed_at: datetime | None
+
+
+class PaymentAttemptList(BaseModel):
+    items: list[PaymentAttemptView]
+    meta: PageMeta

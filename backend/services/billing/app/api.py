@@ -99,3 +99,13 @@ def enqueue_run(
         return service.enqueue_month(payload.billing_month, "MANUAL", key)
     except InvoiceConflict as exc:
         raise error(409, "BILLING_RUN_CONFLICT", str(exc)) from exc
+
+
+@router.get("/invoices/{invoice_id}/payment-attempts", response_model=s.PaymentAttemptList,
+            response_model_exclude_none=True)
+def list_payment_attempts(
+    invoice_id: UUID, page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    require_invoice(db, invoice_id)
+    return repo.page(db, m.PaymentAttempt, [m.PaymentAttempt.invoice_id == invoice_id], page, page_size)

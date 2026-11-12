@@ -58,3 +58,33 @@ class PageMeta(BaseModel):
 class EmailJobPage(BaseModel):
     items: list[EmailJobView]
     meta: PageMeta
+
+
+class PaymentSucceededData(BaseModel):
+    invoice_id: UUID
+    payment_attempt_id: UUID
+    provider_transaction_id: str
+    paid_amount: int = Field(ge=0)
+    recipient_email: str = Field(max_length=254, pattern=r"^[^\s@<>,;]+@[^\s@<>,;]+$")
+    invoice_code: str = Field(min_length=1, max_length=80, pattern=r"^[^\r\n]+$")
+    tenant_name: str
+    room_code: str
+    period_start: date
+    period_end_exclusive: date
+    paid_at: datetime
+
+
+class PaymentSucceeded(BaseModel):
+    event_id: UUID
+    event_type: Literal["PaymentSucceeded"]
+    event_version: Literal[1]
+    occurred_at: datetime
+    correlation_id: UUID
+    aggregate_id: UUID
+    data: PaymentSucceededData
+
+    @model_validator(mode="after")
+    def validate_scope(self):
+        if self.aggregate_id != self.data.invoice_id or self.data.period_end_exclusive <= self.data.period_start:
+            raise ValueError("Invalid payment scope")
+        return self
