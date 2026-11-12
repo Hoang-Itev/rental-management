@@ -280,3 +280,15 @@ def test_service_and_calculator_same_repeatable_output_json():
     assert one.model_dump(mode="json") == two.model_dump(mode="json")
     assert {line.item_type for line in one.items} == {"RENT", "SERVICE", "ELECTRICITY", "WATER"}
     assert next(x for x in one.items if x.item_type=="ELECTRICITY").quantity == Decimal("5.123")
+
+
+def test_uncovered_periods_handles_touching_and_disjoint_ranges():
+    from app.calculator import uncovered_periods
+
+    start = date(2026, 11, 1)
+    days = [start + timedelta(days=offset) for offset in range(8)]
+    assert uncovered_periods(days[1], days[7], [(days[4], days[5]), (days[0], days[2]),
+                                                (days[5], days[6])]) == [
+        (days[2], days[4]), (days[6], days[7]),
+    ]
+    assert uncovered_periods(days[1], days[5], [(days[0], days[3]), (days[3], days[6])]) == []

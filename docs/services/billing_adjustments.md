@@ -1,0 +1,9 @@
+# P13 · Hóa đơn cuối và điều chỉnh
+
+`POST /api/v1/final-invoices` nhận `{"contract_id":"..."}`. Hợp đồng phải ở trạng thái ENDED. Billing lấy khoảng thuê từ Tenant và trừ các khoảng của hóa đơn chưa VOID. Các khoảng dùng ngày đầu bao gồm, ngày cuối loại trừ. FINAL được phát hành khi đủ cutoff, hoặc giữ DRAFT và được scheduler thử lại. Nếu toàn bộ kỳ đã được bao phủ, API trả 409. Nếu còn nhiều khoảng rời nhau, xử lý các kỳ tháng còn thiếu trước khi tạo FINAL. Schema hiện có lưu một khoảng liên tục cho mỗi hóa đơn và tối đa một FINAL đang hiệu lực cho mỗi hợp đồng.
+
+`POST /api/v1/invoices/{id}/void` và `POST /api/v1/invoices/{id}/reissue` nhận `{"reason":"..."}`. VOID bị chặn với hóa đơn PAID hoặc còn payment attempt PENDING. Job định kỳ bỏ qua kỳ PERIODIC đã bị VOID riêng. Reissue chấp nhận hóa đơn ISSUED hoặc hóa đơn VOID có kỳ còn trống, miễn không có thanh toán PENDING. Với hóa đơn đã VOID, ngày và lý do VOID cũ được giữ nguyên. Billing tính lại đúng kỳ bằng dữ liệu Tenant/Metering hiện hành, sau đó chuyển bản cũ VOID và phát hành bản mới trong cùng transaction. Nếu chưa đủ dữ liệu để tính lại, giữ hóa đơn và link cũ. Khi phát hành bản thay thế, bản cũ giữ lịch sử và các dòng tiền, link cũ bị thu hồi, revision tăng một và có `replaces_invoice_id`.
+
+Với hóa đơn PAID, dùng `POST /api/v1/invoices/{id}/adjustments` để ghi lý do và `amount_delta` có dấu. Dùng `POST /api/v1/invoice-adjustments/{id}/resolve` với trạng thái RESOLVED hoặc REJECTED và ghi chú. Bản ghi điều chỉnh không thay đổi tổng tiền, dòng tiền hoặc giao dịch đã thanh toán của hóa đơn.
+
+P13 dùng lại schema và Docker Compose hiện có. Chạy `scripts/test_p09.ps1` để chạy toàn bộ unit test Billing và integration Billing với Tenant, Metering, PostgreSQL và RabbitMQ trong project test riêng. Test P13 nằm ở `tests/integration/test_contract_billing.py`.

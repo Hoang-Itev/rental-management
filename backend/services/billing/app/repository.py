@@ -73,3 +73,35 @@ def payment_candidates(db, cutoff, limit, attempt_id=None):
         query = query.where(PaymentAttempt.id == attempt_id)
     return db.scalars(query.order_by(PaymentAttempt.last_reconciled_at.asc().nulls_first(),
                                     PaymentAttempt.created_at, PaymentAttempt.id).limit(limit)).all()
+
+
+def final_invoice(db, contract_id):
+    return db.scalar(select(Invoice).where(
+        Invoice.contract_id == contract_id, Invoice.invoice_type == "FINAL", Invoice.status != "VOID",
+    ).with_for_update())
+
+
+def covered_periods(db, contract_id, start, end, exclude_id=None):
+    query = select(Invoice.period_start, Invoice.period_end).where(
+        Invoice.contract_id == contract_id, Invoice.status != "VOID",
+        Invoice.period_start < end, Invoice.period_end > start,
+    )
+    if exclude_id is not None:
+        query = query.where(Invoice.id != exclude_id)
+    return db.execute(query).all()
+
+
+def periodic_was_voided(db, contract_id, month):
+    return db.scalar(select(Invoice.id).where(
+        Invoice.contract_id == contract_id, Invoice.billing_month == month,
+        Invoice.invoice_type == "PERIODIC", Invoice.status == "VOID",
+    ).limit(1)) is not None
+
+
+def revoke_invoice_tokens(db, invoice_id, now):
+    from sqlalchemy import update
+    from app.models import InvoiceAccessToken
+
+    db.execute(update(InvoiceAccessToken).where(
+        InvoiceAccessToken.invoice_id == invoice_id, InvoiceAccessToken.revoked_at.is_(None),
+    ).values(revoked_at=now))

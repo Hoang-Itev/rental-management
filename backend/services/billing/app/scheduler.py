@@ -5,7 +5,7 @@ from threading import Event, Thread
 import signal
 
 import httpx
-from sqlalchemy import select, text
+from sqlalchemy import or_, select, text
 from sqlalchemy.exc import IntegrityError
 
 from app.clients import BillingClients, DependencyUnavailable
@@ -41,17 +41,20 @@ def tick(engine, service, now):
             run_month = last_due_month(now)
             service.enqueue_month(run_month, "SCHEDULED", run_month.isoformat())
             with service.sessions() as db:
-                drafts = db.execute(select(Invoice.id, Invoice.contract_id, Invoice.billing_month).where(
-                    Invoice.status == "DRAFT", Invoice.invoice_type == "PERIODIC",
-                    Invoice.billing_month <= run_month,
+                drafts = db.execute(select(Invoice.id, Invoice.contract_id, Invoice.billing_month, Invoice.invoice_type).where(
+                    Invoice.status == "DRAFT",
+                    or_(Invoice.invoice_type == "FINAL", Invoice.billing_month <= run_month),
                 )).all()
                 jobs = db.scalars(select(BillingRun.id).where(BillingRun.status == "RUNNING")
                                   .order_by(BillingRun.started_at, BillingRun.id)).all()
             for job_id in jobs:
                 service.execute_run(job_id)
-            for invoice_id, contract_id, month in drafts:
+            for invoice_id, contract_id, month, kind in drafts:
                 try:
-                    service.process(contract_id, month, expected_id=invoice_id)
+                    if kind == "FINAL":
+                        service.final(contract_id, expected_id=invoice_id)
+                    else:
+                        service.process(contract_id, month, expected_id=invoice_id)
                 except (DependencyUnavailable, IntegrityError):
                     logger.warning("Could not retry invoice %s", invoice_id)
                 except InvoiceConflict:
