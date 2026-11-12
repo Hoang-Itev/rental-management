@@ -39,7 +39,7 @@ def meters_from_container(room_id):
         "req=urllib.request.Request(url, headers={'X-Service-Token':os.environ['SERVICE_TOKEN']});"
         "print(urllib.request.urlopen(req,timeout=5).read().decode())"
     )
-    cmd = ["docker", "compose", "-f", "compose.yaml", "-f", "compose.p03.yaml",
+    cmd = ["docker", "compose", "-f", "compose.yaml", "-f", "compose.runtime.yaml",
            "exec", "-T", "metering", "python", "-c", script]
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
     if result.returncode != 0:

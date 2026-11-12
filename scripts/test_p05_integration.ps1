@@ -8,7 +8,7 @@ if (-not ($project.StartsWith('p05test') -or $project.StartsWith('p05ci'))) {
     throw 'Refusing unsafe P05 project name'
 }
 $env:P05_PROJECT_NAME=$project
-$files=@('-p',$project,'-f','compose.yaml','-f','compose.p03.yaml','-f','compose.p05.yaml','-f','compose.p05-isolated.yaml')
+$files=@('-p',$project,'-f','compose.yaml','-f', 'compose.runtime.yaml','-f','compose.p05-isolated.yaml')
 Push-Location $ProjectRoot
 try {
     if (-not (Test-Path .env)) { throw 'Missing .env in project directory' }

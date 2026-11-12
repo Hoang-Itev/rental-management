@@ -5,7 +5,7 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $project = 'rental-p10-test-' + [Guid]::NewGuid().ToString('N').Substring(0, 12)
 $composeArgs = @('--env-file', '.env.example', '-p', $project, '-f', 'compose.yaml',
-    '-f', 'compose.p09.yaml', '-f', 'compose.p10.yaml', '-f', 'compose.p10-test.yaml')
+    '-f', 'compose.runtime.yaml', '-f', 'compose.p10-test.yaml')
 
 function Invoke-P10Compose {
     & docker compose @composeArgs @args
