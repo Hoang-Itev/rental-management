@@ -16,16 +16,16 @@ $services = [ordered]@{
     simulator = 'simulator'
 }
 $integrations = @(
-    'tests/room-postgres.ps1',
-    'tests/room-meter-events.ps1',
-    'tests/room-tenant-contracts.ps1',
-    'tests/contract-lifecycle.ps1',
-    'tests/mqtt-telemetry.ps1',
-    'tests/meter-cutoffs.ps1',
-    'tests/billing-invoices.ps1',
-    'tests/invoice-email.ps1',
-    'tests/momo-payments.ps1',
-    'tests/notification-rules.ps1'
+    'tests/room-postgres-integration.ps1',
+    'tests/room-meter-events-integration.ps1',
+    'tests/room-tenant-contracts-integration.ps1',
+    'tests/contract-lifecycle-integration.ps1',
+    'tests/mqtt-telemetry-integration.ps1',
+    'tests/meter-cutoffs-integration.ps1',
+    'tests/billing-invoices-integration.ps1',
+    'tests/invoice-email-integration.ps1',
+    'tests/momo-payments-integration.ps1',
+    'tests/notification-rules-integration.ps1'
 )
 
 function Invoke-UnitCompose {

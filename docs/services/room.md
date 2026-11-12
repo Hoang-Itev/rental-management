@@ -49,10 +49,10 @@ Trả 201 khi tạo, 200 khi đọc/sửa, 204 khi disable; 404 missing, 409 con
 | `tests/test_service.py` | Hierarchy, CRUD, rollback, outbox, idempotency, occupancy/deactivate |
 | `tests/test_api.py` | HTTP contracts, 404/409/422/204, filter, phân trang, token nội bộ |
 | `tests/test_schemas.py`, `tests/test_repository.py`, `tests/test_config.py` | Validate DTO và các helper/data settings |
-| `integration/test_postgres.py` | Real PostgreSQL UNIQUE, immutable triggers, room property guard, rollback and retries; chạy duy nhất trong disposable Compose |
+| `tests/integration/test_room_postgres.py` | Real PostgreSQL UNIQUE, immutable triggers, room property guard, rollback and retries; chạy duy nhất trong disposable Compose |
 | `infra/compose/tests/room-unit-and-db.yaml` | Overlay chỉ mount tests, requirements-test, env marker; không dùng cho runtime bình thường |
 | `scripts/tests/room-unit.ps1` | Chạy test trong Docker, `--cov=app --cov-fail-under=95` |
-| `scripts/tests/room-postgres.ps1` | Tạo Compose project ngẫu nhiên `p02test...`, migrate Room DB tạm, test rồi xóa **chỉ volume tạm**; không chạm volume local `rental-management` |
+| `scripts/tests/room-postgres-integration.ps1` | Tạo Compose project ngẫu nhiên `p02test...`, migrate Room DB tạm, test rồi xóa **chỉ volume tạm**; không chạm volume local `rental-management` |
 | `scripts/tests/room-gateway.ps1`, `scripts/tests/gateway/room.py` | Test GET danh sách qua Nginx với JWT owner, hoàn toàn read-only với Room DB |
 | `scripts/sync_room_openapi.py` | Thêm method GET/POST/DELETE mới vào OpenAPI hiện tại, tránh ghi đè toàn bộ contracts |
 | `.github/workflows/ci.yml` | `service-unit-tests` room coverage 95%; `database-and-seed` PostgreSQL tests; `compose-startup-smoke` Room Gateway E2E |

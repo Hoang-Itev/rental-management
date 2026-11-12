@@ -18,4 +18,4 @@ Mailpit UI mặc định ở `http://localhost:8025`. URL trong email mặc đ�
 
 ## Kiểm thử
 
-`scripts/tests/invoice-email.ps1` khởi tạo project Compose tạm với PostgreSQL, RabbitMQ, Billing outbox publisher, Notification, Nginx và Mailpit. Ca integration khởi chạy worker với một cổng SMTP lỗi, kiểm tra lịch retry rồi chạy lại worker với Mailpit. Sau khi nhận email, test mở URL qua Nginx và kiểm tra hết hạn. Script xóa container, mạng và volume của project test.
+`scripts/tests/invoice-email-integration.ps1` khởi tạo project Compose tạm với PostgreSQL, RabbitMQ, Billing outbox publisher, Notification, Nginx và Mailpit. Ca integration khởi chạy worker với một cổng SMTP lỗi, kiểm tra lịch retry rồi chạy lại worker với Mailpit. Sau khi nhận email, test mở URL qua Nginx và kiểm tra hết hạn. Script xóa container, mạng và volume của project test.

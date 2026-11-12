@@ -24,7 +24,7 @@ Nếu một mẫu `VALID` đến sau khi cutoff tự động đã `CONFIRMED`, v
 
 ## Chạy và nghiệm thu
 
-Tạo branch `feat/meter-cutoffs` từ `main` đã merge P06. Chạy `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\tests\meter-cutoffs-unit.ps1`. Chạy `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\tests\meter-cutoffs.ps1`. Integration dùng Compose project UUID ngẫu nhiên `p07test...`, DB và broker mới; sau test xóa **duy nhất** project này. Không dùng `docker compose down -v` với project chính.
+Tạo branch `feat/meter-cutoffs` từ `main` đã merge P06. Chạy `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\tests\meter-cutoffs-unit.ps1`. Chạy `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\tests\meter-cutoffs-integration.ps1`. Integration dùng Compose project UUID ngẫu nhiên `p07test...`, DB và broker mới; sau test xóa **duy nhất** project này. Không dùng `docker compose down -v` với project chính.
 
 Chạy stack chính với `docker compose -f compose.yaml -f compose.workers.yaml up -d --build metering metering-cutoff-scheduler metering-consumer metering-telemetry-consumer` sau khi migration `metering` từ P06 đã đạt. Không cần migration mới cho P07; P07 tận dụng `meter_cutoffs`, `meter_cutoff_reasons`, `meter_readings`, `meter_alerts` đã có từ thiết kế V3.
 

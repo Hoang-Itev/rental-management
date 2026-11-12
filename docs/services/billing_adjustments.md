@@ -6,4 +6,4 @@
 
 Với hóa đơn PAID, dùng `POST /api/v1/invoices/{id}/adjustments` để ghi lý do và `amount_delta` có dấu. Dùng `POST /api/v1/invoice-adjustments/{id}/resolve` với trạng thái RESOLVED hoặc REJECTED và ghi chú. Bản ghi điều chỉnh không thay đổi tổng tiền, dòng tiền hoặc giao dịch đã thanh toán của hóa đơn.
 
-P13 dùng lại schema và Docker Compose hiện có. Chạy `scripts/tests/billing-invoices.ps1` để chạy toàn bộ unit test Billing và integration Billing với Tenant, Metering, PostgreSQL và RabbitMQ trong project test riêng. Test P13 nằm ở `tests/integration/test_contract_billing.py`.
+P13 dùng lại schema và Docker Compose hiện có. Chạy `scripts/tests/billing-invoices-integration.ps1` để chạy toàn bộ unit test Billing và integration Billing với Tenant, Metering, PostgreSQL và RabbitMQ trong project test riêng. Test P13 nằm ở `tests/integration/test_contract_billing.py`.

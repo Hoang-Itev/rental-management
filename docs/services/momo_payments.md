@@ -25,6 +25,6 @@ if ($payment.pay_url) { Start-Process $payment.pay_url }
 
 Dùng thông tin thẻ thử do MoMo Sandbox cung cấp trên trang thanh toán. Sau khi hoàn tất, mở lại link trong email để xem `PAID`. Mailpit sẽ nhận email biên nhận nếu Notification đang chạy.
 
-`scripts/tests/momo-payments.ps1` dùng PostgreSQL và RabbitMQ riêng, thay HTTP MoMo bằng fixture có chữ ký kiểm tra độc lập. Nó kiểm tra sai chữ ký/số tiền, callback trùng đồng thời, timeout, đối soát và routing event. Chạy demo với tài khoản Sandbox thật để xác nhận cấu hình IPN bên ngoài.
+`scripts/tests/momo-payments-integration.ps1` dùng PostgreSQL và RabbitMQ riêng, thay HTTP MoMo bằng fixture có chữ ký kiểm tra độc lập. Nó kiểm tra sai chữ ký/số tiền, callback trùng đồng thời, timeout, đối soát và routing event. Chạy demo với tài khoản Sandbox thật để xác nhận cấu hình IPN bên ngoài.
 
 [Tài liệu MoMo ATM](https://developers.momo.vn/v3/vi/docs/payment/api/atm/onetime/) · [IPN](https://developers.momo.vn/v3/vi/docs/payment/api/result-handling/notification/) · [Đối soát](https://developers.momo.vn/v3/vi/docs/payment/api/payment-api/query/)
