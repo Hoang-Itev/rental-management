@@ -174,9 +174,9 @@ def test_final_bills_uncovered_period_then_reissue_preserves_history(seed):
     with get_sessionmaker().begin() as db:
         db.add(Invoice(
             id=previous_id, invoice_code=f"P13-OCT-{previous_id.hex}", contract_id=contract, room_id=room,
-            invoice_type="PERIODIC", billing_month=date(2024, 10, 1), status="PAID", total_amount=1000000,
+            invoice_type="PERIODIC", billing_month=date(2024, 10, 1), status="ISSUED", total_amount=1000000,
             period_start=date(2024, 10, 16), period_end=date(2024, 11, 1), due_date=date(2024, 11, 5),
-            issued_at=now, paid_at=now, tenant_name_snapshot="P09 Payer",
+            issued_at=now, tenant_name_snapshot="P09 Payer",
             tenant_email_snapshot="p09@example.com", room_code_snapshot="P09-A1",
         ))
 
@@ -258,7 +258,43 @@ def test_final_bills_uncovered_period_then_reissue_preserves_history(seed):
             assert token.revoked_at is not None
             assert len(db.scalars(select(OutboxEvent).where(OutboxEvent.aggregate_id == UUID(replacement["id"]))).all()) == 1
 
-        paid_url = f"/api/v1/invoices/{previous_id}"
+        with get_sessionmaker().begin() as db:
+            final_invoice = db.get(Invoice, UUID(replacement["id"]))
+            final_invoice.status, final_invoice.paid_at = "PAID", now
+
+        # A paid FINAL remains intact when an earlier monthly invoice is voided and replaced.
+        october_url = f"/api/v1/invoices/{previous_id}"
+        voided_response = http.post(october_url + "/void", json={"reason": "October invoice error"})
+        assert voided_response.status_code == 200, voided_response.text
+        voided = voided_response.json()
+        assert voided["status"] == "VOID"
+        assert service.process(contract, date(2024, 10, 1)) == ("skipped", None)
+        assert http.post(create, json={"contract_id": str(contract)}).json()["id"] == replacement["id"]
+        assert http.post(october_url + "/reissue", json=reason).status_code == 422
+        add_boundary(date(2024, 10, 16), (100, 100))
+
+        october_response = http.post(october_url + "/reissue", json=reason)
+        assert october_response.status_code == 200, october_response.text
+        october = october_response.json()
+        assert october["status"] == "ISSUED" and october["replaces_invoice_id"] == str(previous_id)
+        assert (october["period_start"], october["period_end"]) == ("2024-10-16", "2024-11-01")
+        assert http.post(october_url + "/reissue", json=reason).json()["id"] == october["id"]
+        assert http.get(october_url).json() == voided
+
+        # A different voided revision cannot take a period already covered by that replacement.
+        conflicting_id = uuid4()
+        with get_sessionmaker().begin() as db:
+            db.add(Invoice(
+                id=conflicting_id, invoice_code=f"P13-OLD-{conflicting_id.hex}", contract_id=contract, room_id=room,
+                invoice_type="PERIODIC", billing_month=date(2024, 10, 1), status="VOID", total_amount=900000,
+                period_start=date(2024, 10, 16), period_end=date(2024, 11, 1), due_date=date(2024, 11, 5),
+                voided_at=now, void_reason="Test previous revision", tenant_name_snapshot="P09 Payer",
+                tenant_email_snapshot="p09@example.com", room_code_snapshot="P09-A1",
+            ))
+        blocked = http.post(f"/api/v1/invoices/{conflicting_id}/reissue", json=reason)
+        assert blocked.status_code == 409 and blocked.json()["code"] == "INVOICE_PERIOD_ALREADY_COVERED"
+
+        paid_url = f"/api/v1/invoices/{replacement['id']}"
         assert http.post(paid_url + "/void", json=reason).status_code == 409
         assert http.post(paid_url + "/reissue", json=reason).status_code == 409
         adjustment = http.post(paid_url + "/adjustments", json={"reason": "Sai đơn giá", "amount_delta": -50000})
@@ -268,5 +304,5 @@ def test_final_bills_uncovered_period_then_reissue_preserves_history(seed):
         assert http.post(resolve, json=resolution).json()["status"] == "RESOLVED"
         assert http.post(resolve, json={"status": "REJECTED", "resolution_note": "Other"}).status_code == 409
         assert http.get(paid_url + "/adjustments").json()["items"][0]["amount_delta"] == -50000
-        assert http.get(paid_url).json()["total_amount"] == 1000000
+        assert http.get(paid_url).json()["total_amount"] == 3335000
     tenant_db.dispose()

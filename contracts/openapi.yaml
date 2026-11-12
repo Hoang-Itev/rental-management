@@ -3275,7 +3275,7 @@ paths:
       - Billing
       summary: Phát hành bản hóa đơn sửa
       operationId: billing_post_api_v1_invoices_invoice_id_reissue
-      description: Chỉ trước khi PAID, từ hóa đơn đã phát hành; bản cũ chuyển VOID và bản mới revision+1.
+      description: Từ hóa đơn ISSUED chưa thanh toán hoặc hóa đơn VOID nếu kỳ chưa có hóa đơn khác bao phủ; bản mới revision+1.
       parameters:
       - name: invoice_id
         in: path

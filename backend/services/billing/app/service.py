@@ -219,9 +219,18 @@ class InvoiceService:
             existing = db.scalar(select(m.Invoice.id).where(m.Invoice.replaces_invoice_id == original.id))
             if existing is not None:
                 return existing
-            if original.status != "ISSUED":
+            if original.status not in ("ISSUED", "VOID"):
                 raise LinkDenied(409, "INVOICE_NOT_REISSUABLE")
             self._check_voidable(db, original)
+            if original.status == "VOID":
+                if original.invoice_type == "PERIODIC":
+                    active = repo.periodic_invoice(db, original.contract_id, original.billing_month)
+                else:
+                    active = repo.final_invoice(db, original.contract_id)
+                if active is not None or repo.covered_periods(
+                    db, original.contract_id, original.period_start, original.period_end,
+                ):
+                    raise LinkDenied(409, "INVOICE_PERIOD_ALREADY_COVERED")
             context = self.clients.context(original.contract_id)
             if (context.contract_status not in BILLABLE_STATUSES
                     or (original.invoice_type == "FINAL" and context.contract_status != "ENDED")
@@ -237,8 +246,9 @@ class InvoiceService:
             if blocked:
                 raise LinkDenied(503 if blocked == "DEPENDENCY_UNAVAILABLE" else 422, blocked)
 
-            self._void(db, original, reason)
-            db.flush()  # Release the old live period before inserting the replacement.
+            if original.status == "ISSUED":
+                self._void(db, original, reason)
+                db.flush()  # Release the old live period before inserting the replacement.
             db.add(replacement)
             self._issue(db, replacement, result)
         return replacement.id
