@@ -80,6 +80,34 @@ class TenantService:
         return repo.page(self.db,m.Contract,page,page_size,c,order=m.Contract.created_at)
     def contract(self, contract_id): return self._get(m.Contract,contract_id)
 
+    def expiring_contracts(self, within_days=7, page=1, page_size=20, *, today=None):
+        today = today or datetime.now(VN).date()
+        conditions = (
+            m.Contract.status == 'ACTIVE',
+            m.Contract.actual_end_date.is_(None),
+            m.Contract.end_date.between(today, today + timedelta(days=within_days)),
+        )
+        return repo.page(self.db, m.Contract, page, page_size, conditions,
+                         order=m.Contract.end_date)
+
+    def cancel(self, contract_id: UUID, reason: str, actor_id: UUID | None = None):
+        with self.db.begin():
+            contract = self._get(m.Contract, contract_id, lock=True)
+            if contract.status == 'CANCELLED':
+                return contract
+            if contract.status not in ('DRAFT', 'SCHEDULED'):
+                raise invalid('Only unstarted contracts can be cancelled')
+            if contract.actual_end_date is not None:
+                raise invalid('Contract already has a recorded handover')
+            contract.status = 'CANCELLED'
+            repo.add(self.db, m.ContractEvent(
+                id=uuid4(), contract_id=contract.id, event_type='CANCELLED',
+                occurred_at=datetime.now(timezone.utc), actor_id=actor_id,
+                reason=reason, details={'reason': reason},
+            ))
+            self.db.flush()
+        return contract
+
     def create_contract(self,data:s.ContractCreate,actor_id:UUID|None=None):
         # A DRAFT may be saved for an INACTIVE room, but the room must exist.
         room=self._room(data.room_id,operational=False)

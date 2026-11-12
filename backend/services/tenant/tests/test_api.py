@@ -87,3 +87,36 @@ def test_internal_auth_and_error_body(client,room):
     assert good.status_code==200 and len(good.json()['terms'])==1
     assert good.json()['payer']['email']=='p@example.com'
     assert client.get('/internal/v1/contracts/'+str(uuid4()),headers={'X-Service-Token':'p'*32}).status_code==404
+
+
+def test_expiring_static_route_and_validation(client):
+    result = client.get('/api/v1/contracts/expiring')
+    assert result.status_code == 200
+    assert result.json() == {'items': [], 'meta': {'page': 1, 'page_size': 20, 'total': 0}}
+    for query in ['within_days=0', 'within_days=91', 'page=0', 'page_size=101']:
+        assert client.get('/api/v1/contracts/expiring?' + query).status_code == 422
+
+
+def test_cancel_http_validation_history_and_retry(client, room):
+    rid = uuid4()
+    room.available[rid] = True
+    payer = client.post('/api/v1/tenants', json={'full_name': 'Cancel payer'}).json()['id']
+    data = {
+        'contract_code': 'CANCEL-HTTP', 'room_id': str(rid),
+        'representative_tenant_id': payer, 'start_date': '2026-12-01', 'end_date': '2027-01-31',
+        'initial_terms': {'effective_from': '2026-12-01', 'monthly_rent': 1,
+                          'electricity_unit_price': 1, 'water_unit_price': 1},
+    }
+    response = client.post('/api/v1/contracts', json=data)
+    assert response.status_code == 201
+    cid = response.json()['id']
+    url = f'/api/v1/contracts/{cid}/cancel'
+    for payload in [{}, {'reason': '   '}, {'reason': 'x', 'extra': 1}]:
+        assert client.post(url, json=payload).status_code == 422
+    result = client.post(url, json={'reason': ' Changed plans '})
+    assert result.status_code == 200 and result.json()['status'] == 'CANCELLED'
+    assert client.post(url, json={'reason': 'Retry'}).status_code == 200
+    events = client.get(f'/api/v1/contracts/{cid}/events').json()['items']
+    assert [e['event_type'] for e in events].count('CANCELLED') == 1
+    assert client.post(f'/api/v1/contracts/{uuid4()}/cancel',
+                       json={'reason': 'Missing'}).status_code == 404

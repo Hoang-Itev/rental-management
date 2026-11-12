@@ -14,6 +14,7 @@ from app.cutoffs import VN, db_utc
 from app.db import get_db
 from app.models import Meter, MeterCutoff
 from app.service import MeteringService
+from app.schemas import RoomMeterList, Page, MeterOut, MeterBaseline, CutoffOut, RoomUsage
 
 router = APIRouter(prefix="/internal/v1", tags=["Internal Metering"])
 
@@ -33,12 +34,12 @@ def meter_view(row) -> dict:
     }
 
 
-@router.get("/rooms/{room_id}/meters", dependencies=[Depends(require_service_token)])
+@router.get("/rooms/{room_id}/meters", response_model=RoomMeterList, dependencies=[Depends(require_service_token)])
 def meters_for_room(room_id: UUID, db: Session = Depends(get_db)):
     return {"items": [meter_view(r) for r in MeteringService(db).meters_for_room(room_id)]}
 
 
-@router.get("/meters", dependencies=[Depends(require_service_token)])
+@router.get("/meters", response_model=Page[MeterOut], dependencies=[Depends(require_service_token)])
 def internal_meters(
     status: str | None = Query(default="ACTIVE", pattern="^(ACTIVE|INACTIVE)$"),
     page: int = Query(default=1, ge=1),
@@ -50,7 +51,7 @@ def internal_meters(
             "meta": {"page": page, "page_size": page_size, "total": total}}
 
 
-@router.get('/meters/{meter_id}/baseline', dependencies=[Depends(require_service_token)])
+@router.get('/meters/{meter_id}/baseline', response_model=MeterBaseline, dependencies=[Depends(require_service_token)])
 def meter_baseline(meter_id: UUID, db: Session = Depends(get_db)):
     from app.telemetry import UnknownMeter
     try:
@@ -61,7 +62,7 @@ def meter_baseline(meter_id: UUID, db: Session = Depends(get_db)):
             'measured_at': data['measured_at'].isoformat(), 'source': data['source']}
 
 
-@router.get('/rooms/{room_id}/cutoffs', dependencies=[Depends(require_service_token)])
+@router.get('/rooms/{room_id}/cutoffs', response_model=Page[CutoffOut], dependencies=[Depends(require_service_token)])
 def confirmed_cutoffs_for_room(room_id: UUID,
     from_at: str | None = Query(default=None, alias='from'),
     to_at: str | None = Query(default=None, alias='to'),
@@ -89,7 +90,7 @@ def confirmed_cutoffs_for_room(room_id: UUID,
             'meta': {'page': page, 'page_size': page_size, 'total': count}}
 
 
-@router.get('/rooms/{room_id}/usage', dependencies=[Depends(require_service_token)])
+@router.get('/rooms/{room_id}/usage', response_model=RoomUsage, dependencies=[Depends(require_service_token)])
 def room_usage(room_id: UUID, contract_id: UUID, period_start: date,
                period_end_exclusive: date, db: Session = Depends(get_db)):
     """Read both boundaries in one database statement, including the end cutoff."""

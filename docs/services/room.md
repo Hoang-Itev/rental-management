@@ -54,7 +54,7 @@ Trả 201 khi tạo, 200 khi đọc/sửa, 204 khi disable; 404 missing, 409 con
 | `scripts/tests/room-unit.ps1` | Chạy test trong Docker, `--cov=app --cov-fail-under=95` |
 | `scripts/tests/room-postgres-integration.ps1` | Tạo Compose project ngẫu nhiên `p02test...`, migrate Room DB tạm, test rồi xóa **chỉ volume tạm**; không chạm volume local `rental-management` |
 | `scripts/tests/room-gateway.ps1`, `scripts/tests/gateway/room.py` | Test GET danh sách qua Nginx với JWT owner, hoàn toàn read-only với Room DB |
-| `scripts/sync_room_openapi.py` | Thêm method GET/POST/DELETE mới vào OpenAPI hiện tại, tránh ghi đè toàn bộ contracts |
+| `scripts/check_api_contract.py --service room` | Đối chiếu route, request và response với OpenAPI đã commit |
 | `.github/workflows/ci.yml` | `service-unit-tests` room coverage 95%; `database-and-seed` PostgreSQL tests; `compose-startup-smoke` Room Gateway E2E |
 
 ## Acceptance / Definition of Done

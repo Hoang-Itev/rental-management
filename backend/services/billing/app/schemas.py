@@ -381,3 +381,16 @@ class AdjustmentView(BaseModel):
 class AdjustmentList(BaseModel):
     items: list[AdjustmentView]
     meta: PageMeta
+
+
+class ReminderEligibility(BaseModel):
+    invoice_id: UUID
+    eligible: bool
+    reason: Literal['ALREADY_PAID', 'VOID', 'NOT_ISSUED', 'NOT_DUE', 'OUTSTANDING']
+
+
+class ReconcileResult(BaseModel):
+    checked_count: int
+    succeeded_count: int
+    failed_count: int
+    still_pending_count: int

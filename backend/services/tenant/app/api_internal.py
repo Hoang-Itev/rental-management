@@ -20,7 +20,7 @@ def credentials(x_service_token,settings):
     if x_service_token is None or not compare_digest(x_service_token,settings.service_token):
         raise HTTPException(status_code=403,detail='internal_only')
 
-@router.get('/contracts/billable')
+@router.get('/contracts/billable', response_model=s.BillableContracts, response_model_exclude_unset=True)
 def billable_contracts(
     period_start: date, period_end_exclusive: date,
     db: Annotated[Session, Depends(get_db)],
@@ -51,7 +51,7 @@ def billable_contracts(
     return result
 
 
-@router.get('/contracts/{contract_id}')
+@router.get('/contracts/{contract_id}', response_model=s.InternalContract)
 def internal_contract(contract_id:UUID,
                       db:Annotated[Session,Depends(get_db)],
                       settings:Annotated[TenantSettings,Depends(get_settings)],
@@ -66,7 +66,7 @@ def internal_contract(contract_id:UUID,
             'payer':{'id':str(tenant.id),'full_name':tenant.full_name,'email':tenant.email}}
 
 
-@router.get('/contracts/{contract_id}/billing-context')
+@router.get('/contracts/{contract_id}/billing-context', response_model=s.BillingContext)
 def billing_context(
     contract_id: UUID, db: Annotated[Session, Depends(get_db)],
     settings: Annotated[TenantSettings, Depends(get_settings)],
@@ -90,7 +90,7 @@ def billing_context(
     }
 
 
-@router.get('/contracts/{contract_id}/expiry-notification-eligibility')
+@router.get('/contracts/{contract_id}/expiry-notification-eligibility', response_model=s.ExpiryEligibility)
 def expiry_notification_eligibility(
     contract_id: UUID, end_date: date,
     db: Annotated[Session, Depends(get_db)],

@@ -7,7 +7,7 @@ from pydantic import AwareDatetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.db import get_db
-from app.schemas import ReadingOut, MeterAlertOut
+from app.schemas import ReadingOut, MeterAlertOut, Page as ResultPage, MonthlyRunResult, RoomMeterList
 from app.service import MeteringService
 from app.telemetry import UnknownMeter
 
@@ -16,7 +16,7 @@ Db = Annotated[Session, Depends(get_db)]
 Page = Annotated[int, Query(ge=1)]
 Size = Annotated[int, Query(ge=1, le=100)]
 
-@router.get('/{meter_id}/readings')
+@router.get('/{meter_id}/readings', response_model=ResultPage[ReadingOut])
 def readings(meter_id: UUID, db: Db, page: Page = 1, page_size: Size = 100,
              from_at: AwareDatetime | None = Query(default=None, alias='from'),
              to_at: AwareDatetime | None = Query(default=None, alias='to')):
@@ -28,7 +28,7 @@ def readings(meter_id: UUID, db: Db, page: Page = 1, page_size: Size = 100,
     return {'items': [ReadingOut.model_validate(x).model_dump(mode='json') for x in rows],
             'meta': {'page': page, 'page_size': page_size, 'total': total}}
 
-@router.get('/{meter_id}/alerts')
+@router.get('/{meter_id}/alerts', response_model=ResultPage[MeterAlertOut])
 def alerts(meter_id: UUID, db: Db, page: Page = 1, page_size: Size = 100):
     try:
         rows, total = MeteringService(db).alerts_for_meter(meter_id, page=page, page_size=page_size)
@@ -41,7 +41,7 @@ def alerts(meter_id: UUID, db: Db, page: Page = 1, page_size: Size = 100):
 # Canonical OpenAPI global alert listing, in addition to the per-meter convenience route.
 alerts_router = APIRouter(prefix='/api/v1', tags=['Metering'])
 
-@alerts_router.get('/meter-alerts')
+@alerts_router.get('/meter-alerts', response_model=ResultPage[MeterAlertOut])
 def all_alerts(db: Db, page: Page = 1, page_size: Size = 100,
                status: str | None = Query(default=None, pattern='^(OPEN|RESOLVED)$'),
                alert_type: str | None = Query(default=None, pattern='^(OFFLINE|READING_DECREASE|LATE_AFTER_CUTOFF|CONFLICTING_DUPLICATE)$')):
@@ -75,7 +75,7 @@ def cutoff_error(exc: CutoffError):
     raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
 
 
-@cutoff_router.get('')
+@cutoff_router.get('', response_model=ResultPage[CutoffOut])
 def list_cutoffs(db: Db, meter_id: UUID | None = None, room_id: UUID | None = None,
                  status: str | None = Query(default=None, pattern='^(PENDING|CONFIRMED|SUPERSEDED)$'),
                  cutoff_type: str | None = Query(default=None, pattern='^(MONTHLY|CONTRACT_START|CONTRACT_END)$'),
@@ -91,7 +91,7 @@ def list_cutoffs(db: Db, meter_id: UUID | None = None, room_id: UUID | None = No
             'meta': {'page': page, 'page_size': page_size, 'total': count}}
 
 
-@cutoff_router.get('/{cutoff_id}')
+@cutoff_router.get('/{cutoff_id}', response_model=CutoffOut)
 def get_cutoff(cutoff_id: UUID, db: Db):
     try:
         cutoff = MeteringService(db).cutoff(cutoff_id)
@@ -100,7 +100,7 @@ def get_cutoff(cutoff_id: UUID, db: Db):
     return cutoff_payload(db, cutoff)
 
 
-@cutoff_router.post('/{cutoff_id}/confirm')
+@cutoff_router.post('/{cutoff_id}/confirm', response_model=CutoffOut)
 def confirm_cutoff(cutoff_id: UUID, body: ManualCutoffInput, db: Db,
                    actor: UUID = Header(alias='X-Auth-User-Id')):
     try:
@@ -111,8 +111,8 @@ def confirm_cutoff(cutoff_id: UUID, body: ManualCutoffInput, db: Db,
     return cutoff_payload(db, row)
 
 
-@cutoff_router.post('/{cutoff_id}/revise', status_code=201, include_in_schema=False)
-@cutoff_router.post('/{cutoff_id}/corrections', status_code=201)
+@cutoff_router.post('/{cutoff_id}/revise', status_code=201, include_in_schema=False, response_model=CutoffOut)
+@cutoff_router.post('/{cutoff_id}/corrections', status_code=201, response_model=CutoffOut)
 def revise_cutoff(cutoff_id: UUID, body: ManualCutoffInput, db: Db,
                   actor: UUID = Header(alias='X-Auth-User-Id')):
     try:
@@ -132,7 +132,7 @@ def run_cutoff_job(db: Db):
         cutoff_error(exc)
 
 
-@router.get('/{meter_id}/cutoffs')
+@router.get('/{meter_id}/cutoffs', response_model=ResultPage[CutoffOut])
 def cutoffs_for_meter(meter_id: UUID, db: Db, page: Page = 1, page_size: Size = 100):
     from app import models as m
     if db.get(m.Meter, meter_id) is None:
@@ -143,7 +143,7 @@ def cutoffs_for_meter(meter_id: UUID, db: Db, page: Page = 1, page_size: Size = 
             'meta': {'page':page, 'page_size':page_size, 'total':count}}
 
 
-@job_router.post('/monthly-cutoffs/run', status_code=202)
+@job_router.post('/monthly-cutoffs/run', status_code=202, response_model=MonthlyRunResult)
 def monthly_cutoff_run(body: MonthlyRunInput, db: Db):
     """Explicit month-boundary demo job; same transactional logic as scheduler."""
     from uuid import uuid4
@@ -167,7 +167,7 @@ class ResolveAlertInput(BaseModel):
     resolution_note: str = Field(min_length=8, max_length=1000)
 
 
-@alerts_router.post('/meter-alerts/{alert_id}/resolve')
+@alerts_router.post('/meter-alerts/{alert_id}/resolve', response_model=MeterAlertOut)
 def resolve_meter_alert(alert_id: UUID, body: ResolveAlertInput, db: Db,
                         actor: UUID = Header(alias='X-Auth-User-Id')):
     try:
@@ -175,3 +175,13 @@ def resolve_meter_alert(alert_id: UUID, body: ResolveAlertInput, db: Db,
     except CutoffError as exc:
         cutoff_error(exc)
     return MeterAlertOut.model_validate(row).model_dump(mode='json')
+
+
+
+
+room_router = APIRouter(prefix='/api/v1/rooms', tags=['Metering'])
+
+
+@room_router.get('/{room_id}/meters', response_model=RoomMeterList)
+def room_meters(room_id: UUID, db: Db):
+    return {'items': MeteringService(db).meters_for_room(room_id)}

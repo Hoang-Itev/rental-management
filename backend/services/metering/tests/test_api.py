@@ -134,3 +134,14 @@ def test_p07_monthly_job_validates_vn_boundary(client):
     wrong = client.post('/api/v1/jobs/meters/monthly-cutoffs/run',
                         json={'cutoff_at':'2026-11-01T00:00:00Z'})
     assert wrong.status_code==422
+
+
+def test_owner_room_meter_listing(client, make_session):
+    event = example()
+    with make_session() as db:
+        MeteringService(db).process_room_created(event)
+    result = client.get('/api/v1/rooms/' + event['data']['room_id'] + '/meters')
+    assert result.status_code == 200
+    assert sorted(m['meter_type'] for m in result.json()['items']) == ['ELECTRICITY', 'WATER']
+    assert client.get(f'/api/v1/rooms/{uuid4()}/meters').json() == {'items': []}
+    assert client.get('/api/v1/rooms/invalid/meters').status_code == 422
