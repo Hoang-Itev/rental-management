@@ -21,4 +21,4 @@ Stack mặc định đã bật Billing API, scheduler và outbox publisher.
 
 Local và cloud dùng cùng cấu hình ứng dụng. Đặt thông tin DB, RabbitMQ và service token theo môi trường. Có thể ghi đè `BILLING_TENANT_URL`, `BILLING_METERING_URL`, `BILLING_HTTP_TIMEOUT_SECONDS` (mặc định 5) và `BILLING_POLL_SECONDS` (mặc định 300). Các URL mặc định là tên service trong mạng Compose.
 
-`scripts/tests/billing-invoices.ps1` tạo project Compose riêng, chạy test và xóa volume của chính project đó. Test bao gồm cutoff thiếu, phát hành, hai yêu cầu đồng thời, rollback khi lỗi Outbox, chạy lại job, tổng tiền và xác nhận nhận sự kiện qua RabbitMQ.
+`scripts/tests/billing-invoices-integration.ps1` tạo project Compose riêng, chạy test và xóa volume của chính project đó. Test bao gồm cutoff thiếu, phát hành, hai yêu cầu đồng thời, rollback khi lỗi Outbox, chạy lại job, tổng tiền và xác nhận nhận sự kiện qua RabbitMQ.

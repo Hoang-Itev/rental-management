@@ -12,8 +12,7 @@ try {
 
   # Always verify all six schemas first (even when intentionally skipping
   # the Auth demo account); prevents seeding into a partially migrated stack.
-  & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'verify_schema_v3.ps1') -ProjectRoot $ProjectRoot
-  if ($LASTEXITCODE -ne 0) { throw 'Schema verification failed. Seed was not started.' }
+  & (Join-Path $PSScriptRoot 'verify_schema_v3.ps1') -ProjectRoot $ProjectRoot
 
   $env:SEED_MODE = 'demo'
   if (-not $SkipAuth) {

@@ -23,8 +23,7 @@ try {
     }
   }
   Write-Host "`nChecking expected tables..." -ForegroundColor Cyan
-  & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'verify_schema_v3.ps1') -ProjectRoot $ProjectRoot
-  if ($LASTEXITCODE -ne 0) { throw 'Post-migration schema verification failed.' }
+  & (Join-Path $PSScriptRoot 'verify_schema_v3.ps1') -ProjectRoot $ProjectRoot
 } finally {
   Pop-Location
 }

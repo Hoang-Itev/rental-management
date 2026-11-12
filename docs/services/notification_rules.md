@@ -14,4 +14,4 @@ Stack mặc định đã bật Tenant, Billing và Notification worker. Đặt `
 docker compose -f compose.yaml -f compose.workers.yaml up -d --build
 ```
 
-Nếu demo đồng hồ và cutoff, giữ thêm các overlay P06 và P07 đang dùng. Chạy `scripts/tests/notification-rules.ps1` để kiểm tra bằng PostgreSQL, RabbitMQ và Mailpit trong project Compose riêng. Test chạy lại scheduler, phát lại cùng event, kiểm tra Billing tạm mất kết nối và cả hai thứ tự đến của event thanh toán và reminder.
+Nếu demo đồng hồ và cutoff, giữ thêm các overlay P06 và P07 đang dùng. Chạy `scripts/tests/notification-rules-integration.ps1` để kiểm tra bằng PostgreSQL, RabbitMQ và Mailpit trong project Compose riêng. Test chạy lại scheduler, phát lại cùng event, kiểm tra Billing tạm mất kết nối và cả hai thứ tự đến của event thanh toán và reminder.

@@ -167,7 +167,7 @@ jobs:
         run: |
           set -euo pipefail
           docker compose -f compose.yaml -f infra/compose/tests/room-unit-and-db.yaml run --rm --no-deps room \
-            sh -c 'python -m pip install --disable-pip-version-check -q -r /app/requirements-test.txt && python -m pytest integration/test_postgres.py -q'
+            sh -c 'python -m pip install --disable-pip-version-check -q -r /app/requirements-test.txt && python -m pytest integration/test_room_postgres.py -q'
       - name: Run seed again to prove idempotence
         run: |
           set -euo pipefail
@@ -269,7 +269,7 @@ jobs:
         shell: pwsh
         env:
           P03_CI_PROJECT_NAME: p03ci${{ github.run_id }}${{ github.run_attempt }}
-        run: ./scripts/tests/room-meter-events.ps1
+        run: ./scripts/tests/room-meter-events-integration.ps1
       - name: Inspect P03 failures
         if: failure()
         shell: bash
@@ -294,7 +294,7 @@ jobs:
         shell: pwsh
         env:
           P04_CI_PROJECT_NAME: p04ci${{ github.run_id }}${{ github.run_attempt }}
-        run: ./scripts/tests/room-tenant-contracts.ps1
+        run: ./scripts/tests/room-tenant-contracts-integration.ps1
       - name: Inspect failed isolated P04 stack
         if: failure()
         shell: bash
@@ -318,7 +318,7 @@ jobs:
         shell: pwsh
         env:
           P05_CI_PROJECT_NAME: p05ci${{ github.run_id }}${{ github.run_attempt }}
-        run: ./scripts/tests/contract-lifecycle.ps1
+        run: ./scripts/tests/contract-lifecycle-integration.ps1
 
   # P06: real MQTT QoS1 -> RabbitMQ MQTT plugin -> AMQP -> Metering -> Postgres.
   mqtt-metering-integration:
@@ -342,7 +342,7 @@ jobs:
         shell: pwsh
         env:
           P06_CI_PROJECT_NAME: p06ci${{ github.run_id }}${{ github.run_attempt }}
-        run: ./scripts/tests/mqtt-telemetry.ps1
+        run: ./scripts/tests/mqtt-telemetry-integration.ps1
 
   business-integration:
     name: Business integration (${{ matrix.suite }})
@@ -359,4 +359,4 @@ jobs:
         run: cp .env.example .env
       - name: Run isolated integration suite
         shell: pwsh
-        run: ./scripts/tests/${{ matrix.suite }}.ps1
+        run: ./scripts/tests/${{ matrix.suite }}-integration.ps1

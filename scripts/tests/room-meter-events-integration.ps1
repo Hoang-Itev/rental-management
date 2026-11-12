@@ -33,13 +33,13 @@ try {
 
   # Publisher retry semantics, with both workers still stopped.
   & docker compose @files run --rm --no-deps room `
-    sh -c 'python -m pip install --disable-pip-version-check -q -r /app/requirements-test.txt && python -m pytest -q integration/test_outbox_publish.py'
+    sh -c 'python -m pip install --disable-pip-version-check -q -r /app/requirements-test.txt && python -m pytest -q integration/test_room_outbox_publish.py'
   if ($LASTEXITCODE -ne 0) { throw 'P03 real PostgreSQL publisher retry test failed' }
 
   & docker compose @files up -d room-outbox metering-consumer
   if ($LASTEXITCODE -ne 0) { throw 'P03 worker startup failed' }
   & docker compose @files run --rm --no-deps metering `
-    sh -c 'python -m pip install --disable-pip-version-check -q -r /app/requirements-test.txt && python -m pytest -q tests/integration/test_outbox_and_events.py'
+    sh -c 'python -m pip install --disable-pip-version-check -q -r /app/requirements-test.txt && python -m pytest -q integration/test_room_meter_events.py'
   if ($LASTEXITCODE -ne 0) { throw 'P03 RoomCreated -> RabbitMQ -> Metering end-to-end failed' }
   Write-Host 'P03 POSTGRES + RABBITMQ E2E OK: outbox retry, two meters, duplicate delivery' -ForegroundColor Green
 } catch {

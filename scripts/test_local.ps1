@@ -16,16 +16,16 @@ $services = [ordered]@{
     simulator = 'simulator'
 }
 $integrations = @(
-    'tests/room-postgres.ps1',
-    'tests/room-meter-events.ps1',
-    'tests/room-tenant-contracts.ps1',
-    'tests/contract-lifecycle.ps1',
-    'tests/mqtt-telemetry.ps1',
-    'tests/meter-cutoffs.ps1',
-    'tests/billing-invoices.ps1',
-    'tests/invoice-email.ps1',
-    'tests/momo-payments.ps1',
-    'tests/notification-rules.ps1'
+    'tests/room-postgres-integration.ps1',
+    'tests/room-meter-events-integration.ps1',
+    'tests/room-tenant-contracts-integration.ps1',
+    'tests/contract-lifecycle-integration.ps1',
+    'tests/mqtt-telemetry-integration.ps1',
+    'tests/meter-cutoffs-integration.ps1',
+    'tests/billing-invoices-integration.ps1',
+    'tests/invoice-email-integration.ps1',
+    'tests/momo-payments-integration.ps1',
+    'tests/notification-rules-integration.ps1'
 )
 
 function Invoke-UnitCompose {
@@ -44,8 +44,16 @@ try {
         $path = Join-Path $root $entry.Value
         $mount = "${path}:/checkout:ro"
         $requirements = "$(Join-Path $root 'requirements-test.txt'):/requirements-test.txt:ro"
-        $testCommand = 'python -m pip install -q -r /requirements-test.txt && cd /checkout && PYTHONDONTWRITEBYTECODE=1 python -m pytest -q -p no:cacheprovider --ignore=tests/integration tests'
-        Invoke-UnitCompose run --rm --no-deps --build --volume $mount --volume $requirements $entry.Key sh -ec $testCommand
+        $config = "$(Join-Path $root 'pyproject.toml'):/pytest-config.toml:ro"
+        $coverageArgs = switch ($entry.Key) {
+            'auth' { '--cov=app --cov-fail-under=95' }
+            'room' { '--cov=app --cov-fail-under=95' }
+            'billing' { '--cov=app.calculator --cov-fail-under=80' }
+            'simulator' { '' }
+            default { '--cov=app.service --cov-fail-under=80' }
+        }
+        $testCommand = 'python -m pip install -q -r /requirements-test.txt && cd /checkout && PYTHONDONTWRITEBYTECODE=1 COVERAGE_FILE=/tmp/.coverage python -m pytest -c /pytest-config.toml -q -p no:cacheprovider tests ' + $coverageArgs
+        Invoke-UnitCompose run --rm --no-deps --build --volume $mount --volume $requirements --volume $config $entry.Key sh -ec $testCommand
     }
 
     if (-not $UnitOnly) {
