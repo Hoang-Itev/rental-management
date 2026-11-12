@@ -36,4 +36,4 @@ Room unit tests cover both orders, duplicates, stale and premature messages, saf
 
 ## Operating
 
-Always start with `docker compose -f compose.yaml -f compose.p03.yaml -f compose.p05.yaml up -d --build ...`; both overlays are required until consolidated into base Compose. P05 does not delete `.env`, existing migrations, Docker volumes or P03 code.
+Start the API and lifecycle workers with `docker compose -f compose.yaml -f compose.workers.yaml up -d --build --wait`.

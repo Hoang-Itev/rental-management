@@ -24,11 +24,11 @@ The V3 schema contains a legacy optional `deposit_amount` column, but P04 does n
 
 ## Tests
 
-`./scripts/test_p04_unit.ps1` validates SQLite-backed Tenant service/API and mocked Room HTTP behavior, requiring ≥80% coverage on `app.service`. The SQLite harness removes PostgreSQL-only GiST exclusion constraints: it does NOT claim to test database locking.
+`./scripts/tests/tenant-unit.ps1` validates SQLite-backed Tenant service/API and mocked Room HTTP behavior, requiring ≥80% coverage on `app.service`. The SQLite harness removes PostgreSQL-only GiST exclusion constraints: it does NOT claim to test database locking.
 
-`./scripts/test_p04_integration.ps1` provisions a randomized disposable Docker Compose project with PostgreSQL and RabbitMQ, applies **real** Room and Tenant migrations, starts both services, and exercises HTTP flows across them. It covers term versioning, inclusive overlap prevention, inactive rooms and **two concurrent confirm requests** against the real PostgreSQL exclusion constraint. It removes only the disposable project and its two volumes, never the user's running rental-management stack.
+`./scripts/tests/room-tenant-contracts.ps1` provisions a randomized disposable Docker Compose project with PostgreSQL and RabbitMQ, applies **real** Room and Tenant migrations, starts both services, and exercises HTTP flows across them. It covers term versioning, inclusive overlap prevention, inactive rooms and **two concurrent confirm requests** against the real PostgreSQL exclusion constraint. It removes only the disposable project and its two volumes, never the user's running rental-management stack.
 
-`./scripts/test_p04_gateway.ps1` is optional after the Tenant container is rebuilt. It uses existing owner credentials and Nginx to exercise the full flow. **It creates permanent demo records in the local dev databases** and does not auto-delete them.
+`./scripts/tests/tenant-gateway.ps1` is optional after the Tenant container is rebuilt. It uses existing owner credentials and Nginx to exercise the full flow. **It creates permanent demo records in the local dev databases** and does not auto-delete them.
 
 ## Constraints and caveats
 

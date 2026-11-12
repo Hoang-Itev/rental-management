@@ -15,7 +15,7 @@ $appServices = @('auth', 'room', 'tenant', 'metering', 'billing', 'notification'
 $composeArgs = @('-f', 'compose.yaml')
 $workers = @()
 if ($Runtime) {
-  $composeArgs += @('-f', 'compose.runtime.yaml')
+  $composeArgs += @('-f', 'compose.workers.yaml')
   $workers = @('room-outbox', 'metering-consumer', 'tenant-outbox', 'tenant-scheduler',
                'room-consumer', 'metering-telemetry-consumer', 'metering-cutoff-scheduler',
                'billing-scheduler', 'billing-outbox', 'notification-worker')

@@ -42,7 +42,12 @@ jobs:
               return loader.construct_scalar(node)
 
           yaml.SafeLoader.add_multi_constructor("!", compose_tag)
-          required = [Path('compose.yaml'), Path('compose.dev.yaml'), Path('compose.runtime.yaml'), Path('compose.prod.yaml'), Path('compose.seed.yaml'), Path('compose.auth-test.yaml'), Path('compose.room-test.yaml'), Path('compose.p03-unit.yaml'), Path('compose.p04-unit.yaml'), Path('compose.p04-isolated.yaml'), Path('compose.p05-isolated.yaml'), Path('compose.p06-unit.yaml'), Path('compose.p06-isolated.yaml'), Path('.github/workflows/ci.yml')]
+          required = [
+              Path('compose.yaml'), Path('compose.workers.yaml'), Path('compose.prod.yaml'),
+              Path('infra/compose/dev.yaml'), Path('infra/compose/seed.yaml'),
+              *sorted(Path('infra/compose/tests').glob('*.yaml')),
+              Path('.github/workflows/ci.yml'),
+          ]
           for path in required:
               assert path.exists(), f'Missing {path}'
               yaml.safe_load(path.read_text(encoding='utf-8'))
@@ -55,7 +60,7 @@ jobs:
       - name: Test deterministic seed dataset
         run: python -m pytest -q scripts/seed/tests
       - name: Ensure Room OpenAPI extensions are committed
-        run: python scripts/room/sync_openapi.py --check contracts/openapi.yaml
+        run: python scripts/sync_room_openapi.py --check contracts/openapi.yaml
 
   service-unit-tests:
     runs-on: ubuntu-latest
@@ -72,6 +77,7 @@ jobs:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: |
+            requirements-test.txt
             backend/auth/requirements.txt
             backend/services/*/requirements.txt
       - name: Install backend test dependencies
@@ -80,26 +86,23 @@ jobs:
           if [[ "${{ matrix.service }}" == "auth" ]]; then path="backend/auth"; else path="backend/services/${{ matrix.service }}"; fi
           python -m pip install -r requirements-test.txt
           python -m pip install -r "$path/requirements.txt"
-      - name: Run actual service tests when implemented
+      - name: Run service unit tests with coverage
         shell: bash
+        env:
+          SERVICE: ${{ matrix.service }}
         run: |
           set -euo pipefail
-          if [[ "${{ matrix.service }}" == "auth" ]]; then path="backend/auth"; else path="backend/services/${{ matrix.service }}"; fi
-          cd "$path"
-          if grep -r -E -q '^[[:space:]]*(async[[:space:]]+)?def[[:space:]]+test_' tests --include='test_*.py'; then
-            if [[ "${{ matrix.service }}" == "auth" || "${{ matrix.service }}" == "room" ]]; then
-              python -m pytest tests -q --cov=app --cov-report=term-missing --cov-fail-under=95
-            elif [[ "${{ matrix.service }}" == "billing" ]]; then
-              python -m pytest tests -q --cov=app.calculator --cov-report=term-missing --cov-fail-under=80
-            elif grep -E -q '^[[:space:]]*(async[[:space:]]+)?def[[:space:]]+test_' tests/test_service.py; then
-              python -m pytest tests -q --cov=app.service --cov-report=term-missing --cov-fail-under=80
-            else
-              python -m pytest tests -q
-              echo 'No service-level unit tests yet; 80% business logic gate not activated.'
-            fi
-          else
-            echo 'NO SERVICE TESTS YET for ${{ matrix.service }}; this is not proof of unit coverage.'
-          fi
+          case "$SERVICE" in
+            auth) cd backend/auth ;;
+            *) cd "backend/services/$SERVICE" ;;
+          esac
+          case "$SERVICE" in
+            auth|room) target=app; minimum=95 ;;
+            billing) target=app.calculator; minimum=80 ;;
+            *) target=app.service; minimum=80 ;;
+          esac
+          python -m pytest tests --ignore=tests/integration -q \
+            --cov="$target" --cov-report=term-missing --cov-fail-under="$minimum"
 
   database-and-seed:
     runs-on: ubuntu-latest
@@ -128,7 +131,7 @@ jobs:
           OWNER_EMAIL=owner.demo@example.com
           EOF
       - name: Validate Compose configuration
-        run: docker compose -f compose.yaml -f compose.seed.yaml config --quiet
+        run: docker compose -f compose.yaml -f infra/compose/seed.yaml config --quiet
       - name: Start PostgreSQL only
         run: docker compose up -d --wait postgres
       - name: Build six independent service images
@@ -143,36 +146,36 @@ jobs:
         run: |
           set -euo pipefail
           for svc in auth room tenant metering billing notification; do
-            docker compose -f compose.yaml -f compose.seed.yaml run --rm --no-deps "$svc" python /seed/seed_service.py "$svc"
+            docker compose -f compose.yaml -f infra/compose/seed.yaml run --rm --no-deps "$svc" python /seed/seed_service.py "$svc"
           done
       - name: Verify seed content and references
         run: |
           set -euo pipefail
           for svc in auth room tenant metering billing notification; do
-            docker compose -f compose.yaml -f compose.seed.yaml run --rm --no-deps "$svc" python /seed/verify_service.py "$svc"
+            docker compose -f compose.yaml -f infra/compose/seed.yaml run --rm --no-deps "$svc" python /seed/verify_service.py "$svc"
           done
       - name: Verify PostgreSQL UNIQUE and exclusion constraints (rollback-only)
         run: |
           set -euo pipefail
           for svc in room tenant metering billing; do
-            docker compose -f compose.yaml -f compose.seed.yaml run --rm --no-deps "$svc" python /seed/verify_constraints.py "$svc"
+            docker compose -f compose.yaml -f infra/compose/seed.yaml run --rm --no-deps "$svc" python /seed/verify_constraints.py "$svc"
           done
       - name: Verify room_v3_003 hierarchy immutability (rollback-only)
         run: |
-          docker compose -f compose.yaml -f compose.seed.yaml run --rm --no-deps room python /seed/verify_room_immutability.py
+          docker compose -f compose.yaml -f infra/compose/seed.yaml run --rm --no-deps room python /seed/verify_room_immutability.py
       - name: PostgreSQL P02 Room integration, real triggers and rollback (CI disposable DB)
         run: |
           set -euo pipefail
-          docker compose -f compose.yaml -f compose.room-test.yaml run --rm --no-deps room \
+          docker compose -f compose.yaml -f infra/compose/tests/room-unit-and-db.yaml run --rm --no-deps room \
             sh -c 'python -m pip install --disable-pip-version-check -q -r /app/requirements-test.txt && python -m pytest integration/test_postgres.py -q'
       - name: Run seed again to prove idempotence
         run: |
           set -euo pipefail
           for svc in auth room tenant metering billing notification; do
-            docker compose -f compose.yaml -f compose.seed.yaml run --rm --no-deps "$svc" python /seed/seed_service.py "$svc" --expect-existing
+            docker compose -f compose.yaml -f infra/compose/seed.yaml run --rm --no-deps "$svc" python /seed/seed_service.py "$svc" --expect-existing
           done
           for svc in auth room tenant metering billing notification; do
-            docker compose -f compose.yaml -f compose.seed.yaml run --rm --no-deps "$svc" python /seed/verify_service.py "$svc"
+            docker compose -f compose.yaml -f infra/compose/seed.yaml run --rm --no-deps "$svc" python /seed/verify_service.py "$svc"
           done
       - name: Show service logs on failure
         if: failure()
@@ -215,38 +218,41 @@ jobs:
           SMTP_USERNAME: ci-config-only
           SMTP_PASSWORD: ci-config-only
         run: |
-          docker compose -f compose.yaml -f compose.runtime.yaml config --quiet
-          docker compose -f compose.yaml -f compose.runtime.yaml -f compose.prod.yaml config --quiet
+          docker compose -f compose.yaml config --quiet
+          docker compose -f compose.yaml -f compose.workers.yaml config --quiet
+          docker compose -f compose.yaml -f compose.workers.yaml -f compose.prod.yaml config --quiet
       - name: Boot the complete stack from new Docker volumes
-        run: docker compose -f compose.yaml -f compose.runtime.yaml up -d --build
+        run: |
+          docker compose -f compose.yaml build auth room tenant metering billing notification nginx
+          docker compose -f compose.yaml -f compose.workers.yaml up -d --wait --wait-timeout 240
       - name: Inspect one-shot jobs, healthy apps, broker and Gateway
         shell: pwsh
         run: ./scripts/smoke_test.ps1 -Runtime -TimeoutSeconds 240
       - name: Validate live Nginx configuration
-        run: docker compose -f compose.yaml -f compose.runtime.yaml exec -T nginx nginx -t
+        run: docker compose -f compose.yaml exec -T nginx nginx -t
       - name: Seed disposable owner for real Auth / Gateway integration
         env:
           SEED_MODE: demo
           SEED_OWNER_PASSWORD: CI_Demo_Auth_Only_2026_Strong_Password
-        run: docker compose -f compose.yaml -f compose.seed.yaml run --rm --no-deps auth python /seed/seed_service.py auth
+        run: docker compose -f compose.yaml -f infra/compose/seed.yaml run --rm --no-deps auth python /seed/seed_service.py auth
       - name: Test login, JWT and Nginx auth_request against real PostgreSQL
         env:
           TEST_AUTH_EMAIL: owner.demo@example.com
           TEST_AUTH_PASSWORD: CI_Demo_Auth_Only_2026_Strong_Password
-        run: python3 scripts/auth/gateway_check.py
+        run: python3 scripts/tests/gateway/auth.py
       - name: Test Room read-only routes via real Auth and Nginx
         env:
           TEST_AUTH_EMAIL: owner.demo@example.com
           TEST_AUTH_PASSWORD: CI_Demo_Auth_Only_2026_Strong_Password
-        run: python3 scripts/room/gateway_check.py
+        run: python3 scripts/tests/gateway/room.py
       - name: Diagnose failed Compose startup
         if: failure()
         run: |
-          docker compose -f compose.yaml -f compose.runtime.yaml ps -a || true
-          docker compose -f compose.yaml -f compose.runtime.yaml logs --tail=140 || true
+          docker compose -f compose.yaml -f compose.workers.yaml ps -a || true
+          docker compose -f compose.yaml -f compose.workers.yaml logs --tail=140 || true
       - name: Destroy ONLY disposable GitHub CI volumes
         if: always()
-        run: docker compose -f compose.yaml -f compose.runtime.yaml down -v --remove-orphans
+        run: docker compose -f compose.yaml -f compose.workers.yaml down -v --remove-orphans
 
   # P03: real RabbitMQ + two independent PostgreSQL logical databases.
   # Every CI run uses a disposable project, never a shared/local Docker volume.
@@ -258,35 +264,20 @@ jobs:
       - uses: actions/checkout@v4
       - name: Write isolated P03 CI-only credentials
         shell: bash
-        run: |
-          cat > .env <<'EOF'
-          POSTGRES_USER=postgres
-          POSTGRES_PASSWORD=p03_ci_pg_temporary
-          AUTH_DB_PASSWORD=p03_ci_auth_temporary
-          ROOM_DB_PASSWORD=p03_ci_room_temporary
-          TENANT_DB_PASSWORD=p03_ci_tenant_temporary
-          METERING_DB_PASSWORD=p03_ci_metering_temporary
-          BILLING_DB_PASSWORD=p03_ci_billing_temporary
-          NOTIFICATION_DB_PASSWORD=p03_ci_notification_temporary
-          RABBITMQ_DEFAULT_USER=p03_ci_rabbit
-          RABBITMQ_DEFAULT_PASS=p03_ci_rabbit_temporary
-          SERVICE_TOKEN=p03_ci_service_token_is_long_enough
-          JWT_SECRET=p03_ci_jwt_secret_is_long_enough
-          OWNER_EMAIL=owner.demo@example.com
-          EOF
+        run: cp .env.example .env
       - name: Test actual Room outbox delivery, retry and Metering consumer
         shell: pwsh
         env:
           P03_CI_PROJECT_NAME: p03ci${{ github.run_id }}${{ github.run_attempt }}
-        run: ./scripts/test_p03_integration.ps1
+        run: ./scripts/tests/room-meter-events.ps1
       - name: Inspect P03 failures
         if: failure()
         shell: bash
         env:
           P03_PROJECT_NAME: p03ci${{ github.run_id }}${{ github.run_attempt }}
         run: |
-          docker compose -p "$P03_PROJECT_NAME" -f compose.yaml -f compose.runtime.yaml -f compose.p03-isolated.yaml ps -a || true
-          docker compose -p "$P03_PROJECT_NAME" -f compose.yaml -f compose.runtime.yaml -f compose.p03-isolated.yaml logs --tail=120 || true
+          docker compose -p "$P03_PROJECT_NAME" -f compose.yaml -f compose.workers.yaml -f infra/compose/tests/room-meter-events.yaml ps -a || true
+          docker compose -p "$P03_PROJECT_NAME" -f compose.yaml -f compose.workers.yaml -f infra/compose/tests/room-meter-events.yaml logs --tail=120 || true
 
   # P04: Room REST + tenant_db PostgreSQL GiST EXCLUDE (two independent HTTP requests).
   # The PowerShell runner picks a disposable project starting p04ci.
@@ -298,35 +289,20 @@ jobs:
       - uses: actions/checkout@v4
       - name: Write isolated P04 CI-only credentials
         shell: bash
-        run: |
-          cat > .env <<'EOF'
-          POSTGRES_USER=postgres
-          POSTGRES_PASSWORD=p04_ci_pg_temporary
-          AUTH_DB_PASSWORD=p04_ci_auth_temporary
-          ROOM_DB_PASSWORD=p04_ci_room_temporary
-          TENANT_DB_PASSWORD=p04_ci_tenant_temporary
-          METERING_DB_PASSWORD=p04_ci_metering_temporary
-          BILLING_DB_PASSWORD=p04_ci_billing_temporary
-          NOTIFICATION_DB_PASSWORD=p04_ci_notification_temporary
-          RABBITMQ_DEFAULT_USER=p04_ci_rabbit
-          RABBITMQ_DEFAULT_PASS=p04_ci_rabbit_temporary
-          SERVICE_TOKEN=p04_ci_service_token_long_enough
-          JWT_SECRET=p04_ci_jwt_secret_long_enough_123
-          OWNER_EMAIL=owner.demo@example.com
-          EOF
+        run: cp .env.example .env
       - name: Real P04 Room + Tenant contract integration
         shell: pwsh
         env:
           P04_CI_PROJECT_NAME: p04ci${{ github.run_id }}${{ github.run_attempt }}
-        run: ./scripts/test_p04_integration.ps1
+        run: ./scripts/tests/room-tenant-contracts.ps1
       - name: Inspect failed isolated P04 stack
         if: failure()
         shell: bash
         env:
           P04_PROJECT_NAME: p04ci${{ github.run_id }}${{ github.run_attempt }}
         run: |
-          docker compose -p "$P04_PROJECT_NAME" -f compose.yaml -f compose.p04-isolated.yaml ps -a || true
-          docker compose -p "$P04_PROJECT_NAME" -f compose.yaml -f compose.p04-isolated.yaml logs --tail=100 || true
+          docker compose -p "$P04_PROJECT_NAME" -f compose.yaml -f infra/compose/tests/room-tenant-contracts.yaml ps -a || true
+          docker compose -p "$P04_PROJECT_NAME" -f compose.yaml -f infra/compose/tests/room-tenant-contracts.yaml logs --tail=100 || true
 
   # P05: disposable PostgreSQL + real RabbitMQ cross-service lifecycle tests.
   contract-lifecycle-integration:
@@ -337,27 +313,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Write disposable P05 CI credentials
         shell: bash
-        run: |
-          cat > .env <<'EOF'
-          POSTGRES_USER=postgres
-          POSTGRES_PASSWORD=p05_ci_pg_local_only
-          AUTH_DB_PASSWORD=p05_ci_auth_local_only
-          ROOM_DB_PASSWORD=p05_ci_room_local_only
-          TENANT_DB_PASSWORD=p05_ci_tenant_local_only
-          METERING_DB_PASSWORD=p05_ci_metering_local_only
-          BILLING_DB_PASSWORD=p05_ci_billing_local_only
-          NOTIFICATION_DB_PASSWORD=p05_ci_notification_local_only
-          RABBITMQ_DEFAULT_USER=p05_ci_rabbit
-          RABBITMQ_DEFAULT_PASS=p05_ci_rabbit_local_only
-          SERVICE_TOKEN=p05_ci_service_token_32_char_test_only
-          JWT_SECRET=p05_ci_jwt_secret_32_char_test_only
-          OWNER_EMAIL=owner.demo@example.org
-          EOF
+        run: cp .env.example .env
       - name: Real Tenant lifecycle, Room occupancy and Metering cutoffs
         shell: pwsh
         env:
           P05_CI_PROJECT_NAME: p05ci${{ github.run_id }}${{ github.run_attempt }}
-        run: ./scripts/test_p05_integration.ps1
+        run: ./scripts/tests/contract-lifecycle.ps1
 
   # P06: real MQTT QoS1 -> RabbitMQ MQTT plugin -> AMQP -> Metering -> Postgres.
   mqtt-metering-integration:
@@ -368,22 +329,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Create temporary P06 CI-only credentials
         shell: bash
-        run: |
-          cat > .env <<'EOF'
-          POSTGRES_USER=postgres
-          POSTGRES_PASSWORD=p06_ci_pg_local_only
-          AUTH_DB_PASSWORD=p06_ci_auth_local_only
-          ROOM_DB_PASSWORD=p06_ci_room_local_only
-          TENANT_DB_PASSWORD=p06_ci_tenant_local_only
-          METERING_DB_PASSWORD=p06_ci_metering_local_only
-          BILLING_DB_PASSWORD=p06_ci_billing_local_only
-          NOTIFICATION_DB_PASSWORD=p06_ci_notification_local_only
-          RABBITMQ_DEFAULT_USER=p06_ci_rabbit
-          RABBITMQ_DEFAULT_PASS=p06_ci_rabbit_local_only
-          SERVICE_TOKEN=p06_ci_service_token_32_char_test_only
-          JWT_SECRET=p06_ci_jwt_secret_32_char_test_only
-          OWNER_EMAIL=owner.demo@example.org
-          EOF
+        run: cp .env.example .env
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -396,4 +342,21 @@ jobs:
         shell: pwsh
         env:
           P06_CI_PROJECT_NAME: p06ci${{ github.run_id }}${{ github.run_attempt }}
-        run: ./scripts/test_p06_integration.ps1
+        run: ./scripts/tests/mqtt-telemetry.ps1
+
+  business-integration:
+    name: Business integration (${{ matrix.suite }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs: static-checks
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [meter-cutoffs, billing-invoices, invoice-email, momo-payments, notification-rules]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare disposable Compose configuration
+        run: cp .env.example .env
+      - name: Run isolated integration suite
+        shell: pwsh
+        run: ./scripts/tests/${{ matrix.suite }}.ps1

@@ -1,4 +1,4 @@
-# Optional manual deployment settings. Apply after compose.runtime.yaml.
+# Optional manual deployment settings. Apply after compose.yaml and compose.workers.yaml.
 # Terminate HTTPS with a reverse proxy on the host, upstream 127.0.0.1:8080.
 services:
   rabbitmq:

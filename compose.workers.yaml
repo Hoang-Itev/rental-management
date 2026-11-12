@@ -1,0 +1,174 @@
+# Background processes. Apply after compose.yaml.
+services:
+  room-outbox:
+    image: ${COMPOSE_PROJECT_NAME}-room:latest
+    pull_policy: never
+    command: [python, -m, app.worker]
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://room_app:${ROOM_DB_PASSWORD:?ROOM_DB_PASSWORD required}@postgres:5432/room_db
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:?RABBIT user required}:${RABBITMQ_DEFAULT_PASS:?RABBIT password required}@rabbitmq:5672/
+    depends_on:
+      room-migrate:
+        condition: service_completed_successfully
+      rabbitmq-init:
+        condition: service_completed_successfully
+    networks: [internal]
+  metering-consumer:
+    image: ${COMPOSE_PROJECT_NAME}-metering:latest
+    pull_policy: never
+    command: [python, -m, app.worker]
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://metering_app:${METERING_DB_PASSWORD:?METERING_DB_PASSWORD required}@postgres:5432/metering_db
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:?RABBIT user required}:${RABBITMQ_DEFAULT_PASS:?RABBIT password required}@rabbitmq:5672/
+    depends_on:
+      metering-migrate:
+        condition: service_completed_successfully
+      rabbitmq-init:
+        condition: service_completed_successfully
+    networks: [internal]
+  tenant-outbox:
+    image: ${COMPOSE_PROJECT_NAME}-tenant:latest
+    pull_policy: never
+    command: [python, -m, app.worker]
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://tenant_app:${TENANT_DB_PASSWORD:?TENANT_DB_PASSWORD required}@postgres:5432/tenant_db
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:?rabbit user}:${RABBITMQ_DEFAULT_PASS:?rabbit pass}@rabbitmq:5672/
+    depends_on:
+      tenant-migrate:
+        condition: service_completed_successfully
+      rabbitmq-init:
+        condition: service_completed_successfully
+    networks: [internal]
+  tenant-scheduler:
+    image: ${COMPOSE_PROJECT_NAME}-tenant:latest
+    pull_policy: never
+    command: [python, -m, app.scheduler]
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://tenant_app:${TENANT_DB_PASSWORD:?TENANT_DB_PASSWORD required}@postgres:5432/tenant_db
+      ROOM_URL: http://room:8000
+      SERVICE_TOKEN: ${SERVICE_TOKEN:?SERVICE_TOKEN required}
+    depends_on:
+      tenant-migrate:
+        condition: service_completed_successfully
+      room:
+        condition: service_healthy
+    networks: [internal]
+  room-consumer:
+    image: ${COMPOSE_PROJECT_NAME}-room:latest
+    pull_policy: never
+    command: [python, -m, app.worker, consume]
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://room_app:${ROOM_DB_PASSWORD:?ROOM_DB_PASSWORD required}@postgres:5432/room_db
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:?rabbit user}:${RABBITMQ_DEFAULT_PASS:?rabbit pass}@rabbitmq:5672/
+    depends_on:
+      room-migrate:
+        condition: service_completed_successfully
+      rabbitmq-init:
+        condition: service_completed_successfully
+    networks: [internal]
+  metering-telemetry-consumer:
+    image: ${COMPOSE_PROJECT_NAME}-metering:latest
+    pull_policy: never
+    command: [python, -m, app.worker, telemetry]
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://metering_app:${METERING_DB_PASSWORD:?Set METERING_DB_PASSWORD}@postgres:5432/metering_db
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:?Set RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS:?Set RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/
+    depends_on:
+      metering-migrate:
+        condition: service_completed_successfully
+      rabbitmq-init:
+        condition: service_completed_successfully
+    networks: [internal]
+  metering-cutoff-scheduler:
+    image: ${COMPOSE_PROJECT_NAME}-metering:latest
+    pull_policy: never
+    command: [python, -m, app.scheduler]
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://metering_app:${METERING_DB_PASSWORD:?METERING_DB_PASSWORD required}@postgres:5432/metering_db
+      P07_JOB_INTERVAL_SECONDS: ${P07_JOB_INTERVAL_SECONDS:-60}
+      P07_OFFLINE_MINUTES: ${P07_OFFLINE_MINUTES:-20}
+      P07_MONTHS_BACK: ${P07_MONTHS_BACK:-24}
+    depends_on:
+      metering-migrate:
+        condition: service_completed_successfully
+    networks: [internal]
+  billing-scheduler:
+    image: ${COMPOSE_PROJECT_NAME}-billing:latest
+    pull_policy: never
+    restart: unless-stopped
+    networks: [internal]
+    command: [python, -m, app.scheduler]
+    depends_on:
+      billing:
+        condition: service_healthy
+      tenant:
+        condition: service_healthy
+      metering:
+        condition: service_healthy
+    environment:
+      TENANT_URL: ${BILLING_TENANT_URL:-http://tenant:8000}
+      METERING_URL: ${BILLING_METERING_URL:-http://metering:8000}
+      BILLING_HTTP_TIMEOUT_SECONDS: ${BILLING_HTTP_TIMEOUT_SECONDS:-5}
+      DATABASE_URL: postgresql+psycopg://billing_app:${BILLING_DB_PASSWORD}@postgres:5432/billing_db
+      SERVICE_TOKEN: ${SERVICE_TOKEN:?Set SERVICE_TOKEN in .env}
+      BILLING_POLL_SECONDS: ${BILLING_POLL_SECONDS:-300}
+      MOMO_PARTNER_CODE: ${MOMO_PARTNER_CODE:-}
+      MOMO_ACCESS_KEY: ${MOMO_ACCESS_KEY:-}
+      MOMO_SECRET_KEY: ${MOMO_SECRET_KEY:-}
+      MOMO_IPN_URL: ${MOMO_IPN_URL:-}
+      MOMO_TIMEOUT_SECONDS: ${MOMO_TIMEOUT_SECONDS:-30}
+      MOMO_RECONCILE_SECONDS: ${MOMO_RECONCILE_SECONDS:-300}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8080}
+  billing-outbox:
+    image: ${COMPOSE_PROJECT_NAME}-billing:latest
+    pull_policy: never
+    restart: unless-stopped
+    networks: [internal]
+    command: [python, -m, app.worker]
+    depends_on:
+      billing:
+        condition: service_healthy
+      rabbitmq-init:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgresql+psycopg://billing_app:${BILLING_DB_PASSWORD}@postgres:5432/billing_db
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/
+  notification-worker:
+    image: ${COMPOSE_PROJECT_NAME}-notification:latest
+    pull_policy: never
+    command: [python, -m, app.worker]
+    restart: unless-stopped
+    networks: [internal]
+    depends_on:
+      notification:
+        condition: service_healthy
+      billing:
+        condition: service_healthy
+      rabbitmq-init:
+        condition: service_completed_successfully
+      tenant:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://notification_app:${NOTIFICATION_DB_PASSWORD}@postgres:5432/notification_db
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/
+      BILLING_URL: ${NOTIFICATION_BILLING_URL:-http://billing:8000}
+      SERVICE_TOKEN: ${SERVICE_TOKEN:?Set SERVICE_TOKEN in .env}
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_SECURITY: ${SMTP_SECURITY:-plain}
+      SMTP_FROM: ${SMTP_FROM:-billing@example.com}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      NOTIFICATION_POLL_SECONDS: ${NOTIFICATION_POLL_SECONDS:-2}
+      NOTIFICATION_RETRY_SECONDS: ${NOTIFICATION_RETRY_SECONDS:-30}
+      NOTIFICATION_MAX_ATTEMPTS: ${NOTIFICATION_MAX_ATTEMPTS:-5}
+      NOTIFICATION_TIMEOUT_SECONDS: ${NOTIFICATION_TIMEOUT_SECONDS:-8}
+      OWNER_EMAIL: ${OWNER_EMAIL:?Set OWNER_EMAIL in .env}
+      TENANT_URL: ${NOTIFICATION_TENANT_URL:-http://tenant:8000}

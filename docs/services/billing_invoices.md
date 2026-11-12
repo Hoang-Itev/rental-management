@@ -17,8 +17,8 @@ Publisher gửi sự kiện vào RabbitMQ và cập nhật `published_at` sau br
 
 ## Docker Compose
 
-Thêm `-f compose.p09.yaml` sau các overlay bạn đang dùng, rồi chạy `up -d --build`. Billing API, scheduler và publisher dùng chung Dockerfile. Scheduler và publisher chạy thành hai process độc lập. Giữ các overlay cũ nếu demo cần consumer hợp đồng hoặc job tạo cutoff.
+Stack mặc định đã bật Billing API, scheduler và outbox publisher.
 
 Local và cloud dùng cùng cấu hình ứng dụng. Đặt thông tin DB, RabbitMQ và service token theo môi trường. Có thể ghi đè `BILLING_TENANT_URL`, `BILLING_METERING_URL`, `BILLING_HTTP_TIMEOUT_SECONDS` (mặc định 5) và `BILLING_POLL_SECONDS` (mặc định 300). Các URL mặc định là tên service trong mạng Compose.
 
-`scripts/test_p09.ps1` tạo project Compose riêng, chạy test và xóa volume của chính project đó. Test bao gồm cutoff thiếu, phát hành, hai yêu cầu đồng thời, rollback khi lỗi Outbox, chạy lại job, tổng tiền và xác nhận nhận sự kiện qua RabbitMQ.
+`scripts/tests/billing-invoices.ps1` tạo project Compose riêng, chạy test và xóa volume của chính project đó. Test bao gồm cutoff thiếu, phát hành, hai yêu cầu đồng thời, rollback khi lỗi Outbox, chạy lại job, tổng tiền và xác nhận nhận sự kiện qua RabbitMQ.

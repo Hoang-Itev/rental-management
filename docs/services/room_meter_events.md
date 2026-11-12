@@ -27,11 +27,11 @@ Lỗi database tạm thời: publish message sang retry queue có TTL `10s`, `60
 | `metering/app/worker.py` | `aio-pika` robust consumer, `prefetch_count=8`. |
 | `metering/app/api_internal.py` | `GET /internal/v1/rooms/{room_id}/meters` cho kiểm thử; `GET /internal/v1/meters` cho Simulator sau này. Cả hai yêu cầu `X-Service-Token`. |
 | `metering/app/main.py` | Giữ `/health`, `/ready`, đăng ký router nội bộ. |
-| `compose.p03.yaml` | Bật 2 worker bên cạnh các app của `compose.yaml`; không tự động bật khi chỉ chạy base Compose. |
-| `compose.p03-isolated.yaml` | Xóa port RabbitMQ public trên test project ngẫu nhiên để không đụng stack đang chạy. |
+| `compose.yaml` | Bật Room outbox và Metering consumer trong stack mặc định. |
+| `infra/compose/tests/room-meter-events.yaml` | Xóa port RabbitMQ public trên test project ngẫu nhiên để không đụng stack đang chạy. |
 | `tests/integration/test_outbox_and_events.py` | PostgreSQL + RabbitMQ E2E thật, xác minh đúng hai meter, duplicate delivery không sinh thêm. |
 | `room/integration/test_outbox_publish.py` | PostgreSQL + RabbitMQ publisher test: publish thất bại vẫn pending, lần sau confirm thành công. |
-| `scripts/test_p03_gateway.ps1` | Checkpoint **local** đăng nhập + tạo đủ cây + chờ đúng hai meter; **tạo dữ liệu thật trong DB local**, không xóa. |
+| `scripts/tests/room-meter-gateway.ps1` | Checkpoint **local** đăng nhập + tạo đủ cây + chờ đúng hai meter; **tạo dữ liệu thật trong DB local**, không xóa. |
 
 ## API nội bộ
 
@@ -39,11 +39,11 @@ Lỗi database tạm thời: publish message sang retry queue có TTL `10s`, `60
 
 ## Test và Definition of Done
 
-Unit local: `scripts/test_p03_unit.ps1` ⇒ Room >=95% (bao gồm P02), Metering service/repository/messaging/api_internal >=90%. `.coveragerc` Room chỉ loại `app/worker.py` khỏi **unit coverage** vì worker được xác nhận bởi integration test, không loại logic gửi message.
+Unit local: `scripts/tests/room-meter-unit.ps1` ⇒ Room >=95% (bao gồm P02), Metering service/repository/messaging/api_internal >=90%. `.coveragerc` Room chỉ loại `app/worker.py` khỏi **unit coverage** vì worker được xác nhận bởi integration test, không loại logic gửi message.
 
-Integration thật: `scripts/test_p03_integration.ps1` ⇒ khởi tạo một Docker Compose project ngẫu nhiên + PostgreSQL/RabbitMQ tách khỏi stack live, chạy Room/Metering Alembic migrations, kiểm thử broker outage và replay, bật workers, rồi chạy `test_outbox_and_events.py`. Cuối cùng chỉ `down -v` project ngẫu nhiên. Cần Docker Compose v2.24+ (hỗ trợ `!reset`).
+Integration thật: `scripts/tests/room-meter-events.ps1` ⇒ khởi tạo một Docker Compose project ngẫu nhiên + PostgreSQL/RabbitMQ tách khỏi stack live, chạy Room/Metering Alembic migrations, kiểm thử broker outage và replay, bật workers, rồi chạy `test_outbox_and_events.py`. Cuối cùng chỉ `down -v` project ngẫu nhiên. Cần Docker Compose v2.24+ (hỗ trợ `!reset`).
 
-Checkpoint người dùng: sau khi khởi động ứng dụng với overlay P03, `scripts/test_p03_gateway.ps1` phải xác minh login, tạo cây trọ/phòng qua Gateway và nhận hai meter. PR CI cần có `service-unit-tests (room)`, `service-unit-tests (metering)` và `room-meter-events-integration` xanh, cùng các job cũ.
+Checkpoint người dùng: sau khi khởi động ứng dụng với overlay P03, `scripts/tests/room-meter-gateway.ps1` phải xác minh login, tạo cây trọ/phòng qua Gateway và nhận hai meter. PR CI cần có `service-unit-tests (room)`, `service-unit-tests (metering)` và `room-meter-events-integration` xanh, cùng các job cũ.
 
 ## Giới hạn và lưu ý vận hành
 

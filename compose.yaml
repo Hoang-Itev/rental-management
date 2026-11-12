@@ -71,8 +71,10 @@ services:
       - "127.0.0.1:8025:8025"  # Mailpit UI, local only
     networks: [internal]
 
+  # The API services below build project-scoped images. Migrations and workers reuse them.
   auth-migrate:
-    build: ./backend/auth
+    image: ${COMPOSE_PROJECT_NAME}-auth:latest
+    pull_policy: never
     restart: "no"
     command: ["python", "-m", "alembic", "upgrade", "head"]
     environment:
@@ -83,7 +85,8 @@ services:
     networks: [internal]
 
   room-migrate:
-    build: ./backend/services/room
+    image: ${COMPOSE_PROJECT_NAME}-room:latest
+    pull_policy: never
     restart: "no"
     command: ["python", "-m", "alembic", "upgrade", "head"]
     environment:
@@ -94,7 +97,8 @@ services:
     networks: [internal]
 
   tenant-migrate:
-    build: ./backend/services/tenant
+    image: ${COMPOSE_PROJECT_NAME}-tenant:latest
+    pull_policy: never
     restart: "no"
     command: ["python", "-m", "alembic", "upgrade", "head"]
     environment:
@@ -105,7 +109,8 @@ services:
     networks: [internal]
 
   metering-migrate:
-    build: ./backend/services/metering
+    image: ${COMPOSE_PROJECT_NAME}-metering:latest
+    pull_policy: never
     restart: "no"
     command: ["python", "-m", "alembic", "upgrade", "head"]
     environment:
@@ -116,7 +121,8 @@ services:
     networks: [internal]
 
   billing-migrate:
-    build: ./backend/services/billing
+    image: ${COMPOSE_PROJECT_NAME}-billing:latest
+    pull_policy: never
     restart: "no"
     command: ["python", "-m", "alembic", "upgrade", "head"]
     environment:
@@ -127,7 +133,8 @@ services:
     networks: [internal]
 
   notification-migrate:
-    build: ./backend/services/notification
+    image: ${COMPOSE_PROJECT_NAME}-notification:latest
+    pull_policy: never
     restart: "no"
     command: ["python", "-m", "alembic", "upgrade", "head"]
     environment:
@@ -230,9 +237,18 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://billing_app:${BILLING_DB_PASSWORD}@postgres:5432/billing_db
       RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/
-      TENANT_URL: http://tenant:8000
-      METERING_URL: http://metering:8000
       SERVICE_TOKEN: ${SERVICE_TOKEN:?Set SERVICE_TOKEN in .env}
+      TENANT_URL: ${BILLING_TENANT_URL:-http://tenant:8000}
+      METERING_URL: ${BILLING_METERING_URL:-http://metering:8000}
+      BILLING_HTTP_TIMEOUT_SECONDS: ${BILLING_HTTP_TIMEOUT_SECONDS:-5}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8080}
+      INVOICE_LINK_TTL_SECONDS: ${INVOICE_LINK_TTL_SECONDS:-259200}
+      MOMO_PARTNER_CODE: ${MOMO_PARTNER_CODE:-}
+      MOMO_ACCESS_KEY: ${MOMO_ACCESS_KEY:-}
+      MOMO_SECRET_KEY: ${MOMO_SECRET_KEY:-}
+      MOMO_IPN_URL: ${MOMO_IPN_URL:-}
+      MOMO_TIMEOUT_SECONDS: ${MOMO_TIMEOUT_SECONDS:-30}
+      MOMO_RECONCILE_SECONDS: ${MOMO_RECONCILE_SECONDS:-300}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3).read()"]
       interval: 10s
@@ -287,8 +303,9 @@ services:
         condition: service_healthy
     networks: [internal]
 
-  # Simulator stays disabled until app/main.py is implemented.
+  # Optional simulated MQTT telemetry.
   simulator:
+    restart: unless-stopped
     profiles: ["simulator"]
     build: ./simulator
     environment:
@@ -298,11 +315,17 @@ services:
       MQTT_USERNAME: ${RABBITMQ_DEFAULT_USER}
       MQTT_PASSWORD: ${RABBITMQ_DEFAULT_PASS}
       SERVICE_TOKEN: ${SERVICE_TOKEN:?Set SERVICE_TOKEN in .env}
+      SIM_INTERVAL_SECONDS: ${SIM_INTERVAL_SECONDS:-300}
+      SIM_REFRESH_SECONDS: ${SIM_REFRESH_SECONDS:-300}
+      SIM_EPOCH: ${SIM_EPOCH:-2026-01-01T00:00:00+00:00}
+      SIM_TIME_SCALE: ${SIM_TIME_SCALE:-1}
+      SIM_KWH_PER_DAY: ${SIM_KWH_PER_DAY:-4}
+      SIM_M3_PER_DAY: ${SIM_M3_PER_DAY:-0.5}
     depends_on:
       rabbitmq-init:
         condition: service_completed_successfully
       metering:
-        condition: service_started
+        condition: service_healthy
     networks: [internal]
 
 volumes:

@@ -16,7 +16,7 @@ RabbitMQ manual ACK happens **after DB commit**, or after publisher-confirmed tr
 
 Owner JWT read endpoints: `GET /api/v1/meters/{meter_id}/readings` (pagination, `from`/`to` aware timestamps), `GET /api/v1/meter-alerts` (status, alert_type, pagination), and convenience `GET /api/v1/meters/{meter_id}/alerts`. Nginx already routes these paths to Metering. Internal meter listing is service-token-only, not public.
 
-Merge Compose files in order: `compose.yaml`, `compose.p03.yaml`, `compose.p05.yaml`, `compose.p06.yaml`. New P06 service is `metering-telemetry-consumer`. Simulator remains opt-in via `--profile simulator`. Settings: `SIM_INTERVAL_SECONDS=300`, `SIM_REFRESH_SECONDS=300`, `SIM_EPOCH=2026-01-01T00:00:00+00:00`, `SIM_TIME_SCALE=1`, `SIM_KWH_PER_DAY=4`, `SIM_M3_PER_DAY=0.5`.
+The default Compose stack includes the telemetry consumer. Enable the simulator with `--profile simulator`.
 
 ## Testing and limits
 

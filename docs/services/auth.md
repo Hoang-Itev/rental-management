@@ -35,9 +35,9 @@ Hai public routes được định nghĩa trong `contracts/openapi.yaml`; intern
 | `tests/test_config.py` | Required secrets, token TTL bounds, env parsing |
 | `tests/test_main.py` | Readiness DB up/down, no migration, error responses |
 | `infra/nginx/default.conf` | `auth_request /_auth`, propagate verified user ID (never client-supplied), throttle login 10/min with burst 8 |
-| `scripts/auth/gateway_check.py` | E2E thực qua `127.0.0.1:8080`, **không mock**; kiểm tra login/me/đường nội bộ |
-| `scripts/test_auth_unit.ps1`, `scripts/test_auth_gateway.ps1` | Một lệnh test trong Docker, một lệnh E2E qua gateway trên Windows |
-| `compose.auth-test.yaml` | Overlay chỉ mount test và requirements-test, không được dùng cho production |
+| `scripts/tests/gateway/auth.py` | E2E thực qua `127.0.0.1:8080`, **không mock**; kiểm tra login/me/đường nội bộ |
+| `scripts/tests/auth-unit.ps1`, `scripts/tests/auth-gateway.ps1` | Một lệnh test trong Docker, một lệnh E2E qua gateway trên Windows |
+| `infra/compose/tests/auth-unit.yaml` | Overlay chỉ mount test và requirements-test, không được dùng cho production |
 
 ## Chính sách bảo mật và giới hạn P01
 
@@ -47,6 +47,6 @@ Tài khoản owner tạo qua seed (`scripts/run_seed_demo.ps1`, nhập mật kh�
 
 ## Definition of Done
 
-Local: `scripts/test_auth_unit.ps1` đạt **>=95%** coverage và `scripts/test_auth_gateway.ps1` hoàn tất sau khi seed owner. Kiểm tra `docker compose exec -T nginx nginx -t`. Github CI: `service-unit-tests (auth)` + `compose-startup-smoke` (sẽ seed owner tạm riêng, chạy `gateway_check.py`) đạt. Mọi thay đổi qua feature branch, Pull Request, CI trước merge.
+Local: `scripts/tests/auth-unit.ps1` đạt **>=95%** coverage và `scripts/tests/auth-gateway.ps1` hoàn tất sau khi seed owner. Kiểm tra `docker compose exec -T nginx nginx -t`. Github CI: `service-unit-tests (auth)` + `compose-startup-smoke` (sẽ seed owner tạm riêng, chạy `gateway_check.py`) đạt. Mọi thay đổi qua feature branch, Pull Request, CI trước merge.
 
 **Không cần sửa migration hay bảng Auth.** P01 không thêm API đăng ký, refresh token, logout server-side, MFA, đổi mật khẩu, hoặc RBAC nhiều vai trò.
