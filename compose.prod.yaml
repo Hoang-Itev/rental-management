@@ -1,0 +1,22 @@
+# Optional manual deployment settings. Apply after compose.runtime.yaml.
+# Terminate HTTPS with a reverse proxy on the host, upstream 127.0.0.1:8080.
+services:
+  rabbitmq:
+    ports: !reset []
+  mailpit:
+    profiles: [local-mail]
+    ports: !reset []
+  billing:
+    environment:
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?Set the public HTTPS origin}
+  billing-scheduler:
+    environment:
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?Set the public HTTPS origin}
+  notification-worker:
+    environment:
+      SMTP_HOST: ${SMTP_HOST:?Set the SMTP relay host}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURITY: ${SMTP_SECURITY:-starttls}
+      SMTP_FROM: ${SMTP_FROM:?Set the verified sender address}
+      SMTP_USERNAME: ${SMTP_USERNAME:?Set the SMTP username}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:?Set the SMTP password}

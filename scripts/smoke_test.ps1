@@ -3,7 +3,8 @@
 # was already executed. CI runs it against a new isolated Docker environment.
 param(
   [string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot),
-  [int]$TimeoutSeconds = 180
+  [int]$TimeoutSeconds = 180,
+  [switch]$Runtime
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -11,10 +12,18 @@ if ($TimeoutSeconds -lt 1) { throw 'TimeoutSeconds must be at least 1.' }
 
 $migrations = @('auth-migrate', 'room-migrate', 'tenant-migrate', 'metering-migrate', 'billing-migrate', 'notification-migrate')
 $appServices = @('auth', 'room', 'tenant', 'metering', 'billing', 'notification')
+$composeArgs = @('-f', 'compose.yaml')
+$workers = @()
+if ($Runtime) {
+  $composeArgs += @('-f', 'compose.runtime.yaml')
+  $workers = @('room-outbox', 'metering-consumer', 'tenant-outbox', 'tenant-scheduler',
+               'room-consumer', 'metering-telemetry-consumer', 'metering-cutoff-scheduler',
+               'billing-scheduler', 'billing-outbox', 'notification-worker')
+}
 
 function Get-ServiceContainer {
   param([string]$Service)
-  $result = & docker compose ps -a -q $Service
+  $result = & docker compose @composeArgs ps -a -q $Service
   if ($LASTEXITCODE -ne 0) { throw "docker compose ps failed: $Service" }
   return (($result | Out-String).Trim())
 }
@@ -57,6 +66,11 @@ try {
       }
     }
 
+    foreach ($svc in $workers) {
+      $state = Get-State (Get-ServiceContainer $svc)
+      if ($state -notlike 'running|*') { $issues.Add("${svc}: $state (expected running)") }
+    }
+
     $nginxId = Get-ServiceContainer 'nginx'
     if ((Get-State $nginxId) -notlike 'running|*') { $issues.Add('nginx is not running') }
 
@@ -69,6 +83,7 @@ try {
 
     if ($issues.Count -eq 0) {
       Write-Host 'SMOKE OK: 6 migrations exited(0); rabbitmq-init exited(0); 6 apps healthy; postgres/rabbitmq/mailpit healthy; Nginx HTTP 200.' -ForegroundColor Green
+      if ($Runtime) { Write-Host "RUNTIME OK: $($workers.Count) workers and schedulers running." -ForegroundColor Green }
       return
     }
     $reason = $issues -join '; '

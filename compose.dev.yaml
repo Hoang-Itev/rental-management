@@ -30,7 +30,7 @@ services:
       - "127.0.0.1:18004:8000"
     volumes:
       - ./backend/services/billing/app:/app/app
-    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--no-access-log"]
   notification:
     ports:
       - "127.0.0.1:18005:8000"

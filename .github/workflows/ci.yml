@@ -42,7 +42,7 @@ jobs:
               return loader.construct_scalar(node)
 
           yaml.SafeLoader.add_multi_constructor("!", compose_tag)
-          required = [Path('compose.yaml'), Path('compose.dev.yaml'), Path('compose.seed.yaml'), Path('compose.auth-test.yaml'), Path('compose.room-test.yaml'), Path('compose.p03.yaml'), Path('compose.p03-unit.yaml'), Path('compose.p04-unit.yaml'), Path('compose.p04-isolated.yaml'), Path('compose.p05.yaml'), Path('compose.p05-isolated.yaml'), Path('compose.p06.yaml'), Path('compose.p06-unit.yaml'), Path('compose.p06-isolated.yaml'), Path('.github/workflows/ci.yml')]
+          required = [Path('compose.yaml'), Path('compose.dev.yaml'), Path('compose.runtime.yaml'), Path('compose.prod.yaml'), Path('compose.seed.yaml'), Path('compose.auth-test.yaml'), Path('compose.room-test.yaml'), Path('compose.p03-unit.yaml'), Path('compose.p04-unit.yaml'), Path('compose.p04-isolated.yaml'), Path('compose.p05-isolated.yaml'), Path('compose.p06-unit.yaml'), Path('compose.p06-isolated.yaml'), Path('.github/workflows/ci.yml')]
           for path in required:
               assert path.exists(), f'Missing {path}'
               yaml.safe_load(path.read_text(encoding='utf-8'))
@@ -208,14 +208,22 @@ jobs:
           OWNER_EMAIL=owner.demo@example.com
           EOF
       - name: Validate Compose
-        run: docker compose config --quiet
+        env:
+          PUBLIC_BASE_URL: https://rental.example.com
+          SMTP_HOST: smtp.example.com
+          SMTP_FROM: rental@example.com
+          SMTP_USERNAME: ci-config-only
+          SMTP_PASSWORD: ci-config-only
+        run: |
+          docker compose -f compose.yaml -f compose.runtime.yaml config --quiet
+          docker compose -f compose.yaml -f compose.runtime.yaml -f compose.prod.yaml config --quiet
       - name: Boot the complete stack from new Docker volumes
-        run: docker compose up -d --build
+        run: docker compose -f compose.yaml -f compose.runtime.yaml up -d --build
       - name: Inspect one-shot jobs, healthy apps, broker and Gateway
         shell: pwsh
-        run: ./scripts/smoke_test.ps1 -TimeoutSeconds 240
+        run: ./scripts/smoke_test.ps1 -Runtime -TimeoutSeconds 240
       - name: Validate live Nginx configuration
-        run: docker compose exec -T nginx nginx -t
+        run: docker compose -f compose.yaml -f compose.runtime.yaml exec -T nginx nginx -t
       - name: Seed disposable owner for real Auth / Gateway integration
         env:
           SEED_MODE: demo
@@ -234,11 +242,11 @@ jobs:
       - name: Diagnose failed Compose startup
         if: failure()
         run: |
-          docker compose ps -a || true
-          docker compose logs --tail=140 || true
+          docker compose -f compose.yaml -f compose.runtime.yaml ps -a || true
+          docker compose -f compose.yaml -f compose.runtime.yaml logs --tail=140 || true
       - name: Destroy ONLY disposable GitHub CI volumes
         if: always()
-        run: docker compose down -v --remove-orphans
+        run: docker compose -f compose.yaml -f compose.runtime.yaml down -v --remove-orphans
 
   # P03: real RabbitMQ + two independent PostgreSQL logical databases.
   # Every CI run uses a disposable project, never a shared/local Docker volume.
@@ -277,8 +285,8 @@ jobs:
         env:
           P03_PROJECT_NAME: p03ci${{ github.run_id }}${{ github.run_attempt }}
         run: |
-          docker compose -p "$P03_PROJECT_NAME" -f compose.yaml -f compose.p03.yaml -f compose.p03-isolated.yaml ps -a || true
-          docker compose -p "$P03_PROJECT_NAME" -f compose.yaml -f compose.p03.yaml -f compose.p03-isolated.yaml logs --tail=120 || true
+          docker compose -p "$P03_PROJECT_NAME" -f compose.yaml -f compose.runtime.yaml -f compose.p03-isolated.yaml ps -a || true
+          docker compose -p "$P03_PROJECT_NAME" -f compose.yaml -f compose.runtime.yaml -f compose.p03-isolated.yaml logs --tail=120 || true
 
   # P04: Room REST + tenant_db PostgreSQL GiST EXCLUDE (two independent HTTP requests).
   # The PowerShell runner picks a disposable project starting p04ci.

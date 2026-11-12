@@ -1,88 +1,83 @@
-# Rental Management (Cloud Microservices)
+# Rental Management
 
-Backend: FastAPI Auth + 5 business services (Room, Tenant, Metering,
-Billing, Notification), Nginx Gateway, PostgreSQL (six logical databases),
-RabbitMQ/AMQP + MQTT, Mailpit. Frontend is a separate React/Vite workstream.
+Hệ thống FastAPI gồm Auth, Room, Tenant, Metering, Billing và Notification. Nginx là gateway. PostgreSQL chứa sáu database, RabbitMQ truyền sự kiện và telemetry, Mailpit nhận email thử. Frontend là phần việc riêng.
 
-**Status:** Docker infrastructure, ORM and migrations exist; most business
-routes, workers and schedulers are intentionally not implemented yet.
-A green P00 smoke check is **not** an end-to-end business acceptance test.
+## Chạy local từ đầu
 
-## Start / stop on Windows (PowerShell 5.1)
-
-Open Docker Desktop first. In the project root:
+Mở Docker Desktop ở chế độ Linux containers. Trong thư mục dự án, tạo `.env` nếu chưa có:
 
 ```powershell
-docker compose -f compose.yaml -f compose.dev.yaml up -d --build
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\smoke_test.ps1
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+docker compose version
+```
+
+### Reset Docker cũ nếu cần dữ liệu trắng
+
+**Lệnh sau xóa dữ liệu PostgreSQL, RabbitMQ và Mailpit của project local `rental-management`.** Sao lưu trước nếu cần giữ dữ liệu. Nếu trước đây dùng tên project khác, xem tên bằng `docker compose ls -a` rồi chọn đúng project của đồ án. Chạy lệnh từ máy local với Docker context của Docker Desktop.
+
+```powershell
+docker context show
+docker compose -p rental-management -f compose.yaml -f compose.runtime.yaml down --volumes --remove-orphans
+```
+
+### Khởi động
+
+Dùng hai file cho môi trường local đầy đủ:
+
+```powershell
+$stack = @('-f', 'compose.yaml', '-f', 'compose.runtime.yaml')
+docker compose @stack config --quiet
+docker compose @stack up -d --build --wait
+docker compose @stack ps -a
+```
+
+Gateway dùng `http://localhost:8080`, Mailpit dùng `http://localhost:8025` và RabbitMQ Management dùng `http://localhost:15672`. Sáu container migration và `rabbitmq-init` chạy một lần rồi thoát mã 0. Các API, worker và scheduler tiếp tục chạy. Để bật thêm simulator hoặc dừng stack:
+
+```powershell
+docker compose @stack --profile simulator up -d --build --wait
+docker compose @stack --profile simulator stop
+```
+
+`compose.runtime.yaml` thay chuỗi overlay P03, P05, P06, P07, P09, P10, P11 và P12. Các file Compose dành cho test chỉ được script của chúng dùng. `compose.dev.yaml` là tùy chọn khi cần hot reload.
+
+### Seed dữ liệu demo tùy chọn
+
+Nếu cần số liệu seed đúng như fixture ngay từ đầu, khởi động hạ tầng và API, seed, rồi mới bật các job nghiệp vụ. Sau khi reset, dùng các lệnh này thay cho bước khởi động đầy đủ phía trên:
+
+```powershell
+$stack = @('-f', 'compose.yaml', '-f', 'compose.runtime.yaml')
+docker compose -f compose.yaml up -d --build --wait
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run_seed_demo.ps1
+docker compose @stack up -d --build --wait
+```
+
+Script sẽ hỏi mật khẩu demo. Đăng nhập bằng `OWNER_EMAIL` trong `.env`. Seed ghi snapshot mẫu trực tiếp và kiểm tra schema trước khi ghi. Sau khi bật scheduler, dữ liệu mẫu có thể thay đổi theo nghiệp vụ.
+
+## Test local
+
+Kiểm tra stack đang chạy. Các lệnh này đọc trạng thái migration, healthcheck, worker và gateway:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\smoke_test.ps1 -Runtime -TimeoutSeconds 240
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify_schema_v3.ps1
 ```
 
-The Compose file runs six `*-migrate` one-shot jobs **before** each application
-becomes healthy. Both Room and Metering have previous revisions 002; Room now
-also has 003. Do not edit already-applied migrations to update revisions.
-
-Stop safely:
+Chạy unit và các integration test cô lập. Mỗi integration script tạo project và volume test riêng rồi tự dọn. Có thể thêm `-UnitOnly` để chạy nhanh unit test:
 
 ```powershell
-docker compose stop
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test_local.ps1
 ```
 
-**Never run `docker compose down -v` on the local project:** it deletes the
-PostgreSQL/RabbitMQ volumes. CI uses it only on an ephemeral GitHub runner.
-
-## Demo seed (optional)
-
-The seed is a deterministic **direct ORM snapshot**, not the runtime API flow.
-It never creates fake successful MoMo payments or fake email-delivery events.
+Sau khi seed tài khoản demo, có thể kiểm tra đăng nhập và JWT qua gateway:
 
 ```powershell
-# Seeds Auth (prompts for a local demo password) and all business DBs:
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run_seed_demo.ps1
-
-# Skip both creating AND verifying the demo Auth account:
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run_seed_demo.ps1 -SkipAuth
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify_seed_demo.ps1 -SkipAuth
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test_auth_gateway.ps1
 ```
 
-`run_seed_demo.ps1` verifies 6 Alembic heads before any inserts. It is
-idempotent: running it again keeps existing deterministic rows. `-SkipAuth`
-still validates Auth **schema**, but does not require an Auth demo account.
+Bài test MoMo tự động mô phỏng provider. Demo MoMo Sandbox cần tài khoản Sandbox và URL IPN HTTPS mà MoMo truy cập được. CI chạy thêm smoke trên stack đầy đủ, kiểm tra cấu hình Nginx và các integration theo từng luồng nghiệp vụ.
 
-## GitHub Actions CI
+## Chuẩn bị chạy cloud sau này
 
-`.github/workflows/ci.yml` runs checks for Python/YAML, seed tests, backend
-unit tests as they are implemented, migrations, seed/constraints, and a **new
-clean-stack smoke job**. Each CI job gets a separate new Ubuntu runner and
-test-only `.env` file. `compose-startup-smoke` builds all services and runs
-normal `docker compose up -d --build` on a clean project volume, then tests
-six exit-0 migration jobs, RabbitMQ bootstrap, all healthchecks and Gateway
-HTTP 200. This job never connects to the laptop's PostgreSQL.
+Khi triển khai thủ công, dùng `compose.yaml`, `compose.runtime.yaml` và thêm `compose.prod.yaml`. Cấu hình này bỏ port quản trị RabbitMQ và chỉ bật Mailpit nếu chọn profile `local-mail`. Gateway lắng nghe ở loopback `127.0.0.1:8080` để reverse proxy trên máy chủ nhận HTTPS và chuyển tiếp vào gateway. PostgreSQL và API nội bộ vẫn chạy trong mạng Docker.
 
-Run the **read-only** smoke test against your already running local stack:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\smoke_test.ps1 -TimeoutSeconds 180
-```
-
-This command **does not** start, stop or reset containers. The first run of
-`docker compose up -d --build` with the new migration must complete first.
-The CI PostgreSQL/seed job also asserts the Room 003 hierarchy invariant.
-
-## Hierarchy rule (room_v3_003)
-
-After creation, `buildings.property_id` and `floors.building_id` are immutable,
-including if a building/floor is still empty. Reparenting isn't a supported
-business operation. This prevents a race condition between room creation
-and moving its floor/building. `PATCH` of name and status is still possible.
-
-## Git workflow
-
-Create a branch for P00 (`fix/p00-ci-seed-hierarchy`), apply and test the
-changes, commit/push, open a Pull Request and wait for the **two CI database /
-Compose jobs** plus static/service jobs to complete successfully before merge.
-Two empty CD workflow placeholders (`publish.yml` and `deploy.yml`) are
-removed by the installer **only if they are zero bytes**. They are recreated
-later during the AWS/GHCR deployment phase.
-
-Do not commit `.env`, login passwords, MoMo secrets or other credentials.
+Tạo file môi trường riêng trên máy chủ với password DB/broker, JWT secret và service token mới. Đặt `PUBLIC_BASE_URL` thành origin HTTPS và cấu hình SMTP thật qua `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURITY`, `SMTP_FROM`, `SMTP_USERNAME`, `SMTP_PASSWORD`. `compose.prod.yaml` mặc định dùng SMTP STARTTLS cổng 587. Nếu dùng MoMo, cấu hình `MOMO_IPN_URL` bằng HTTPS của gateway. Giữ thông tin này ngoài Git. Dữ liệu demo chỉ dùng ở local.
