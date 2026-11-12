@@ -7,7 +7,7 @@ $project='p04test'+([guid]::NewGuid().ToString('N').Substring(0,10))
 if ($env:P04_CI_PROJECT_NAME) { $project=$env:P04_CI_PROJECT_NAME }
 if (-not ($project.StartsWith('p04test') -or $project.StartsWith('p04ci'))) { throw 'Unsafe P04 Docker project name' }
 $env:P04_PROJECT_NAME=$project
-$files=@('-p',$project,'-f','compose.yaml','-f','compose.p04-isolated.yaml')
+$files=@('-p',$project,'-f','compose.yaml','-f','infra/compose/tests/room-tenant-contracts.yaml')
 Push-Location $ProjectRoot
 try {
   if (-not (Test-Path .env)) { throw 'Missing .env in project root (P04 isolated project uses its own volumes)' }

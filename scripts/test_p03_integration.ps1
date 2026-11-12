@@ -9,7 +9,7 @@ if (-not $project.StartsWith('p03test') -and -not $project.StartsWith('p03ci')) 
   throw 'P03 project name must begin p03test or p03ci'
 }
 $env:P03_PROJECT_NAME = $project
-$files = @('-p', $project, '-f', 'compose.yaml', '-f', 'compose.runtime.yaml', '-f', 'compose.p03-isolated.yaml')
+$files = @('-p', $project, '-f', 'compose.yaml', '-f', 'infra/compose/tests/room-meter-events.yaml')
 Push-Location $ProjectRoot
 try {
   if (-not (Test-Path .env)) { throw 'Local .env is missing' }

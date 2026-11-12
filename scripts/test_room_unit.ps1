@@ -4,9 +4,9 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 Push-Location $ProjectRoot
 try {
-  & docker compose -f compose.yaml -f compose.room-test.yaml build room
+  & docker compose -f compose.yaml -f infra/compose/tests/room-unit-and-db.yaml build room
   if ($LASTEXITCODE -ne 0) { throw 'Room image build failed' }
-  & docker compose -f compose.yaml -f compose.room-test.yaml run --rm --no-deps room `
+  & docker compose -f compose.yaml -f infra/compose/tests/room-unit-and-db.yaml run --rm --no-deps room `
     sh -c 'python -m pip install --disable-pip-version-check -q -r /app/requirements-test.txt && python -m pytest -q tests --cov=app --cov-report=term-missing --cov-fail-under=95'
   if ($LASTEXITCODE -ne 0) { throw 'Room unit/API tests failed' }
   Write-Host 'ROOM UNIT/API TESTS OK (>=95% coverage)' -ForegroundColor Green

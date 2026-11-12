@@ -4,7 +4,7 @@ param()
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $project = 'rental-p09-test-' + [Guid]::NewGuid().ToString('N').Substring(0, 12)
-$composeArgs = @('--env-file', '.env.example', '-p', $project, '-f', 'compose.yaml', '-f', 'compose.p09-test.yaml')
+$composeArgs = @('--env-file', '.env.example', '-p', $project, '-f', 'compose.yaml', '-f', 'infra/compose/tests/billing-invoices.yaml')
 
 function Invoke-P09Compose {
     & docker compose @composeArgs @args

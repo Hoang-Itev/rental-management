@@ -1,4 +1,4 @@
-name: P09 Billing Invoices
+name: Billing Invoices
 
 on:
   pull_request:
@@ -10,8 +10,9 @@ on:
       - infra/rabbitmq/**
       - tests/integration/test_contract_billing.py
       - compose*.yaml
+      - infra/compose/**
       - scripts/test_p09.ps1
-      - .github/workflows/p09-billing-invoices.yml
+      - .github/workflows/billing-invoices.yml
   workflow_dispatch:
 
 permissions:

@@ -1,11 +1,11 @@
-name: P08 Billing Calculator
+name: Billing Calculator
 
 on:
   pull_request:
     branches: [main]
     paths:
       - backend/services/billing/**
-      - .github/workflows/p08-billing-calculator.yml
+      - .github/workflows/billing-calculator.yml
   push:
     branches: [feat/billing-calculator]
   workflow_dispatch:

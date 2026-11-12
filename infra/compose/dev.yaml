@@ -1,5 +1,5 @@
 # Optional hot-reload overlay for local development.
-# Run: docker compose -f compose.yaml -f compose.dev.yaml up -d --build
+# Run: docker compose -f compose.yaml -f infra/compose/dev.yaml up -d --build
 services:
   auth:
     ports:

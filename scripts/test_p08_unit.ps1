@@ -5,7 +5,7 @@ $ErrorActionPreference='Stop'
 Push-Location $ProjectRoot
 try {
   if (-not (Test-Path '.env')) { throw 'Missing project .env (used for Compose interpolation)' }
-  $files=@('-f','compose.yaml','-f','compose.p08-unit.yaml')
+  $files=@('-f','compose.yaml','-f','infra/compose/tests/billing-unit.yaml')
   & docker compose @files config --quiet
   if ($LASTEXITCODE -ne 0) { throw 'P08 Compose config invalid' }
   & docker compose @files build billing

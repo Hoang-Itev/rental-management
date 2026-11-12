@@ -14,7 +14,7 @@ try {
   if ($LASTEXITCODE -ne 0) { throw 'Failed to build Room image' }
   & docker compose -p $project -f compose.yaml run --rm --no-deps room python -m alembic upgrade head
   if ($LASTEXITCODE -ne 0) { throw 'Isolated room_db migration failed' }
-  & docker compose -p $project -f compose.yaml -f compose.room-test.yaml run --rm --no-deps room `
+  & docker compose -p $project -f compose.yaml -f infra/compose/tests/room-unit-and-db.yaml run --rm --no-deps room `
     sh -c 'python -m pip install --disable-pip-version-check -q -r /app/requirements-test.txt && python -m pytest integration -q'
   if ($LASTEXITCODE -ne 0) { throw 'Room PostgreSQL integration tests failed' }
   Write-Host 'ROOM POSTGRES INTEGRATION OK: isolated database; 5 tests' -ForegroundColor Green

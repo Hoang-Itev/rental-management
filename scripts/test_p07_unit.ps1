@@ -5,7 +5,7 @@ $ErrorActionPreference='Stop'
 Push-Location $ProjectRoot
 try {
   if (-not (Test-Path '.env')) { throw 'Missing project .env' }
-  $files=@('-f','compose.yaml','-f','compose.p06-unit.yaml')
+  $files=@('-f','compose.yaml','-f','infra/compose/tests/mqtt-unit.yaml')
   & docker compose @files config --quiet
   if ($LASTEXITCODE -ne 0) { throw 'Invalid P07 unit Compose overlay' }
   & docker compose @files build metering

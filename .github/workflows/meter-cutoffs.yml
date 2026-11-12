@@ -1,4 +1,4 @@
-name: P07 Meter Cutoffs
+name: Meter Cutoffs
 on:
   pull_request:
     branches: [main]

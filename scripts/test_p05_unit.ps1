@@ -4,7 +4,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 Push-Location $ProjectRoot
 try {
-    $files=@('-f','compose.yaml','-f','compose.p03-unit.yaml','-f','compose.p04-unit.yaml')
+    $files=@('-f','compose.yaml','-f','infra/compose/tests/room-meter-unit.yaml','-f','infra/compose/tests/tenant-unit.yaml')
     & docker compose @files build room tenant metering
     if ($LASTEXITCODE -ne 0) { throw 'P05 Docker image build failed' }
     & docker compose @files run --rm --no-deps room `

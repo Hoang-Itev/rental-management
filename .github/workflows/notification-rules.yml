@@ -1,4 +1,4 @@
-name: P11 MoMo Payments
+name: Notification Rules
 
 on:
   pull_request:
@@ -6,12 +6,14 @@ on:
     paths:
       - backend/services/billing/**
       - backend/services/notification/**
+      - backend/services/tenant/**
       - infra/nginx/**
       - infra/rabbitmq/**
-      - tests/integration/test_momo_payment.py
+      - tests/integration/test_notification_rules.py
       - compose*.yaml
-      - scripts/test_p11.ps1
-      - .github/workflows/p11-momo-payment.yml
+      - infra/compose/**
+      - scripts/test_p12.ps1
+      - .github/workflows/notification-rules.yml
   workflow_dispatch:
 
 permissions:
@@ -23,6 +25,6 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - name: Verify payment IPN, reconciliation and RabbitMQ outbox
+      - name: Verify overdue reminders and expiry notifications
         shell: pwsh
-        run: ./scripts/test_p11.ps1
+        run: ./scripts/test_p12.ps1

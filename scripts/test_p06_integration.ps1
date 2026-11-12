@@ -9,7 +9,7 @@ if (-not ($project.StartsWith('p06test') -or $project.StartsWith('p06ci'))) {
   throw 'Refusing unsafe P06 project name (must start p06test or p06ci)'
 }
 $env:P06_PROJECT_NAME=$project
-$files=@('-p',$project,'-f','compose.yaml','-f', 'compose.runtime.yaml','-f','compose.p06-isolated.yaml')
+$files=@('-p',$project,'-f','compose.yaml','-f','infra/compose/tests/mqtt-telemetry.yaml')
 Push-Location $ProjectRoot
 try {
   if (-not (Test-Path '.env')) { throw 'Project .env missing' }

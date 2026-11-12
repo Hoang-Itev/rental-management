@@ -5,7 +5,7 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $project = 'rental-p11-test-' + [Guid]::NewGuid().ToString('N').Substring(0, 12)
 $composeArgs = @('--env-file', '.env.example', '-p', $project, '-f', 'compose.yaml',
-    '-f', 'compose.p11-test.yaml')
+    '-f', 'infra/compose/tests/momo-payments.yaml')
 
 function Invoke-P11Compose {
     & docker compose @composeArgs @args

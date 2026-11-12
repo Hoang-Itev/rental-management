@@ -7,7 +7,7 @@ $project='p07test'+([guid]::NewGuid().ToString('N').Substring(0,10))
 if ($env:P07_CI_PROJECT_NAME) { $project=$env:P07_CI_PROJECT_NAME }
 if (-not ($project.StartsWith('p07test') -or $project.StartsWith('p07ci'))) { throw 'Unsafe disposable P07 project name' }
 $env:P07_PROJECT_NAME=$project
-$files=@('-p',$project,'-f','compose.yaml','-f', 'compose.runtime.yaml','-f','compose.p07-isolated.yaml')
+$files=@('-p',$project,'-f','compose.yaml','-f','infra/compose/tests/meter-cutoffs.yaml')
 Push-Location $ProjectRoot
 try {
   if (-not (Test-Path '.env')) { throw 'Missing .env' }

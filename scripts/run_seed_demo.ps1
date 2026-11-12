@@ -1,7 +1,8 @@
 # Direct, deterministic demo seed. Never run against production.
 param(
   [string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot),
-  [switch]$SkipAuth
+  [switch]$SkipAuth,
+  [switch]$UseDemoPassword
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -16,10 +17,14 @@ try {
 
   $env:SEED_MODE = 'demo'
   if (-not $SkipAuth) {
-    $secure = Read-Host 'Set a NEW demo owner login password (12+ characters; never stored in Git)' -AsSecureString
-    $ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
-    try { $env:SEED_OWNER_PASSWORD = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr) }
-    finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr) }
+    if ($UseDemoPassword) {
+      $env:SEED_OWNER_PASSWORD = '123456789011'
+    } else {
+      $secure = Read-Host 'Set a NEW demo owner login password (12+ characters; never stored in Git)' -AsSecureString
+      $ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+      try { $env:SEED_OWNER_PASSWORD = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr) }
+      finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr) }
+    }
     if ($env:SEED_OWNER_PASSWORD.Length -lt 12) { throw 'Password must contain at least 12 characters.' }
   }
 
@@ -29,7 +34,7 @@ try {
   Write-Host 'Seeding LOCAL demo snapshots (not via runtime business APIs)...' -ForegroundColor Cyan
   foreach ($svc in $services) {
     Write-Host "Seed service: $svc" -ForegroundColor Cyan
-    & docker compose -f compose.yaml -f compose.seed.yaml run --rm --no-deps $svc python /seed/seed_service.py $svc
+    & docker compose -f compose.yaml -f infra/compose/seed.yaml run --rm --no-deps $svc python /seed/seed_service.py $svc
     if ($LASTEXITCODE -ne 0) { throw "Seed failed for $svc. Earlier services may already have committed." }
   }
 

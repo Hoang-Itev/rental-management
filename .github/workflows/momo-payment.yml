@@ -1,4 +1,4 @@
-name: P10 Invoice Notifications
+name: MoMo Payments
 
 on:
   pull_request:
@@ -8,10 +8,11 @@ on:
       - backend/services/notification/**
       - infra/nginx/**
       - infra/rabbitmq/**
-      - tests/integration/test_outbox_and_events.py
+      - tests/integration/test_momo_payment.py
       - compose*.yaml
-      - scripts/test_p10.ps1
-      - .github/workflows/p10-invoice-notifications.yml
+      - infra/compose/**
+      - scripts/test_p11.ps1
+      - .github/workflows/momo-payment.yml
   workflow_dispatch:
 
 permissions:
@@ -23,6 +24,6 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - name: Verify invoice email and Nginx public link
+      - name: Verify payment IPN, reconciliation and RabbitMQ outbox
         shell: pwsh
-        run: ./scripts/test_p10.ps1
+        run: ./scripts/test_p11.ps1

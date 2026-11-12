@@ -42,7 +42,7 @@ jobs:
               return loader.construct_scalar(node)
 
           yaml.SafeLoader.add_multi_constructor("!", compose_tag)
-          required = [Path('compose.yaml'), Path('compose.dev.yaml'), Path('compose.runtime.yaml'), Path('compose.prod.yaml'), Path('compose.seed.yaml'), Path('compose.auth-test.yaml'), Path('compose.room-test.yaml'), Path('compose.p03-unit.yaml'), Path('compose.p04-unit.yaml'), Path('compose.p04-isolated.yaml'), Path('compose.p05-isolated.yaml'), Path('compose.p06-unit.yaml'), Path('compose.p06-isolated.yaml'), Path('.github/workflows/ci.yml')]
+          required = [Path('compose.yaml'), Path('infra/compose/dev.yaml'), Path('compose.prod.yaml'), Path('infra/compose/seed.yaml'), Path('infra/compose/tests/auth-unit.yaml'), Path('infra/compose/tests/room-unit-and-db.yaml'), Path('infra/compose/tests/room-meter-unit.yaml'), Path('infra/compose/tests/tenant-unit.yaml'), Path('infra/compose/tests/room-tenant-contracts.yaml'), Path('infra/compose/tests/contract-lifecycle.yaml'), Path('infra/compose/tests/mqtt-unit.yaml'), Path('infra/compose/tests/mqtt-telemetry.yaml'), Path('.github/workflows/ci.yml')]
           for path in required:
               assert path.exists(), f'Missing {path}'
               yaml.safe_load(path.read_text(encoding='utf-8'))
@@ -128,7 +128,7 @@ jobs:
           OWNER_EMAIL=owner.demo@example.com
           EOF
       - name: Validate Compose configuration
-        run: docker compose -f compose.yaml -f compose.seed.yaml config --quiet
+        run: docker compose -f compose.yaml -f infra/compose/seed.yaml config --quiet
       - name: Start PostgreSQL only
         run: docker compose up -d --wait postgres
       - name: Build six independent service images
@@ -143,36 +143,36 @@ jobs:
         run: |
           set -euo pipefail
           for svc in auth room tenant metering billing notification; do
-            docker compose -f compose.yaml -f compose.seed.yaml run --rm --no-deps "$svc" python /seed/seed_service.py "$svc"
+            docker compose -f compose.yaml -f infra/compose/seed.yaml run --rm --no-deps "$svc" python /seed/seed_service.py "$svc"
           done
       - name: Verify seed content and references
         run: |
           set -euo pipefail
           for svc in auth room tenant metering billing notification; do
-            docker compose -f compose.yaml -f compose.seed.yaml run --rm --no-deps "$svc" python /seed/verify_service.py "$svc"
+            docker compose -f compose.yaml -f infra/compose/seed.yaml run --rm --no-deps "$svc" python /seed/verify_service.py "$svc"
           done
       - name: Verify PostgreSQL UNIQUE and exclusion constraints (rollback-only)
         run: |
           set -euo pipefail
           for svc in room tenant metering billing; do
-            docker compose -f compose.yaml -f compose.seed.yaml run --rm --no-deps "$svc" python /seed/verify_constraints.py "$svc"
+            docker compose -f compose.yaml -f infra/compose/seed.yaml run --rm --no-deps "$svc" python /seed/verify_constraints.py "$svc"
           done
       - name: Verify room_v3_003 hierarchy immutability (rollback-only)
         run: |
-          docker compose -f compose.yaml -f compose.seed.yaml run --rm --no-deps room python /seed/verify_room_immutability.py
+          docker compose -f compose.yaml -f infra/compose/seed.yaml run --rm --no-deps room python /seed/verify_room_immutability.py
       - name: PostgreSQL P02 Room integration, real triggers and rollback (CI disposable DB)
         run: |
           set -euo pipefail
-          docker compose -f compose.yaml -f compose.room-test.yaml run --rm --no-deps room \
+          docker compose -f compose.yaml -f infra/compose/tests/room-unit-and-db.yaml run --rm --no-deps room \
             sh -c 'python -m pip install --disable-pip-version-check -q -r /app/requirements-test.txt && python -m pytest integration/test_postgres.py -q'
       - name: Run seed again to prove idempotence
         run: |
           set -euo pipefail
           for svc in auth room tenant metering billing notification; do
-            docker compose -f compose.yaml -f compose.seed.yaml run --rm --no-deps "$svc" python /seed/seed_service.py "$svc" --expect-existing
+            docker compose -f compose.yaml -f infra/compose/seed.yaml run --rm --no-deps "$svc" python /seed/seed_service.py "$svc" --expect-existing
           done
           for svc in auth room tenant metering billing notification; do
-            docker compose -f compose.yaml -f compose.seed.yaml run --rm --no-deps "$svc" python /seed/verify_service.py "$svc"
+            docker compose -f compose.yaml -f infra/compose/seed.yaml run --rm --no-deps "$svc" python /seed/verify_service.py "$svc"
           done
       - name: Show service logs on failure
         if: failure()
@@ -215,20 +215,20 @@ jobs:
           SMTP_USERNAME: ci-config-only
           SMTP_PASSWORD: ci-config-only
         run: |
-          docker compose -f compose.yaml -f compose.runtime.yaml config --quiet
-          docker compose -f compose.yaml -f compose.runtime.yaml -f compose.prod.yaml config --quiet
+          docker compose -f compose.yaml config --quiet
+          docker compose -f compose.yaml -f compose.prod.yaml config --quiet
       - name: Boot the complete stack from new Docker volumes
-        run: docker compose -f compose.yaml -f compose.runtime.yaml up -d --build
+        run: docker compose -f compose.yaml up -d --build
       - name: Inspect one-shot jobs, healthy apps, broker and Gateway
         shell: pwsh
         run: ./scripts/smoke_test.ps1 -Runtime -TimeoutSeconds 240
       - name: Validate live Nginx configuration
-        run: docker compose -f compose.yaml -f compose.runtime.yaml exec -T nginx nginx -t
+        run: docker compose -f compose.yaml exec -T nginx nginx -t
       - name: Seed disposable owner for real Auth / Gateway integration
         env:
           SEED_MODE: demo
           SEED_OWNER_PASSWORD: CI_Demo_Auth_Only_2026_Strong_Password
-        run: docker compose -f compose.yaml -f compose.seed.yaml run --rm --no-deps auth python /seed/seed_service.py auth
+        run: docker compose -f compose.yaml -f infra/compose/seed.yaml run --rm --no-deps auth python /seed/seed_service.py auth
       - name: Test login, JWT and Nginx auth_request against real PostgreSQL
         env:
           TEST_AUTH_EMAIL: owner.demo@example.com
@@ -242,11 +242,11 @@ jobs:
       - name: Diagnose failed Compose startup
         if: failure()
         run: |
-          docker compose -f compose.yaml -f compose.runtime.yaml ps -a || true
-          docker compose -f compose.yaml -f compose.runtime.yaml logs --tail=140 || true
+          docker compose -f compose.yaml ps -a || true
+          docker compose -f compose.yaml logs --tail=140 || true
       - name: Destroy ONLY disposable GitHub CI volumes
         if: always()
-        run: docker compose -f compose.yaml -f compose.runtime.yaml down -v --remove-orphans
+        run: docker compose -f compose.yaml down -v --remove-orphans
 
   # P03: real RabbitMQ + two independent PostgreSQL logical databases.
   # Every CI run uses a disposable project, never a shared/local Docker volume.
@@ -285,8 +285,8 @@ jobs:
         env:
           P03_PROJECT_NAME: p03ci${{ github.run_id }}${{ github.run_attempt }}
         run: |
-          docker compose -p "$P03_PROJECT_NAME" -f compose.yaml -f compose.runtime.yaml -f compose.p03-isolated.yaml ps -a || true
-          docker compose -p "$P03_PROJECT_NAME" -f compose.yaml -f compose.runtime.yaml -f compose.p03-isolated.yaml logs --tail=120 || true
+          docker compose -p "$P03_PROJECT_NAME" -f compose.yaml -f infra/compose/tests/room-meter-events.yaml ps -a || true
+          docker compose -p "$P03_PROJECT_NAME" -f compose.yaml -f infra/compose/tests/room-meter-events.yaml logs --tail=120 || true
 
   # P04: Room REST + tenant_db PostgreSQL GiST EXCLUDE (two independent HTTP requests).
   # The PowerShell runner picks a disposable project starting p04ci.
@@ -325,8 +325,8 @@ jobs:
         env:
           P04_PROJECT_NAME: p04ci${{ github.run_id }}${{ github.run_attempt }}
         run: |
-          docker compose -p "$P04_PROJECT_NAME" -f compose.yaml -f compose.p04-isolated.yaml ps -a || true
-          docker compose -p "$P04_PROJECT_NAME" -f compose.yaml -f compose.p04-isolated.yaml logs --tail=100 || true
+          docker compose -p "$P04_PROJECT_NAME" -f compose.yaml -f infra/compose/tests/room-tenant-contracts.yaml ps -a || true
+          docker compose -p "$P04_PROJECT_NAME" -f compose.yaml -f infra/compose/tests/room-tenant-contracts.yaml logs --tail=100 || true
 
   # P05: disposable PostgreSQL + real RabbitMQ cross-service lifecycle tests.
   contract-lifecycle-integration:

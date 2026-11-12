@@ -1,4 +1,4 @@
-name: P12 Notification Rules
+name: Invoice Notifications
 
 on:
   pull_request:
@@ -6,13 +6,13 @@ on:
     paths:
       - backend/services/billing/**
       - backend/services/notification/**
-      - backend/services/tenant/**
       - infra/nginx/**
       - infra/rabbitmq/**
-      - tests/integration/test_notification_rules.py
+      - tests/integration/test_outbox_and_events.py
       - compose*.yaml
-      - scripts/test_p12.ps1
-      - .github/workflows/p12-notification-rules.yml
+      - infra/compose/**
+      - scripts/test_p10.ps1
+      - .github/workflows/invoice-notifications.yml
   workflow_dispatch:
 
 permissions:
@@ -24,6 +24,6 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - name: Verify overdue reminders and expiry notifications
+      - name: Verify invoice email and Nginx public link
         shell: pwsh
-        run: ./scripts/test_p12.ps1
+        run: ./scripts/test_p10.ps1
