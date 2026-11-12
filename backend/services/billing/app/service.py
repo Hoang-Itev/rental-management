@@ -1,6 +1,8 @@
 """Invoice calculation, persistence and issuance."""
 from __future__ import annotations
-from datetime import date, datetime, timezone
+import hashlib
+from secrets import token_urlsafe
+from datetime import date, datetime, timedelta, timezone
 from typing import Mapping
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 from zoneinfo import ZoneInfo
@@ -178,3 +180,51 @@ class InvoiceService:
                 run.status = "COMPLETED" if completed else "FAILED"
                 run.finished_at = datetime.now(timezone.utc)
         return run
+
+
+class LinkDenied(Exception):
+    def __init__(self, status, code):
+        self.status = status
+        self.code = code
+
+
+def hash_link_token(token: str) -> str:
+    return hashlib.sha256(token.encode("ascii")).hexdigest()
+
+
+def create_access_link(db, invoice_id, request, settings):
+    from app.schemas import AccessLink
+
+    with db.begin():
+        invoice = db.get(m.Invoice, invoice_id, with_for_update=True)
+        if invoice is None:
+            raise LinkDenied(404, "INVOICE_NOT_FOUND")
+        if invoice.status != "ISSUED":
+            raise LinkDenied(409, "INVOICE_NOT_ISSUED")
+        source = db.get(m.OutboxEvent, request.source_event_id)
+        if (source is None or source.event_type != "InvoiceIssued" or source.aggregate_id != invoice.id
+                or source.payload.get("data", {}).get("recipient_email") != request.recipient_email
+                or invoice.tenant_email_snapshot != request.recipient_email):
+            raise LinkDenied(403, "LINK_RECIPIENT_MISMATCH")
+        token = token_urlsafe(32)
+        expires = datetime.now(timezone.utc) + timedelta(seconds=settings.invoice_link_ttl_seconds)
+        db.add(m.InvoiceAccessToken(invoice_id=invoice.id, token_hash=hash_link_token(token), expires_at=expires))
+    return AccessLink(url=f"{str(settings.public_base_url).rstrip('/')}/public/v1/invoices/{token}", expires_at=expires)
+
+
+def read_access_link(db, token):
+    from app.schemas import PublicInvoiceView
+
+    now = datetime.now(timezone.utc)
+    with db.begin():
+        link = repo.usable_invoice_link(db, hash_link_token(token), now)
+        if link is None:
+            raise LinkDenied(404, "LINK_NOT_FOUND")
+        invoice = link.invoice
+        link.last_used_at = now
+        return PublicInvoiceView(
+            invoice_code=invoice.invoice_code, room_code=invoice.room_code_snapshot,
+            tenant_name=invoice.tenant_name_snapshot, period_start=invoice.period_start,
+            period_end=invoice.period_end, status=invoice.status, total_amount=invoice.total_amount,
+            due_date=invoice.due_date, items=invoice.items,
+        )

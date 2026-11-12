@@ -1,0 +1,28 @@
+name: P10 Invoice Notifications
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - backend/services/billing/**
+      - backend/services/notification/**
+      - infra/nginx/**
+      - infra/rabbitmq/**
+      - tests/integration/test_outbox_and_events.py
+      - compose*.yaml
+      - scripts/test_p10.ps1
+      - .github/workflows/p10-invoice-notifications.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  email:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify invoice email and Nginx public link
+        shell: pwsh
+        run: ./scripts/test_p10.ps1

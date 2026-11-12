@@ -1,5 +1,8 @@
-"""notification HTTP application skeleton. Not yet implementing business routes."""
+"""Notification HTTP application."""
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
+
+from app.api import router
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -28,4 +31,10 @@ def ready() -> dict[str, str]:
         raise HTTPException(status_code=503, detail="database_not_ready") from exc
     return {"status": "ready"}
 
-# TODO: Register API routers once each business feature is implemented.
+
+@app.exception_handler(HTTPException)
+async def http_error(request, exc):
+    return JSONResponse(exc.detail, status_code=exc.status_code, headers=exc.headers)
+
+
+app.include_router(router)
