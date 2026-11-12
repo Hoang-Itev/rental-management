@@ -1,0 +1,21 @@
+# Internal APIs are NOT frontend APIs. They are blocked on localhost:8080.
+# Run these only from a REST client INSIDE the Compose network, using the service
+# hostname. Ordinary VS Code on the host cannot resolve these names.
+# Do not publish service ports or pass the service token to the browser to work around this.
+@tenantBase = http://tenant:8000
+@meteringBase = http://metering:8000
+@serviceToken = REPLACE_WITH_LOCAL_SERVICE_TOKEN
+@contractId = REPLACE_WITH_CONTRACT_UUID
+@roomId = REPLACE_WITH_ROOM_UUID
+
+### Billing input snapshot
+GET {{tenantBase}}/internal/v1/contracts/{{contractId}}/billing-context
+X-Service-Token: {{serviceToken}}
+
+### Meter pair for a room
+GET {{meteringBase}}/internal/v1/rooms/{{roomId}}/meters
+X-Service-Token: {{serviceToken}}
+
+### Confirmed cutoff projection
+GET {{meteringBase}}/internal/v1/rooms/{{roomId}}/cutoffs?page=1&page_size=100
+X-Service-Token: {{serviceToken}}

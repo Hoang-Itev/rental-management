@@ -1,0 +1,84 @@
+# VS Code REST Client. Set ownerPassword to the EXISTING seeded password locally.
+# Do not commit real credentials. Execute login before authenticated requests.
+@baseUrl = http://localhost:8080
+@ownerEmail = hoangdv955@gmail.com
+@ownerPassword = REPLACE_WITH_SEEDED_PASSWORD
+@roomId = REPLACE_WITH_ROOM_UUID
+@contractId = REPLACE_WITH_CONTRACT_UUID
+@invoiceId = REPLACE_WITH_INVOICE_UUID
+@cutoffId = REPLACE_WITH_CUTOFF_UUID
+@billingMonth = 2026-10-01
+
+### Login
+# @name login
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{"email":"{{ownerEmail}}","password":"{{ownerPassword}}"}
+
+### Profile
+GET {{baseUrl}}/api/v1/auth/me
+Authorization: Bearer {{login.response.body.access_token}}
+
+### Rooms
+GET {{baseUrl}}/api/v1/rooms?page=1&page_size=20
+Authorization: Bearer {{login.response.body.access_token}}
+
+### Meters created asynchronously after RoomCreated
+GET {{baseUrl}}/api/v1/rooms/{{roomId}}/meters
+Authorization: Bearer {{login.response.body.access_token}}
+
+### Contracts
+GET {{baseUrl}}/api/v1/contracts?page=1&page_size=20
+Authorization: Bearer {{login.response.body.access_token}}
+
+### Expiring ACTIVE contracts (Vietnam calendar date)
+GET {{baseUrl}}/api/v1/contracts/expiring?within_days=7
+Authorization: Bearer {{login.response.body.access_token}}
+
+### Cancel only DRAFT/SCHEDULED; this MUTATES the selected contract
+POST {{baseUrl}}/api/v1/contracts/{{contractId}}/cancel
+Authorization: Bearer {{login.response.body.access_token}}
+Content-Type: application/json
+
+{"reason":"Tenant cancelled before activation"}
+
+### Cutoffs awaiting confirmation
+GET {{baseUrl}}/api/v1/meter-cutoffs?status=PENDING&page=1&page_size=20
+Authorization: Bearer {{login.response.body.access_token}}
+
+### Confirm a real observed index; replace reading_value before sending
+# Nginx supplies X-Auth-User-Id from JWT. Do not set it yourself.
+POST {{baseUrl}}/api/v1/meter-cutoffs/{{cutoffId}}/confirm
+Authorization: Bearer {{login.response.body.access_token}}
+Content-Type: application/json
+
+{"reading_value":"123.000","manual_reason":"Confirmed from actual meter reading"}
+
+### Queue billing for a CLOSED month. Reusing the key retries the same request.
+POST {{baseUrl}}/api/v1/billing-runs
+Authorization: Bearer {{login.response.body.access_token}}
+Idempotency-Key: manual-billing-{{billingMonth}}
+Content-Type: application/json
+
+{"billing_month":"{{billingMonth}}"}
+
+### Invoice list
+GET {{baseUrl}}/api/v1/invoices?page=1&page_size=20
+Authorization: Bearer {{login.response.body.access_token}}
+
+### Invoice detail (compare total_amount with item lines)
+GET {{baseUrl}}/api/v1/invoices/{{invoiceId}}
+Authorization: Bearer {{login.response.body.access_token}}
+
+### Retry issue after cutoffs are confirmed
+POST {{baseUrl}}/api/v1/invoices/{{invoiceId}}/issue
+Authorization: Bearer {{login.response.body.access_token}}
+
+### Email jobs (actual local emails are visible at http://localhost:8025)
+GET {{baseUrl}}/api/v1/email-jobs?page=1&page_size=20
+Authorization: Bearer {{login.response.body.access_token}}
+
+### Payment attempts
+GET {{baseUrl}}/api/v1/invoices/{{invoiceId}}/payment-attempts
+Authorization: Bearer {{login.response.body.access_token}}

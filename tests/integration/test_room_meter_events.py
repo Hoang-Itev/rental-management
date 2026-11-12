@@ -58,6 +58,9 @@ async def test_real_roomcreated_queue_and_duplicate_deliveries():
         })
         room_id = room["id"]
         meters = wait_meters(client, room_id)
+        public = client.get(METER_BASE + f"/api/v1/rooms/{room_id}/meters")
+        assert public.status_code == 200, public.text
+        assert public.json()['items'] == meters
         assert {(x["meter_type"], x["unit"]) for x in meters} == {
             ("ELECTRICITY", "KWH"), ("WATER", "M3")}
 

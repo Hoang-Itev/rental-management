@@ -59,8 +59,8 @@ jobs:
           PY
       - name: Test deterministic seed dataset
         run: python -m pytest -q scripts/seed/tests
-      - name: Ensure Room OpenAPI extensions are committed
-        run: python scripts/sync_room_openapi.py --check contracts/openapi.yaml
+      - name: Validate API contract inventory and checker
+        run: python -m pytest -q scripts/tests/test_api_contract.py
 
   service-unit-tests:
     runs-on: ubuntu-latest
@@ -86,6 +86,8 @@ jobs:
           if [[ "${{ matrix.service }}" == "auth" ]]; then path="backend/auth"; else path="backend/services/${{ matrix.service }}"; fi
           python -m pip install -r requirements-test.txt
           python -m pip install -r "$path/requirements.txt"
+      - name: Check registered API against committed OpenAPI
+        run: python scripts/check_api_contract.py --service "${{ matrix.service }}"
       - name: Run service unit tests with coverage
         shell: bash
         env:
@@ -245,6 +247,11 @@ jobs:
           TEST_AUTH_EMAIL: owner.demo@example.com
           TEST_AUTH_PASSWORD: CI_Demo_Auth_Only_2026_Strong_Password
         run: python3 scripts/tests/gateway/room.py
+      - name: Test contract and Metering gateway routes with real JWT
+        env:
+          TEST_AUTH_EMAIL: owner.demo@example.com
+          TEST_AUTH_PASSWORD: CI_Demo_Auth_Only_2026_Strong_Password
+        run: python3 scripts/tests/gateway/tenant.py
       - name: Diagnose failed Compose startup
         if: failure()
         run: |

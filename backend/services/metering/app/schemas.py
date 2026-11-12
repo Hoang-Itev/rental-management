@@ -1,8 +1,8 @@
 """P06 telemetry contract. The MQTT body is cumulative, never a delta."""
 from __future__ import annotations
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
-from typing import Annotated, Literal
+from typing import Annotated, Generic, Literal, TypeVar
 from uuid import UUID
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 
@@ -80,3 +80,69 @@ class JobResult(BaseModel):
 class MonthlyRunInput(BaseModel):
     model_config = ConfigDict(extra='forbid')
     cutoff_at: AwareDatetime
+
+
+class MeterOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    room_id: UUID
+    meter_code: str
+    meter_type: Literal['ELECTRICITY', 'WATER']
+    unit: str
+    status: Literal['ACTIVE', 'INACTIVE']
+
+
+class RoomMeterList(BaseModel):
+    items: list[MeterOut]
+
+
+class PageMeta(BaseModel):
+    page: int
+    page_size: int
+    total: int
+
+
+T = TypeVar('T')
+
+
+class Page(BaseModel, Generic[T]):
+    items: list[T]
+    meta: PageMeta
+
+
+class MonthlyRunResult(BaseModel):
+    job_id: UUID
+    cutoff_at: datetime
+    created_count: int
+    confirmed_count: int
+    pending_count: int
+
+
+class MeterBaseline(BaseModel):
+    meter_id: UUID
+    reading_value: str
+    measured_at: datetime
+    source: str
+
+
+class UtilityUsage(BaseModel):
+    meter_id: UUID
+    meter_type: Literal['ELECTRICITY', 'WATER']
+    unit: str
+    start_cutoff_id: UUID
+    end_cutoff_id: UUID
+    start_reading: str
+    end_reading: str
+    consumption: str
+
+
+
+
+class RoomUsage(BaseModel):
+    room_id: UUID
+    contract_id: UUID
+    period_start: date
+    period_end_exclusive: date
+    status: Literal['PENDING_CUTOFF', 'READY']
+    missing_cutoffs: list[str]
+    utilities: list[UtilityUsage]

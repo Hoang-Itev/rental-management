@@ -11,7 +11,7 @@ from app.config import Settings, get_settings
 from app.db import get_db
 from app.models import Invoice
 from app.reminders import reminder_reason
-from app.schemas import AccessLink, AccessLinkRequest
+from app.schemas import AccessLink, AccessLinkRequest, ReminderEligibility
 from app.service import LinkDenied, VN, create_access_link
 
 router = APIRouter(prefix="/internal/v1", include_in_schema=False)
@@ -35,7 +35,7 @@ def issue_link(invoice_id: UUID, payload: AccessLinkRequest, db: Session = Depen
         raise error(exc.status, exc.code, "Access link could not be issued") from exc
 
 
-@router.get("/invoices/{invoice_id}/reminder-eligibility", dependencies=[Depends(require_service_token)])
+@router.get("/invoices/{invoice_id}/reminder-eligibility", response_model=ReminderEligibility, dependencies=[Depends(require_service_token)])
 def reminder_eligibility(invoice_id: UUID, db: Session = Depends(get_db)):
     invoice = db.get(Invoice, invoice_id)
     if invoice is None:

@@ -257,3 +257,54 @@ def test_contract_deposit_create_patch_and_clear(
 
     with pytest.raises(ValueError):
         s.ContractPatch(deposit_amount=-1)
+
+
+@pytest.mark.parametrize('confirmed', [False, True])
+def test_cancel_unstarted_is_idempotent_and_releases_booking(
+        env, room, tenant_payload, make_contract, sessions, confirmed):
+    payer, rid, draft = seeded(env, room, tenant_payload, make_contract)
+    if confirmed:
+        act(env, 'confirm', draft.id)
+    actor = uuid4()
+    assert act(env, 'cancel', draft.id, 'Changed plans', actor).status == 'CANCELLED'
+    assert act(env, 'cancel', draft.id, 'Retry', actor).status == 'CANCELLED'
+    events = act(env, 'events', draft.id)
+    cancelled = [e for e in events if e.event_type == 'CANCELLED']
+    assert len(cancelled) == 1
+    assert cancelled[0].reason == 'Changed plans' and cancelled[0].actor_id == actor
+    with sessions() as db:
+        assert db.scalar(select(func.count()).select_from(m.OutboxEvent)) == 0
+    replacement = act(env, 'create_contract', make_contract(payer.id, rid))
+    assert act(env, 'confirm', replacement.id).status == 'SCHEDULED'
+
+
+@pytest.mark.parametrize('status', ['ACTIVE', 'EXPIRED_PENDING', 'ENDED'])
+def test_cancel_rejects_started_contract(env, room, tenant_payload, make_contract, sessions, status):
+    _, _, draft = seeded(env, room, tenant_payload, make_contract)
+    with sessions.begin() as db:
+        db.get(m.Contract, draft.id).status = status
+    err(409, lambda: act(env, 'cancel', draft.id, 'Invalid cancellation'))
+    assert act(env, 'contract', draft.id).status == status
+    err(404, lambda: act(env, 'cancel', uuid4(), 'Missing'))
+
+
+def test_expiring_filters_window_status_handover_and_pagination(
+        env, room, tenant_payload, make_contract, sessions):
+    from datetime import timedelta
+    today = date(2026, 12, 10)
+    ids = []
+    for offset, status, handover in [
+        (0, 'ACTIVE', None), (7, 'ACTIVE', None), (8, 'ACTIVE', None),
+        (-1, 'ACTIVE', None), (3, 'DRAFT', None), (3, 'SCHEDULED', None),
+        (3, 'CANCELLED', None), (3, 'ACTIVE', today),
+    ]:
+        _, _, contract = seeded(env, room, tenant_payload, make_contract,
+                                start='2026-12-01', end=today + timedelta(days=offset))
+        with sessions.begin() as db:
+            row = db.get(m.Contract, contract.id)
+            row.status, row.actual_end_date = status, handover
+        ids.append(contract.id)
+    rows, total = act(env, 'expiring_contracts', 7, 1, 1, today=today)
+    assert total == 2 and [r.id for r in rows] == ids[:1]
+    rows, total = act(env, 'expiring_contracts', 7, 2, 1, today=today)
+    assert total == 2 and [r.id for r in rows] == ids[1:2]

@@ -167,3 +167,61 @@ class LifecycleResult(Strict):
     processed: int
     started: int
     pending_end: int
+
+
+class CancelRequest(Strict):
+    reason: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
+
+
+class BillableContract(BaseModel):
+    contract_id: UUID
+    room_id: UUID
+    status: Status
+    start_date: date
+    end_date: date
+    actual_end_date: date | None
+
+
+class BillableContracts(BaseModel):
+    items: list[BillableContract]
+    next_cursor: UUID | None = None
+
+
+class PayerOut(BaseModel):
+    id: UUID
+    full_name: str
+    email: str | None
+
+
+class InternalContract(BaseModel):
+    contract: ContractOut
+    terms: list[TermOut]
+    payer: PayerOut
+
+
+class BillingTerm(BaseModel):
+    id: UUID
+    effective_from: date
+    effective_to: date | None
+    monthly_rent: int
+    electricity_unit_price: int
+    water_unit_price: int
+    monthly_service_fee: int
+
+
+class BillingContext(BaseModel):
+    contract_id: UUID
+    room_id: UUID
+    contract_status: Status
+    tenant_name: str
+    tenant_email: str | None
+    room_code: str
+    chargeable_from: date
+    chargeable_to_exclusive: date
+    terms: list[BillingTerm]
+
+
+class ExpiryEligibility(BaseModel):
+    contract_id: UUID
+    end_date: date
+    eligible: bool

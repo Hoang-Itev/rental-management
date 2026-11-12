@@ -62,6 +62,16 @@ def main():
     code,_=req('POST',f"/api/v1/contracts/{overlapping['id']}/confirm",{},token)
     assert code==409,f'Expected 409 overlap, got {code}'
     print('[PASS] overlapping contract rejected; repeat confirm idempotent')
+    meter_path = f"/api/v1/rooms/{room['id']}/meters"
+    assert req('GET', meter_path)[0] == 401
+    assert isinstance(ok('GET', meter_path, token=token)['items'], list)
+    assert req('GET', '/api/v1/contracts/expiring')[0] == 401
+    assert isinstance(ok('GET', '/api/v1/contracts/expiring', token=token)['items'], list)
+    cancel_path = f"/api/v1/contracts/{overlapping['id']}/cancel"
+    assert req('POST', cancel_path, {'reason': 'Gateway test cleanup'})[0] == 401
+    assert ok('POST', cancel_path, {'reason': 'Gateway test cleanup'}, token)['status'] == 'CANCELLED'
+    assert ok('POST', cancel_path, {'reason': 'Retry'}, token)['status'] == 'CANCELLED'
+    print('[PASS] room meters, expiring contracts and idempotent cancellation through Nginx/JWT')
     print('ROOM_ID='+room['id'])
     print('TENANT_ID='+payer['id'])
     print('CONTRACT_ID='+contract['id'])

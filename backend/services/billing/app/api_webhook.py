@@ -9,7 +9,7 @@ from app.config import get_settings
 from app.db import get_sessionmaker
 from app.momo import MomoClient
 from app.payment import PaymentService
-from app.schemas import MomoIPN, ReconcilePayments
+from app.schemas import MomoIPN, ReconcilePayments, ReconcileResult
 from app.service import LinkDenied
 
 router = APIRouter()
@@ -30,7 +30,7 @@ def receive_momo_ipn(payload: MomoIPN, service: PaymentService = Depends(get_pay
     return Response(status_code=204)
 
 
-@router.post("/api/v1/jobs/payments/reconcile/run")
+@router.post("/api/v1/jobs/payments/reconcile/run", response_model=ReconcileResult)
 def reconcile_payments(payload: ReconcilePayments | None = None,
                        service: PaymentService = Depends(get_payment_service)):
     try:

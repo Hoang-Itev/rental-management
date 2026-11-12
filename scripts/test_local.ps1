@@ -52,8 +52,12 @@ try {
             'simulator' { '' }
             default { '--cov=app.service --cov-fail-under=80' }
         }
-        $testCommand = 'python -m pip install -q -r /requirements-test.txt && cd /checkout && PYTHONDONTWRITEBYTECODE=1 COVERAGE_FILE=/tmp/.coverage python -m pytest -c /pytest-config.toml -q -p no:cacheprovider tests ' + $coverageArgs
-        Invoke-UnitCompose run --rm --no-deps --build --volume $mount --volume $requirements --volume $config $entry.Key sh -ec $testCommand
+        $testCommand = 'cd /checkout && PYTHONDONTWRITEBYTECODE=1 COVERAGE_FILE=/tmp/.coverage python -m pytest -c /pytest-config.toml -q -p no:cacheprovider tests ' + $coverageArgs
+        if ($entry.Key -ne 'simulator') {
+            $testCommand = "python /repo/scripts/check_api_contract.py --service $($entry.Key) && " + $testCommand
+        }
+        $testCommand = 'python -m pip install -q -r /requirements-test.txt && ' + $testCommand
+        Invoke-UnitCompose run --rm --no-deps --build --volume "${root}:/repo:ro" --volume $mount --volume $requirements --volume $config $entry.Key sh -ec $testCommand
     }
 
     if (-not $UnitOnly) {

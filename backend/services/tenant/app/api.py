@@ -56,6 +56,19 @@ def create_contract(data:s.ContractCreate,db:Db,settings:Settings,
                     x_auth_user_id: Annotated[str|None,Header(alias='X-Auth-User-Id')]=None):
     return service(db,settings).create_contract(data,actor_id(x_auth_user_id))
 
+@router.get('/contracts/expiring', response_model=s.Page[s.ContractOut])
+def expiring_contracts(db: Db, settings: Settings, page: Page = 1, page_size: Size = 20,
+                       within_days: Annotated[int, Query(ge=1, le=90)] = 7):
+    rows, total = service(db, settings).expiring_contracts(within_days, page, page_size)
+    return page_result(rows, total, page, page_size, s.ContractOut)
+
+
+@router.post('/contracts/{contract_id}/cancel', response_model=s.ContractOut)
+def cancel_contract(contract_id: UUID, body: s.CancelRequest, db: Db, settings: Settings,
+                    x_auth_user_id: Annotated[str | None, Header(alias='X-Auth-User-Id')] = None):
+    return service(db, settings).cancel(contract_id, body.reason, actor_id(x_auth_user_id))
+
+
 @router.get('/contracts/{contract_id}',response_model=s.ContractOut)
 def contract(contract_id:UUID,db:Db,settings:Settings):
     return service(db,settings).contract(contract_id)

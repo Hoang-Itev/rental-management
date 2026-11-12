@@ -107,3 +107,24 @@ def test_two_concurrent_confirmations_cannot_overlap(tree):
     for c in (c1,c2):
         evs=checked('GET',TENANT,f"/api/v1/contracts/{c['id']}/events")['items']
         assert [e['event_type'] for e in evs].count('CONFIRMED')==(1 if checked('GET',TENANT,f"/api/v1/contracts/{c['id']}")['status']=='SCHEDULED' else 0)
+
+
+def test_cancel_releases_postgres_booking_and_is_idempotent(tree):
+    _, create_room = tree
+    payer = checked('POST', TENANT, '/api/v1/tenants', {'full_name': 'Cancellation payer', 'email': 'cancellation@example.com'}, 201)
+    room = create_room('CANCEL-' + uuid4().hex[:8])
+    first = draft(room['id'], payer['id'], '2027-08-01', '2027-10-31')
+    checked('POST', TENANT, f"/api/v1/contracts/{first['id']}/confirm")
+    replacement = draft(room['id'], payer['id'], '2027-08-01', '2027-10-31')
+    assert request('POST', TENANT, f"/api/v1/contracts/{replacement['id']}/confirm").status_code == 409
+    path = f"/api/v1/contracts/{first['id']}/cancel"
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        responses = list(pool.map(lambda _: request('POST', TENANT, path, {'reason': 'Plans changed'}), range(2)))
+    assert [r.status_code for r in responses] == [200, 200]
+    assert all(r.json()['status'] == 'CANCELLED' for r in responses)
+    history = checked('GET', TENANT, f"/api/v1/contracts/{first['id']}/events")
+    assert len([e for e in history['items'] if e['event_type'] == 'CANCELLED']) == 1
+    assert checked('POST', TENANT, f"/api/v1/contracts/{replacement['id']}/confirm")['status'] == 'SCHEDULED'
+    # Static path must not be mistaken for a contract UUID by the router.
+    expiring = checked('GET', TENANT, '/api/v1/contracts/expiring?within_days=7')
+    assert isinstance(expiring['items'], list)

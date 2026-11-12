@@ -1,0 +1,19 @@
+# Copy the token from a real invoice email in Mailpit. No owner JWT is needed.
+# Expired/revoked tokens must fail. Never commit a real access token.
+@baseUrl = http://localhost:8080
+@invoiceToken = REPLACE_WITH_EMAIL_LINK_TOKEN
+
+### Read invoice
+GET {{baseUrl}}/public/v1/invoices/{{invoiceToken}}
+
+### Create/retry MoMo Sandbox checkout. Requires configured Sandbox credentials.
+# A disabled MoMo provider returns 503. This request does not itself mark an invoice PAID.
+POST {{baseUrl}}/public/v1/invoices/{{invoiceToken}}/payments/momo
+Idempotency-Key: manual-checkout-{{invoiceToken}}
+
+### Browser return is informational only; it must not set PAID.
+GET {{baseUrl}}/public/v1/payments/momo/return
+
+# Do not fabricate a successful IPN for manual testing.
+# The automated MoMo integration suite covers invalid signatures, duplicate IPNs,
+# amount mismatch and exactly-once payment/event behavior with a test provider.
