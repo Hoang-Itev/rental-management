@@ -1,15 +1,18 @@
 """Service-token-only diagnostics and the planned Metering listing for Simulator."""
 from __future__ import annotations
-
 import hmac
+from datetime import date, datetime, time
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
 from app.config import MeteringSettings, get_settings
+from app.cutoffs import VN, db_utc
 from app.db import get_db
+from app.models import Meter, MeterCutoff
 from app.service import MeteringService
 
 router = APIRouter(prefix="/internal/v1", tags=["Internal Metering"])
@@ -84,3 +87,50 @@ def confirmed_cutoffs_for_room(room_id: UUID,
         page=page, page_size=page_size)
     return {'items': [cutoff_payload(db, row) for row in rows],
             'meta': {'page': page, 'page_size': page_size, 'total': count}}
+
+
+@router.get('/rooms/{room_id}/usage', dependencies=[Depends(require_service_token)])
+def room_usage(room_id: UUID, contract_id: UUID, period_start: date,
+               period_end_exclusive: date, db: Session = Depends(get_db)):
+    """Read both boundaries in one database statement, including the end cutoff."""
+    if period_end_exclusive <= period_start:
+        raise HTTPException(422, detail='Invalid usage period')
+    start = datetime.combine(period_start, time.min, tzinfo=VN)
+    end = datetime.combine(period_end_exclusive, time.min, tzinfo=VN)
+    rows = db.execute(
+        select(Meter, MeterCutoff)
+        .outerjoin(MeterCutoff, and_(
+            MeterCutoff.meter_id == Meter.id,
+            MeterCutoff.status == 'CONFIRMED',
+            MeterCutoff.cutoff_at.in_((start, end)),
+        ))
+        .where(Meter.room_id == room_id)
+    ).all()
+    meters = {meter.meter_type: meter for meter, _ in rows}
+    boundaries = {
+        (meter.meter_type, db_utc(cutoff.cutoff_at)): cutoff
+        for meter, cutoff in rows if cutoff is not None
+    }
+    missing, utilities = [], []
+    for kind in ('ELECTRICITY', 'WATER'):
+        # P07 shares one physical cutoff across all reasons at the same instant.
+        first, last = (boundaries.get((kind, instant)) for instant in (start, end))
+        if first is None or last is None:
+            if first is None:
+                missing.append(f'{kind}:{period_start.isoformat()}')
+            if last is None:
+                missing.append(f'{kind}:{period_end_exclusive.isoformat()}')
+            continue
+        meter = meters[kind]
+        utilities.append({
+            'meter_id': meter.id, 'meter_type': kind, 'unit': meter.unit,
+            'start_cutoff_id': first.id, 'end_cutoff_id': last.id,
+            'start_reading': str(first.reading_value), 'end_reading': str(last.reading_value),
+            'consumption': str(last.reading_value - first.reading_value),
+        })
+    return {
+        'room_id': room_id, 'contract_id': contract_id, 'period_start': period_start,
+        'period_end_exclusive': period_end_exclusive,
+        'status': 'PENDING_CUTOFF' if missing else 'READY',
+        'missing_cutoffs': missing, 'utilities': [] if missing else utilities,
+    }

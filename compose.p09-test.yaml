@@ -1,0 +1,14 @@
+services:
+  rabbitmq:
+    ports: !reset []
+
+  billing:
+    environment:
+      P09_EPHEMERAL_TEST: "1"
+      P09_TENANT_DATABASE_URL: postgresql+psycopg://tenant_app:${TENANT_DB_PASSWORD}@postgres:5432/tenant_db
+      P09_METERING_DATABASE_URL: postgresql+psycopg://metering_app:${METERING_DB_PASSWORD}@postgres:5432/metering_db
+      P09_RABBITMQ_TEST: "1"
+    volumes:
+      - ./tests/integration:/p09/integration:ro
+      - ./backend/services/billing/tests:/app/tests:ro
+      - ./requirements-test.txt:/p09/requirements-test.txt:ro

@@ -1,0 +1,41 @@
+x-billing-runtime: &billing-runtime
+  build: ./backend/services/billing
+  restart: unless-stopped
+  networks: [internal]
+
+x-billing-http: &billing-http
+  TENANT_URL: ${BILLING_TENANT_URL:-http://tenant:8000}
+  METERING_URL: ${BILLING_METERING_URL:-http://metering:8000}
+  BILLING_HTTP_TIMEOUT_SECONDS: ${BILLING_HTTP_TIMEOUT_SECONDS:-5}
+
+services:
+  billing:
+    environment: *billing-http
+
+  billing-scheduler:
+    <<: *billing-runtime
+    command: ["python", "-m", "app.scheduler"]
+    depends_on:
+      billing:
+        condition: service_healthy
+      tenant:
+        condition: service_healthy
+      metering:
+        condition: service_healthy
+    environment:
+      <<: *billing-http
+      DATABASE_URL: postgresql+psycopg://billing_app:${BILLING_DB_PASSWORD}@postgres:5432/billing_db
+      SERVICE_TOKEN: ${SERVICE_TOKEN:?Set SERVICE_TOKEN in .env}
+      BILLING_POLL_SECONDS: ${BILLING_POLL_SECONDS:-300}
+
+  billing-outbox:
+    <<: *billing-runtime
+    command: ["python", "-m", "app.worker"]
+    depends_on:
+      billing:
+        condition: service_healthy
+      rabbitmq-init:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgresql+psycopg://billing_app:${BILLING_DB_PASSWORD}@postgres:5432/billing_db
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/
