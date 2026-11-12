@@ -84,6 +84,7 @@ class RabbitPublisher:
         confirmation = await asyncio.wait_for(
             self.exchange.publish(msg, routing_key={
                 "InvoiceIssued": "invoice.issued.v1",
+                "InvoiceReminderRequested": "invoice.reminder_requested.v1",
                 "PaymentSucceeded": "payment.succeeded.v1",
             }[body["event_type"]], mandatory=True),
             timeout=10,

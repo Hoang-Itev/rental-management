@@ -9,7 +9,7 @@ from sqlalchemy.orm import sessionmaker, Session
 from app import models as m
 
 logger=logging.getLogger(__name__)
-ROUTING={'ContractStarted':'contract.started.v1','ContractEnded':'contract.ended.v1'}
+ROUTING={'ContractStarted':'contract.started.v1','ContractEnded':'contract.ended.v1','ContractExpiring':'contract.expiring.v1'}
 
 
 async def publish_pending(sessions: sessionmaker[Session], publisher, *, limit=20):

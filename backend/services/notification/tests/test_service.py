@@ -7,7 +7,7 @@ from uuid import uuid4
 import pytest
 
 from app import repository
-from app.clients import DeliveryFailure, InvoiceNotIssued
+from app.clients import ContractNoLongerExpiring, DeliveryFailure, InvoiceNotIssued
 from app.service import record_invoice_event, reset_failed_job, send_next
 
 NOW = datetime(2026, 11, 12, tzinfo=timezone.utc)
@@ -29,7 +29,13 @@ def delivery(monkeypatch):
     smtp.send.return_value = "message-id"
     settings = SimpleNamespace(notification_retry_seconds=30, notification_max_attempts=2)
     sessions = SimpleNamespace(begin=lambda: nullcontext("db"))
-    return job, billing, smtp, lambda: send_next(sessions, billing, smtp, settings, clock=lambda: NOW)
+    tenant = Mock()
+
+    def send():
+        return send_next(sessions, billing, smtp, settings, tenant=tenant, clock=lambda: NOW)
+
+    send.tenant = tenant
+    return job, billing, smtp, send
 
 
 def test_sends_invoice(delivery):
@@ -87,6 +93,56 @@ def test_payment_event_creates_receipt_job(monkeypatch):
 
     insert = Mock()
     monkeypatch.setattr(repository, "insert_once", insert)
-    event = SimpleNamespace(data=SimpleNamespace(invoice_code="INV-1"))
+    monkeypatch.setattr(repository, "lock_invoice_events", Mock())
+    monkeypatch.setattr(repository, "skip_pending_reminders", Mock())
+    event = SimpleNamespace(data=SimpleNamespace(invoice_code="INV-1", invoice_id=uuid4()))
     record_payment_event(SimpleNamespace(begin=lambda: nullcontext("db")), event)
     insert.assert_called_once_with("db", event, "Biên nhận INV-1", email_type="PAYMENT_RECEIPT")
+
+
+@pytest.mark.parametrize("reason", ["ALREADY_PAID", "VOID"])
+def test_reminder_is_skipped_after_billing_check(delivery, reason):
+    job, billing, smtp, send = delivery
+    job.email_type = "REMINDER"
+    billing.check_reminder.side_effect = InvoiceNotIssued(reason)
+    assert send() and job.status == "SKIPPED"
+    assert job.last_error == reason
+    smtp.send.assert_not_called()
+
+
+def test_reminder_retries_if_billing_is_down(delivery):
+    job, billing, smtp, send = delivery
+    job.email_type = "REMINDER"
+    billing.check_reminder.side_effect = DeliveryFailure("Billing reminder eligibility unavailable")
+    assert send() and job.status == "PENDING"
+    assert job.next_attempt_at == NOW + timedelta(seconds=30)
+    smtp.send.assert_not_called()
+    billing.check_reminder.side_effect = None
+    assert send() and job.status == "SENT"
+
+
+def test_expiring_contract_email_does_not_call_billing(delivery):
+    job, billing, smtp, send = delivery
+    job.email_type = "CONTRACT_EXPIRING"
+    job.template_data["end_date"] = "2026-11-19"
+    assert send() and job.status == "SENT"
+    assert "2026-11-19" in smtp.send.call_args.args[1]
+    assert not billing.mock_calls
+
+
+def test_stale_contract_expiry_is_skipped(delivery):
+    job, _, smtp, send = delivery
+    job.email_type = "CONTRACT_EXPIRING"
+    send.tenant.check_expiry.side_effect = ContractNoLongerExpiring
+    assert send() and job.status == "SKIPPED"
+    assert job.last_error == "CONTRACT_NO_LONGER_EXPIRING"
+    smtp.send.assert_not_called()
+
+
+def test_contract_expiry_retries_if_tenant_is_unavailable(delivery):
+    job, _, smtp, send = delivery
+    job.email_type = "CONTRACT_EXPIRING"
+    send.tenant.check_expiry.side_effect = DeliveryFailure("Tenant expiry eligibility unavailable")
+    assert send() and job.status == "PENDING"
+    assert job.next_attempt_at == NOW + timedelta(seconds=30)
+    smtp.send.assert_not_called()

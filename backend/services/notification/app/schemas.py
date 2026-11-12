@@ -88,3 +88,50 @@ class PaymentSucceeded(BaseModel):
         if self.aggregate_id != self.data.invoice_id or self.data.period_end_exclusive <= self.data.period_start:
             raise ValueError("Invalid payment scope")
         return self
+
+
+class ReminderData(InvoiceIssuedData):
+    reminder_date: date
+
+
+class InvoiceReminderRequested(BaseModel):
+    event_id: UUID
+    event_type: Literal["InvoiceReminderRequested"]
+    event_version: Literal[1]
+    occurred_at: datetime
+    correlation_id: UUID
+    aggregate_id: UUID
+    data: ReminderData
+
+    @model_validator(mode="after")
+    def validate_scope(self):
+        if (self.aggregate_id != self.data.invoice_id
+                or self.data.period_end_exclusive <= self.data.period_start
+                or self.data.reminder_date <= self.data.due_date):
+            raise ValueError("Invalid overdue reminder scope")
+        return self
+
+
+class ContractExpiringData(BaseModel):
+    contract_id: UUID
+    room_id: UUID
+    end_date: date
+    days_remaining: int = Field(ge=0)
+    room_code: str
+    tenant_name: str
+
+
+class ContractExpiring(BaseModel):
+    event_id: UUID
+    event_type: Literal["ContractExpiring"]
+    event_version: Literal[1]
+    occurred_at: datetime
+    correlation_id: UUID
+    aggregate_id: UUID
+    data: ContractExpiringData
+
+    @model_validator(mode="after")
+    def validate_scope(self):
+        if self.aggregate_id != self.data.contract_id:
+            raise ValueError("Invalid contract scope")
+        return self

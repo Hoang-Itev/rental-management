@@ -5,7 +5,7 @@ import os
 import aio_pika
 import httpx
 
-from app.clients import BillingClient, SmtpClient
+from app.clients import BillingClient, SmtpClient, TenantClient
 from app.config import get_settings
 from app.db import get_sessionmaker
 from app.messaging import QUEUE, handle_delivery
@@ -14,7 +14,7 @@ from app.service import send_next
 logger = logging.getLogger(__name__)
 
 
-async def consume(sessions):
+async def consume(sessions, settings):
     while True:
         try:
             connection = await aio_pika.connect_robust(os.environ["RABBITMQ_URL"], timeout=8)
@@ -24,7 +24,7 @@ async def consume(sessions):
                 queue = await channel.get_queue(QUEUE)
                 async with queue.iterator() as messages:
                     async for message in messages:
-                        await handle_delivery(message, sessions)
+                        await handle_delivery(message, sessions, settings.owner_email)
         except Exception as exc:
             logger.warning("Notification consumer reconnecting (%s)", type(exc).__name__)
             await asyncio.sleep(5)
@@ -33,9 +33,10 @@ async def consume(sessions):
 async def dispatch(sessions, settings):
     with httpx.Client(timeout=settings.notification_timeout_seconds, trust_env=False) as http:
         billing, smtp = BillingClient(http, settings), SmtpClient(settings)
+        tenant = TenantClient(http, settings)
         while True:
             try:
-                if await asyncio.to_thread(send_next, sessions, billing, smtp, settings):
+                if await asyncio.to_thread(send_next, sessions, billing, smtp, settings, tenant=tenant):
                     continue
             except Exception as exc:
                 logger.warning("Notification dispatcher failed (%s)", type(exc).__name__)
@@ -44,9 +45,10 @@ async def dispatch(sessions, settings):
 
 async def run():
     sessions = get_sessionmaker()
+    settings = get_settings()
     async with asyncio.TaskGroup() as group:
-        group.create_task(consume(sessions))
-        group.create_task(dispatch(sessions, get_settings()))
+        group.create_task(consume(sessions, settings))
+        group.create_task(dispatch(sessions, settings))
 
 
 if __name__ == "__main__":

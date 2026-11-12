@@ -1,0 +1,29 @@
+name: P12 Notification Rules
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - backend/services/billing/**
+      - backend/services/notification/**
+      - backend/services/tenant/**
+      - infra/nginx/**
+      - infra/rabbitmq/**
+      - tests/integration/test_notification_rules.py
+      - compose*.yaml
+      - scripts/test_p12.ps1
+      - .github/workflows/p12-notification-rules.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  email:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify overdue reminders and expiry notifications
+        shell: pwsh
+        run: ./scripts/test_p12.ps1

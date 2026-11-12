@@ -193,6 +193,7 @@ def hash_link_token(token: str) -> str:
 
 
 def create_access_link(db, invoice_id, request, settings):
+    from app.reminders import reminder_reason
     from app.schemas import AccessLink
 
     with db.begin():
@@ -202,10 +203,12 @@ def create_access_link(db, invoice_id, request, settings):
         if invoice.status != "ISSUED":
             raise LinkDenied(409, "INVOICE_NOT_ISSUED")
         source = db.get(m.OutboxEvent, request.source_event_id)
-        if (source is None or source.event_type != "InvoiceIssued" or source.aggregate_id != invoice.id
+        if (source is None or source.event_type not in ("InvoiceIssued", "InvoiceReminderRequested") or source.aggregate_id != invoice.id
                 or source.payload.get("data", {}).get("recipient_email") != request.recipient_email
                 or invoice.tenant_email_snapshot != request.recipient_email):
             raise LinkDenied(403, "LINK_RECIPIENT_MISMATCH")
+        if source.event_type == "InvoiceReminderRequested" and reminder_reason(invoice, datetime.now(VN).date()) != "OUTSTANDING":
+            raise LinkDenied(409, "INVOICE_NOT_REMINDABLE")
         token = token_urlsafe(32)
         expires = datetime.now(timezone.utc) + timedelta(seconds=settings.invoice_link_ttl_seconds)
         db.add(m.InvoiceAccessToken(invoice_id=invoice.id, token_hash=hash_link_token(token), expires_at=expires))

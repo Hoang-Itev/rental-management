@@ -88,3 +88,23 @@ def billing_context(
         'terms': [s.TermOut.model_validate(term).model_dump(exclude={'contract_id'})
                   for term in svc.terms(contract_id)],
     }
+
+
+@router.get('/contracts/{contract_id}/expiry-notification-eligibility')
+def expiry_notification_eligibility(
+    contract_id: UUID, end_date: date,
+    db: Annotated[Session, Depends(get_db)],
+    settings: Annotated[TenantSettings, Depends(get_settings)],
+    x_service_token: Annotated[str | None, Header(alias='X-Service-Token')] = None,
+):
+    from datetime import datetime
+    from app.service import VN
+
+    credentials(x_service_token, settings)
+    contract = db.get(Contract, contract_id)
+    today = datetime.now(VN).date()
+    eligible = bool(
+        contract and contract.status == 'ACTIVE' and contract.actual_end_date is None
+        and contract.end_date == end_date and end_date >= today
+    )
+    return {'contract_id': contract_id, 'end_date': end_date, 'eligible': eligible}

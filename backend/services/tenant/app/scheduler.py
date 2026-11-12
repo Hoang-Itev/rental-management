@@ -5,14 +5,16 @@ Run as python -m app.scheduler. Explicit job endpoint shares run_due().
 from __future__ import annotations
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
+from sqlalchemy import String, cast, func, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, sessionmaker
-from app import repository as repo
+from app import models as m, repository as repo
 from app.clients import RoomClient
 from app.config import get_settings
 from app.db import get_sessionmaker
-from app.service import TenantError, TenantService
+from app.service import TenantError, TenantService, VN
 
 logger=logging.getLogger(__name__)
 
@@ -70,6 +72,45 @@ def run_due(*, now: datetime | None = None, sessions: sessionmaker[Session] | No
     return {'job_id': uuid4(), 'processed': count, 'started': started, 'pending_end': pending}
 
 
+def enqueue_expiring_contracts(sessions, now=None, days=7):
+    now = now or datetime.now(timezone.utc)
+    local = now.astimezone(VN)
+    if local.hour < 9:
+        return 0
+    today = local.date()
+    already_enqueued = select(m.OutboxEvent.id).where(
+        m.OutboxEvent.dedupe_key == func.concat("contract.expiring.v1:", cast(m.Contract.id, String),
+                                                ":", func.to_char(m.Contract.end_date, "YYYY-MM-DD")),
+    ).exists()
+    with sessions.begin() as db:
+        rows = db.execute(select(m.Contract, m.Tenant.full_name).join(m.Contract.representative).where(
+            m.Contract.status == "ACTIVE", m.Contract.actual_end_date.is_(None),
+            m.Contract.end_date.between(today, today + timedelta(days=days)),
+            ~already_enqueued,
+        ).order_by(m.Contract.end_date, m.Contract.id).limit(100)
+          .with_for_update(of=m.Contract, skip_locked=True)).all()
+        count = 0
+        for contract, name in rows:
+            event_id = uuid4()
+            result = db.execute(insert(m.OutboxEvent).values(
+                id=event_id, aggregate_type="Contract", aggregate_id=contract.id,
+                event_type="ContractExpiring", event_version=1, correlation_id=event_id,
+                dedupe_key=f"contract.expiring.v1:{contract.id}:{contract.end_date.isoformat()}",
+                payload={
+                    "event_id": str(event_id), "event_type": "ContractExpiring", "event_version": 1,
+                    "occurred_at": now.isoformat(), "effective_at": now.isoformat(),
+                    "aggregate_id": str(contract.id), "correlation_id": str(event_id),
+                    "data": {
+                        "contract_id": str(contract.id), "room_id": str(contract.room_id),
+                        "end_date": contract.end_date.isoformat(), "days_remaining": (contract.end_date - today).days,
+                        "room_code": contract.room_code_snapshot, "tenant_name": name,
+                    },
+                },
+            ).on_conflict_do_nothing(index_elements=[m.OutboxEvent.dedupe_key]).returning(m.OutboxEvent.id))
+            count += result.scalar_one_or_none() is not None
+        return count
+
+
 def main():
     logging.basicConfig(level='INFO')
     while True:
@@ -77,6 +118,10 @@ def main():
             run_due()
         except Exception as exc:
             logger.exception('Contract lifecycle poll failed: %s', type(exc).__name__)
+        try:
+            enqueue_expiring_contracts(get_sessionmaker())
+        except Exception as exc:
+            logger.exception('Contract expiry notification poll failed: %s', type(exc).__name__)
         time.sleep(30)
 
 
