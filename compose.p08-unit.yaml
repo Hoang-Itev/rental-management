@@ -1,0 +1,6 @@
+# P08 pure unit tests run inside the Billing image; no database/queues start.
+services:
+  billing:
+    volumes:
+      - ./backend/services/billing/tests:/app/tests:ro
+      - ./requirements-test.txt:/app/requirements-test.txt:ro
