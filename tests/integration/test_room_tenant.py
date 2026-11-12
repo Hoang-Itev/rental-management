@@ -111,7 +111,7 @@ def test_two_concurrent_confirmations_cannot_overlap(tree):
 
 def test_cancel_releases_postgres_booking_and_is_idempotent(tree):
     _, create_room = tree
-    payer = checked('POST', TENANT, '/api/v1/tenants', {'full_name': 'Cancellation payer'}, 201)
+    payer = checked('POST', TENANT, '/api/v1/tenants', {'full_name': 'Cancellation payer', 'email': 'cancellation@example.com'}, 201)
     room = create_room('CANCEL-' + uuid4().hex[:8])
     first = draft(room['id'], payer['id'], '2027-08-01', '2027-10-31')
     checked('POST', TENANT, f"/api/v1/contracts/{first['id']}/confirm")
