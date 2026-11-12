@@ -7,7 +7,9 @@ from pydantic import AnyHttpUrl, TypeAdapter
 
 
 class InvoiceNotIssued(Exception):
-    pass
+    def __init__(self, reason="INVOICE_NOT_ISSUED"):
+        self.reason = reason
+        super().__init__(reason)
 
 
 class DeliveryFailure(Exception):
@@ -27,12 +29,35 @@ class BillingClient:
                 headers={"X-Service-Token": self.settings.service_token.get_secret_value()},
                 json={"source_event_id": str(job.source_event_id), "recipient_email": job.recipient_email},
             )
-            if response.status_code == 409 and response.json().get("code") == "INVOICE_NOT_ISSUED":
-                raise InvoiceNotIssued
+            if response.status_code == 409:
+                code = response.json().get("code")
+                if code in ("INVOICE_NOT_ISSUED", "INVOICE_NOT_REMINDABLE"):
+                    raise InvoiceNotIssued(code)
             response.raise_for_status()
             return str(TypeAdapter(AnyHttpUrl).validate_python(response.json()["url"]))
         except (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError) as exc:
             raise DeliveryFailure("Billing link unavailable") from exc
+
+
+    def check_reminder(self, job):
+        base = str(self.settings.billing_url).rstrip("/")
+        try:
+            response = self.http.get(
+                f"{base}/internal/v1/invoices/{job.invoice_id}/reminder-eligibility",
+                headers={"X-Service-Token": self.settings.service_token.get_secret_value()},
+            )
+            response.raise_for_status()
+            result = response.json()
+            if result["invoice_id"] != str(job.invoice_id) or type(result["eligible"]) is not bool:
+                raise ValueError("Invalid reminder eligibility")
+            reason = result["reason"]
+            if result["eligible"] is True and reason == "OUTSTANDING":
+                return
+            if result["eligible"] is False and reason in ("ALREADY_PAID", "VOID", "NOT_ISSUED", "NOT_DUE"):
+                raise InvoiceNotIssued(reason)
+            raise ValueError("Invalid reminder eligibility")
+        except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
+            raise DeliveryFailure("Billing reminder eligibility unavailable") from exc
 
 
 class SmtpClient:

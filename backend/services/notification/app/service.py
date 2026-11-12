@@ -11,7 +11,40 @@ def record_invoice_event(sessions, event):
 
 def record_payment_event(sessions, event):
     with sessions.begin() as db:
+        repo.lock_invoice_events(db, event.data.invoice_id)
         repo.insert_once(db, event, f"Biên nhận {event.data.invoice_code}", email_type="PAYMENT_RECEIPT")
+
+        repo.skip_pending_reminders(db, event.data.invoice_id)
+
+
+def record_reminder_event(sessions, event):
+    with sessions.begin() as db:
+        invoice_id = event.data.invoice_id
+        repo.lock_invoice_events(db, invoice_id)
+        repo.insert_once(db, event, f"Nhắc thanh toán {event.data.invoice_code}", email_type="REMINDER",
+                         skipped=repo.has_payment_receipt(db, invoice_id))
+
+
+def record_expiring_event(sessions, event, owner_email):
+    with sessions.begin() as db:
+        repo.insert_once(db, event, f"Hợp đồng phòng {event.data.room_code} sắp hết hạn",
+                         email_type="CONTRACT_EXPIRING", recipient=owner_email)
+
+
+def reminder_body(data, link):
+    return (
+        f"Chào {data['tenant_name']},\n\n"
+        f"Hóa đơn {data['invoice_code']} của phòng {data['room_code']} đã quá hạn thanh toán.\n"
+        f"Tổng tiền: {data['total_amount']:,} VND. Hạn thanh toán: {data['due_date']}.\n"
+        f"Xem hóa đơn: {link}\n"
+    )
+
+
+def expiry_body(data):
+    return (
+        f"Hợp đồng phòng {data['room_code']} của {data['tenant_name']} "
+        f"hết hạn ngày {data['end_date']}.\n"
+    )
 
 
 def receipt_body(data):
@@ -44,12 +77,17 @@ def send_next(sessions, billing, smtp, settings, *, clock=lambda: datetime.now(t
         try:
             if job.email_type == "PAYMENT_RECEIPT":
                 body = receipt_body(job.template_data)
+            elif job.email_type == "CONTRACT_EXPIRING":
+                body = expiry_body(job.template_data)
+            elif job.email_type == "REMINDER":
+                billing.check_reminder(job)
+                body = reminder_body(job.template_data, billing.access_link(job))
             else:
                 body = invoice_body(job.template_data, billing.access_link(job))
             job.provider_message_id = smtp.send(job, body)
-        except InvoiceNotIssued:
+        except InvoiceNotIssued as exc:
             job.status = "SKIPPED"
-            job.last_error = "INVOICE_NOT_ISSUED"
+            job.last_error = exc.reason
         except DeliveryFailure as exc:
             job.last_error = str(exc)
             if job.attempt_count >= settings.notification_max_attempts:
@@ -65,7 +103,7 @@ def send_next(sessions, billing, smtp, settings, *, clock=lambda: datetime.now(t
 
 
 def reset_failed_job(job):
-    if job.email_type not in ("INVOICE", "PAYMENT_RECEIPT") or job.status != "FAILED":
+    if job.status != "FAILED":
         return False
     job.status = "PENDING"
     job.attempt_count = 0

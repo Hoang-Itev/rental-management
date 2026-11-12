@@ -1,0 +1,17 @@
+services:
+  rabbitmq:
+    ports: !reset []
+  mailpit:
+    ports: !reset []
+  notification:
+    environment:
+      P12_EPHEMERAL_TEST: "1"
+      P12_BILLING_DATABASE_URL: postgresql+psycopg://billing_app:${BILLING_DB_PASSWORD}@postgres:5432/billing_db
+      P12_TENANT_DATABASE_URL: postgresql+psycopg://tenant_app:${TENANT_DB_PASSWORD}@postgres:5432/tenant_db
+      NOTIFICATION_RETRY_SECONDS: "1"
+    volumes:
+      - ./tests/integration:/p12/integration:ro
+      - ./backend/services/billing:/p12/billing:ro
+      - ./backend/services/tenant:/p12/tenant:ro
+      - ./backend/services/notification/tests:/app/tests:ro
+      - ./requirements-test.txt:/p12/requirements-test.txt:ro

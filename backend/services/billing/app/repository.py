@@ -27,7 +27,7 @@ def page(db, model, conditions, page_number, size):
 
 def claim_outbox(db):
     return db.scalar(select(OutboxEvent).where(
-        OutboxEvent.event_type.in_(("InvoiceIssued", "PaymentSucceeded")), OutboxEvent.published_at.is_(None),
+        OutboxEvent.event_type.in_(("InvoiceIssued", "PaymentSucceeded", "InvoiceReminderRequested")), OutboxEvent.published_at.is_(None),
     ).order_by(OutboxEvent.attempts, OutboxEvent.created_at, OutboxEvent.id).limit(1).with_for_update(skip_locked=True))
 
 

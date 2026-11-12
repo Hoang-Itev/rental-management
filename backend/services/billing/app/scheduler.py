@@ -14,6 +14,7 @@ from app.db import get_engine, get_sessionmaker
 from app.models import BillingRun, Invoice
 from app.momo import MomoClient
 from app.payment import PaymentService
+from app.reminders import enqueue_daily_reminders
 from app.schemas import ReconcilePayments
 from app.service import InvoiceConflict, InvoiceService, VN
 
@@ -88,6 +89,7 @@ def run():
         service = InvoiceService(get_sessionmaker(), BillingClients(http, settings))
         while not stop.is_set():
             try:
+                enqueue_daily_reminders(service.sessions)
                 tick(get_engine(), service, datetime.now(VN))
             except Exception:
                 logger.exception("Billing scheduler tick failed")

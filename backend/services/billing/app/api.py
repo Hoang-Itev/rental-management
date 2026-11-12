@@ -1,6 +1,6 @@
 """Landlord invoice endpoints behind the authenticated gateway."""
 from collections.abc import Iterator
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Literal
 from uuid import UUID, uuid4
 
@@ -13,7 +13,8 @@ from app import models as m, repository as repo, schemas as s
 from app.clients import BillingClients, DependencyUnavailable
 from app.config import get_settings
 from app.db import get_db, get_sessionmaker
-from app.service import InvoiceConflict, InvoiceService
+from app.reminders import enqueue_reminder
+from app.service import InvoiceConflict, InvoiceService, LinkDenied
 
 router = APIRouter(prefix="/api/v1")
 
@@ -109,3 +110,17 @@ def list_payment_attempts(
 ):
     require_invoice(db, invoice_id)
     return repo.page(db, m.PaymentAttempt, [m.PaymentAttempt.invoice_id == invoice_id], page, page_size)
+
+
+@router.post("/invoices/{invoice_id}/reminders", response_model=s.InvoiceDetail,
+             response_model_exclude_none=True)
+def request_reminder(invoice_id: UUID, db: Session = Depends(get_db)):
+    try:
+        with db.begin():
+            invoice = db.get(m.Invoice, invoice_id, with_for_update=True)
+            if invoice is None:
+                raise error(404, "INVOICE_NOT_FOUND", "Invoice does not exist")
+            enqueue_reminder(db, invoice, datetime.now(timezone.utc))
+            return s.InvoiceDetail.model_validate(invoice)
+    except LinkDenied as exc:
+        raise error(exc.status, exc.code, "Invoice is not eligible for a reminder") from exc
