@@ -160,6 +160,8 @@ class InvoiceView(BaseModel):
     blocked_reason: str | None
     revision: int
     replaces_invoice_id: UUID | None
+    void_reason: str | None
+    voided_at: datetime | None
     total_amount: int
     due_date: date
     issued_at: datetime | None
@@ -321,4 +323,61 @@ class PaymentAttemptView(BaseModel):
 
 class PaymentAttemptList(BaseModel):
     items: list[PaymentAttemptView]
+    meta: PageMeta
+
+
+class FinalInvoiceRequest(StrictSnapshot):
+    contract_id: UUID
+
+
+class InvoiceReason(StrictSnapshot):
+    reason: Annotated[str, Field(min_length=1, max_length=2000)]
+
+    @field_validator("reason")
+    @classmethod
+    def nonblank_reason(cls, value):
+        if not value.strip():
+            raise ValueError("reason must not be blank")
+        return value.strip()
+
+
+class AdjustmentCreate(InvoiceReason):
+    amount_delta: Annotated[int, Field(strict=True, ge=-9223372036854775808, le=9223372036854775807)]
+
+    @field_validator("amount_delta")
+    @classmethod
+    def nonzero_delta(cls, value):
+        if value == 0:
+            raise ValueError("amount_delta must not be zero")
+        return value
+
+
+class ResolveAdjustment(StrictSnapshot):
+    status: Literal["RESOLVED", "REJECTED"]
+    resolution_note: str = Field(min_length=1, max_length=2000)
+
+    @field_validator("resolution_note")
+    @classmethod
+    def nonblank_note(cls, value):
+        if not value.strip():
+            raise ValueError("resolution_note must not be blank")
+        return value.strip()
+
+
+class AdjustmentView(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    invoice_id: UUID
+    reason: str
+    amount_delta: int
+    status: Literal["OPEN", "RESOLVED", "REJECTED"]
+    resolution_note: str | None
+    created_by: UUID | None
+    created_at: datetime
+    resolved_at: datetime | None
+
+
+class AdjustmentList(BaseModel):
+    items: list[AdjustmentView]
     meta: PageMeta

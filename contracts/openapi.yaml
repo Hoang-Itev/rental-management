@@ -5494,6 +5494,8 @@ components:
         revision:
           type: integer
         replaces_invoice_id: *id009
+        void_reason: *id001
+        voided_at: *id007
         total_amount: *id006
         due_date: *id005
         issued_at: *id007
@@ -5532,7 +5534,9 @@ components:
           - RESOLVED
           - REJECTED
         resolution_note: *id001
+        created_by: *id009
         created_at: *id007
+        resolved_at: *id007
       required:
       - id
       - invoice_id

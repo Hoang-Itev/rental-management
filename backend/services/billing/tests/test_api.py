@@ -28,3 +28,17 @@ def test_monthly_schedule_uses_vietnam_time_and_catches_up():
     assert last_due_month(datetime(2025, 1, 1, 1, 59, tzinfo=VN)) == date(2024, 11, 1)
     assert last_due_month(datetime(2025, 1, 1, 2, tzinfo=VN)) == date(2024, 12, 1)
     assert last_due_month(datetime(2025, 1, 10, 2, tzinfo=VN)) == date(2024, 12, 1)
+
+
+def test_p13_request_schemas_reject_blank_reason_and_zero_adjustment():
+    import pytest
+    from pydantic import ValidationError
+
+    from app.schemas import AdjustmentCreate, InvoiceReason, ResolveAdjustment
+
+    with pytest.raises(ValidationError):
+        InvoiceReason(reason="   ")
+    with pytest.raises(ValidationError):
+        AdjustmentCreate(reason="Corrected rate", amount_delta=0)
+    with pytest.raises(ValidationError):
+        ResolveAdjustment(status="OPEN", resolution_note="Still open")

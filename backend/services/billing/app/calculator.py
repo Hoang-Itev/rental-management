@@ -198,3 +198,20 @@ def calculate_invoice(
         period_start=request.period_start, period_end=request.period_end,
         items=items, total_amount=total,
     )
+
+
+def uncovered_periods(start: date, end: date, covered):
+    """Subtract covered half-open intervals, returning only contiguous uncovered ranges."""
+    cursor = start
+    remaining = []
+    for left, right in sorted(covered):
+        if right <= cursor:
+            continue
+        if left >= end:
+            break
+        if left > cursor:
+            remaining.append((cursor, left))
+        cursor = max(cursor, right)
+    if cursor < end:
+        remaining.append((cursor, end))
+    return remaining

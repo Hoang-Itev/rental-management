@@ -8,10 +8,11 @@ from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 from zoneinfo import ZoneInfo
 
 from pydantic import ValidationError
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app import models as m, repository as repo
-from app.calculator import CalculationError, calculate_invoice, first_day_next_month
+from app.calculator import CalculationError, calculate_invoice, first_day_next_month, uncovered_periods
 from app.clients import DependencyUnavailable, MissingCutoff
 from app.schemas import InvoiceCalculationInput, InvoiceCalculationResult
 
@@ -49,6 +50,86 @@ class InvoiceService:
             "terms": context.terms, "usage_segments": usage,
         })
 
+    def _uncovered(self, db, context, start, end, invoice=None):
+        covered = repo.covered_periods(
+            db, context.contract_id, start, end, invoice.id if invoice else None,
+        )
+        gaps = uncovered_periods(start, end, covered)
+        if len(gaps) > 1:
+            raise InvoiceConflict("Uncovered periods are disjoint. Bill earlier gaps separately first.")
+        return gaps[0] if gaps else None
+
+    @staticmethod
+    def _draft(context, start, end, *, month=None):
+        return m.Invoice(
+            id=uuid4(), invoice_code=f"INV-{start:%Y%m}-{context.contract_id.hex}-{uuid4().hex[:8]}",
+            contract_id=context.contract_id, invoice_type="PERIODIC" if month is not None else "FINAL",
+            billing_month=month, status="DRAFT", total_amount=0, revision=1,
+            period_start=start, period_end=end, due_date=datetime.now(VN).date().replace(day=5),
+        )
+
+    @staticmethod
+    def _snapshot(invoice, context, start, end):
+        invoice.room_id = context.room_id
+        invoice.period_start, invoice.period_end = start, end
+        invoice.tenant_name_snapshot = context.tenant_name
+        invoice.tenant_email_snapshot = context.tenant_email
+        invoice.room_code_snapshot = context.room_code
+
+    def _calculate_for_issue(self, invoice, context):
+        if not context.tenant_email:
+            return None, "MISSING_RECIPIENT_EMAIL"
+        try:
+            return self._calculate(context, invoice.period_start, invoice.period_end), None
+        except MissingCutoff:
+            return None, "PENDING_CUTOFF"
+        except DependencyUnavailable:
+            return None, "DEPENDENCY_UNAVAILABLE"
+        except CalculationError as exc:
+            return None, exc.code
+        except ValidationError:
+            return None, "INVALID_BILLING_DATA"
+
+    @staticmethod
+    def _issue(db, invoice, result, correlation_id=None):
+        now = datetime.now(timezone.utc)
+        for old_item in invoice.items:
+            db.delete(old_item)
+        invoice.items = [m.InvoiceItem(**line.model_dump()) for line in result.items]
+        invoice.status = "ISSUED"
+        invoice.blocked_reason = None
+        invoice.total_amount = result.total_amount
+        invoice.issued_at = now
+        invoice.due_date = now.astimezone(VN).date().replace(day=5)
+        event_id = uuid4()
+        trace = correlation_id or event_id
+        db.add(m.OutboxEvent(
+            id=event_id, aggregate_type="Invoice", aggregate_id=invoice.id,
+            event_type="InvoiceIssued", event_version=1,
+            correlation_id=trace, dedupe_key=f"invoice.issued.v1:{invoice.id}",
+            payload={
+                "event_id": str(event_id), "event_type": "InvoiceIssued", "event_version": 1,
+                "occurred_at": now.isoformat(), "correlation_id": str(trace),
+                "aggregate_id": str(invoice.id),
+                "data": {
+                    "invoice_id": str(invoice.id), "contract_id": str(invoice.contract_id),
+                    "invoice_code": invoice.invoice_code, "recipient_email": invoice.tenant_email_snapshot,
+                    "tenant_name": invoice.tenant_name_snapshot, "room_code": invoice.room_code_snapshot,
+                    "total_amount": invoice.total_amount, "due_date": invoice.due_date.isoformat(),
+                    "period_start": invoice.period_start.isoformat(), "period_end_exclusive": invoice.period_end.isoformat(),
+                },
+            },
+        ))
+
+    def _prepare(self, db, invoice, context, start, end, correlation_id=None):
+        self._snapshot(invoice, context, start, end)
+        result, blocked = self._calculate_for_issue(invoice, context)
+        if blocked:
+            invoice.blocked_reason = blocked
+            return "waiting", invoice.id
+        self._issue(db, invoice, result, correlation_id)
+        return "issued", invoice.id
+
     def process(self, contract_id: UUID, month: date, *, expected_id: UUID | None = None,
                 correlation_id: UUID | None = None) -> tuple[str, UUID | None]:
         if month.day != 1:
@@ -61,6 +142,8 @@ class InvoiceService:
                 raise InvoiceConflict("Invoice is no longer the current periodic invoice")
             if invoice is not None and invoice.status != "DRAFT":
                 return "skipped", invoice.id
+            if invoice is None and repo.periodic_was_voided(db, contract_id, month):
+                return "skipped", None
 
             context = self.clients.context(contract_id)
             start = max(month, context.chargeable_from)
@@ -71,70 +154,94 @@ class InvoiceService:
                     return "waiting", invoice.id
                 return "skipped", None
 
+            gap = self._uncovered(db, context, start, end, invoice)
+            if gap is None:
+                if invoice is not None:
+                    invoice.blocked_reason = "PERIOD_ALREADY_COVERED"
+                    return "waiting", invoice.id
+                return "skipped", None
             if invoice is None:
-                invoice = m.Invoice(
-                    id=uuid4(), invoice_code=f"INV-{month:%Y%m}-{contract_id.hex}-{uuid4().hex[:8]}",
-                    contract_id=contract_id, room_id=context.room_id, invoice_type="PERIODIC",
-                    billing_month=month, status="DRAFT", total_amount=0,
-                    period_start=start, period_end=end, due_date=following_month.replace(day=5),
-                    tenant_name_snapshot=context.tenant_name, tenant_email_snapshot=context.tenant_email,
-                    room_code_snapshot=context.room_code,
-                )
+                invoice = self._draft(context, *gap, month=month)
                 db.add(invoice)
-            else:
-                invoice.room_id = context.room_id
-                invoice.period_start, invoice.period_end = start, end
-                invoice.tenant_name_snapshot = context.tenant_name
-                invoice.tenant_email_snapshot = context.tenant_email
-                invoice.room_code_snapshot = context.room_code
+            return self._prepare(db, invoice, context, *gap, correlation_id)
 
-            blocked = None
-            if not context.tenant_email:
-                blocked = "MISSING_RECIPIENT_EMAIL"
-            else:
-                try:
-                    result = self._calculate(context, start, end)
-                except MissingCutoff:
-                    blocked = "PENDING_CUTOFF"
-                except DependencyUnavailable:
-                    blocked = "DEPENDENCY_UNAVAILABLE"
-                except CalculationError as exc:
-                    blocked = exc.code
-                except ValidationError:
-                    blocked = "INVALID_BILLING_DATA"
+    def final(self, contract_id, *, expected_id=None):
+        with self.sessions.begin() as db:
+            repo.lock_contract(db, contract_id)
+            invoice = repo.final_invoice(db, contract_id)
+            if expected_id is not None and (invoice is None or invoice.id != expected_id):
+                raise InvoiceConflict("Invoice is no longer the current final invoice")
+            if invoice is not None and invoice.status != "DRAFT":
+                return "skipped", invoice.id
+            context = self.clients.context(contract_id)
+            if context.contract_status != "ENDED" or context.chargeable_from >= context.chargeable_to_exclusive:
+                raise InvoiceConflict("A final invoice requires an ended contract")
+            gap = self._uncovered(db, context, context.chargeable_from, context.chargeable_to_exclusive, invoice)
+            if gap is None:
+                raise InvoiceConflict("The whole contract period is already covered")
+            if invoice is None:
+                invoice = self._draft(context, *gap)
+                db.add(invoice)
+            return self._prepare(db, invoice, context, *gap)
+
+    @staticmethod
+    def _locked_invoice(db, invoice_id):
+        contract_id = db.scalar(select(m.Invoice.contract_id).where(m.Invoice.id == invoice_id))
+        if contract_id is None:
+            raise LinkDenied(404, "INVOICE_NOT_FOUND")
+        repo.lock_contract(db, contract_id)
+        return db.get(m.Invoice, invoice_id, with_for_update=True)
+
+    @staticmethod
+    def _check_voidable(db, invoice):
+        if invoice.status == "PAID" or repo.payment_attempt(db, invoice.id, status="PENDING"):
+            raise LinkDenied(409, "INVOICE_HAS_PAYMENT")
+
+    @staticmethod
+    def _void(db, invoice, reason):
+        now = datetime.now(timezone.utc)
+        invoice.status = "VOID"
+        invoice.void_reason = reason
+        invoice.voided_at = now
+        repo.revoke_invoice_tokens(db, invoice.id, now)
+
+    def void(self, invoice_id, reason):
+        with self.sessions.begin() as db:
+            invoice = self._locked_invoice(db, invoice_id)
+            if invoice.status != "VOID":
+                self._check_voidable(db, invoice)
+                self._void(db, invoice, reason)
+        return invoice_id
+
+    def reissue(self, invoice_id, reason):
+        with self.sessions.begin() as db:
+            original = self._locked_invoice(db, invoice_id)
+            existing = db.scalar(select(m.Invoice.id).where(m.Invoice.replaces_invoice_id == original.id))
+            if existing is not None:
+                return existing
+            if original.status != "ISSUED":
+                raise LinkDenied(409, "INVOICE_NOT_REISSUABLE")
+            self._check_voidable(db, original)
+            context = self.clients.context(original.contract_id)
+            if (context.contract_status not in BILLABLE_STATUSES
+                    or (original.invoice_type == "FINAL" and context.contract_status != "ENDED")
+                    or original.period_start < context.chargeable_from
+                    or original.period_end > context.chargeable_to_exclusive):
+                raise LinkDenied(409, "INVOICE_PERIOD_CHANGED")
+            replacement = self._draft(context, original.period_start, original.period_end,
+                                      month=original.billing_month if original.invoice_type == "PERIODIC" else None)
+            self._snapshot(replacement, context, original.period_start, original.period_end)
+            replacement.revision = original.revision + 1
+            replacement.replaces_invoice_id = original.id
+            result, blocked = self._calculate_for_issue(replacement, context)
             if blocked:
-                invoice.blocked_reason = blocked
-                return "waiting", invoice.id
+                raise LinkDenied(503 if blocked == "DEPENDENCY_UNAVAILABLE" else 422, blocked)
 
-            now = datetime.now(timezone.utc)
-            for old_item in invoice.items:
-                db.delete(old_item)
-            invoice.items = [m.InvoiceItem(**line.model_dump()) for line in result.items]
-            invoice.status = "ISSUED"
-            invoice.blocked_reason = None
-            invoice.total_amount = result.total_amount
-            invoice.issued_at = now
-            invoice.due_date = now.astimezone(VN).date().replace(day=5)
-            event_id = uuid4()
-            trace = correlation_id or event_id
-            db.add(m.OutboxEvent(
-                id=event_id, aggregate_type="Invoice", aggregate_id=invoice.id,
-                event_type="InvoiceIssued", event_version=1,
-                correlation_id=trace, dedupe_key=f"invoice.issued.v1:{invoice.id}",
-                payload={
-                    "event_id": str(event_id), "event_type": "InvoiceIssued", "event_version": 1,
-                    "occurred_at": now.isoformat(), "correlation_id": str(trace),
-                    "aggregate_id": str(invoice.id),
-                    "data": {
-                        "invoice_id": str(invoice.id), "contract_id": str(contract_id),
-                        "invoice_code": invoice.invoice_code, "recipient_email": context.tenant_email,
-                        "tenant_name": context.tenant_name, "room_code": context.room_code,
-                        "total_amount": invoice.total_amount, "due_date": invoice.due_date.isoformat(),
-                        "period_start": start.isoformat(), "period_end_exclusive": end.isoformat(),
-                    },
-                },
-            ))
-            return "issued", invoice.id
+            self._void(db, original, reason)
+            db.flush()  # Release the old live period before inserting the replacement.
+            db.add(replacement)
+            self._issue(db, replacement, result)
+        return replacement.id
 
     def enqueue_month(self, month: date, trigger: str, key: str | None = None):
         if month.day != 1 or month >= datetime.now(VN).date().replace(day=1):
@@ -167,7 +274,7 @@ class InvoiceService:
                 try:
                     outcome, _ = self.process(contract_id, month, correlation_id=run_id)
                     counts[outcome] += 1
-                except (DependencyUnavailable, IntegrityError):
+                except (DependencyUnavailable, IntegrityError, InvoiceConflict):
                     counts["failed"] += 1
             completed = counts["failed"] == 0
         except DependencyUnavailable:
