@@ -44,7 +44,7 @@ try {
         $path = Join-Path $root $entry.Value
         $mount = "${path}:/checkout:ro"
         $requirements = "$(Join-Path $root 'requirements-test.txt'):/requirements-test.txt:ro"
-        $testCommand = 'python -m pip install -q -r /requirements-test.txt && cd /checkout && PYTHONDONTWRITEBYTECODE=1 python -m pytest -q -p no:cacheprovider tests'
+        $testCommand = 'python -m pip install -q -r /requirements-test.txt && cd /checkout && PYTHONDONTWRITEBYTECODE=1 python -m pytest -q -p no:cacheprovider --ignore=tests/integration tests'
         Invoke-UnitCompose run --rm --no-deps --build --volume $mount --volume $requirements $entry.Key sh -ec $testCommand
     }
 
@@ -58,6 +58,6 @@ try {
 
     Write-Host 'Local test suite passed.' -ForegroundColor Green
 } finally {
-    & docker compose @composeArgs --profile simulator down --remove-orphans
+    & docker compose @composeArgs --profile simulator down --remove-orphans --rmi local
     Pop-Location
 }

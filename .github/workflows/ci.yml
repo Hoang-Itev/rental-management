@@ -77,6 +77,7 @@ jobs:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: |
+            requirements-test.txt
             backend/auth/requirements.txt
             backend/services/*/requirements.txt
       - name: Install backend test dependencies
@@ -85,26 +86,23 @@ jobs:
           if [[ "${{ matrix.service }}" == "auth" ]]; then path="backend/auth"; else path="backend/services/${{ matrix.service }}"; fi
           python -m pip install -r requirements-test.txt
           python -m pip install -r "$path/requirements.txt"
-      - name: Run actual service tests when implemented
+      - name: Run service unit tests with coverage
         shell: bash
+        env:
+          SERVICE: ${{ matrix.service }}
         run: |
           set -euo pipefail
-          if [[ "${{ matrix.service }}" == "auth" ]]; then path="backend/auth"; else path="backend/services/${{ matrix.service }}"; fi
-          cd "$path"
-          if grep -r -E -q '^[[:space:]]*(async[[:space:]]+)?def[[:space:]]+test_' tests --include='test_*.py'; then
-            if [[ "${{ matrix.service }}" == "auth" || "${{ matrix.service }}" == "room" ]]; then
-              python -m pytest tests --ignore=tests/integration -q --cov=app --cov-report=term-missing --cov-fail-under=95
-            elif [[ "${{ matrix.service }}" == "billing" ]]; then
-              python -m pytest tests --ignore=tests/integration -q --cov=app.calculator --cov-report=term-missing --cov-fail-under=80
-            elif grep -E -q '^[[:space:]]*(async[[:space:]]+)?def[[:space:]]+test_' tests/test_service.py; then
-              python -m pytest tests --ignore=tests/integration -q --cov=app.service --cov-report=term-missing --cov-fail-under=80
-            else
-              python -m pytest tests --ignore=tests/integration -q
-              echo 'No service-level unit tests yet; 80% business logic gate not activated.'
-            fi
-          else
-            echo 'NO SERVICE TESTS YET for ${{ matrix.service }}; this is not proof of unit coverage.'
-          fi
+          case "$SERVICE" in
+            auth) cd backend/auth ;;
+            *) cd "backend/services/$SERVICE" ;;
+          esac
+          case "$SERVICE" in
+            auth|room) target=app; minimum=95 ;;
+            billing) target=app.calculator; minimum=80 ;;
+            *) target=app.service; minimum=80 ;;
+          esac
+          python -m pytest tests --ignore=tests/integration -q \
+            --cov="$target" --cov-report=term-missing --cov-fail-under="$minimum"
 
   database-and-seed:
     runs-on: ubuntu-latest
@@ -224,7 +222,9 @@ jobs:
           docker compose -f compose.yaml -f compose.workers.yaml config --quiet
           docker compose -f compose.yaml -f compose.workers.yaml -f compose.prod.yaml config --quiet
       - name: Boot the complete stack from new Docker volumes
-        run: docker compose -f compose.yaml -f compose.workers.yaml up -d --build
+        run: |
+          docker compose -f compose.yaml build auth room tenant metering billing notification nginx
+          docker compose -f compose.yaml -f compose.workers.yaml up -d --wait --wait-timeout 240
       - name: Inspect one-shot jobs, healthy apps, broker and Gateway
         shell: pwsh
         run: ./scripts/smoke_test.ps1 -Runtime -TimeoutSeconds 240

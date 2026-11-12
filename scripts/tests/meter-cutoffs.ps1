@@ -38,7 +38,7 @@ try {
   throw
 } finally {
   Write-Host "Cleaning ONLY disposable P07 project: $project" -ForegroundColor Yellow
-  & docker compose @files down -v --remove-orphans | Out-Host
+  & docker compose @files down -v --remove-orphans --rmi local | Out-Host
   Remove-Item Env:P07_PROJECT_NAME -ErrorAction SilentlyContinue
   Pop-Location
 }

@@ -32,6 +32,8 @@ docker compose -f compose.yaml up -d --wait postgres rabbitmq mailpit
 docker compose -f compose.yaml build auth room tenant metering billing notification nginx
 ```
 
+Build thường dùng lại cache. Để chạy lại từng bước Dockerfile mà vẫn giữ database, thêm `--no-cache` sau `build`. Lệnh xóa image ở bước 1 và build cache là hai việc riêng.
+
 ### Migration, cấu hình RabbitMQ và API
 
 ```powershell
@@ -70,6 +72,8 @@ docker compose -f compose.yaml -f compose.workers.yaml up -d --wait
 docker compose -f compose.yaml -f compose.workers.yaml ps -a
 docker compose -f compose.yaml -f compose.workers.yaml images
 ```
+
+Nếu vừa build lại một API sau khi đã bật worker, chạy lại lệnh `up` với **cả hai file** để Compose cập nhật cả API lẫn các worker dùng chung image. Chỉ chạy `up` với file chính có thể để worker tiếp tục dùng image cũ.
 
 Đây là cùng project `rental-management`. Docker Compose đọc file chính rồi bổ sung các tiến trình chạy nền. Dùng cả hai file khi quản lý stack đầy đủ. Để thử MQTT mô phỏng, chạy thêm:
 

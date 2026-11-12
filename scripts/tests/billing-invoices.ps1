@@ -19,7 +19,7 @@ try {
         Invoke-P09Compose up -d --build --wait --wait-timeout 180 tenant metering billing
         Invoke-P09Compose run --rm --no-deps billing sh -ec 'python -m pip install -q -r /p09/requirements-test.txt && PYTHONPATH=/app python -m pytest -q /app/tests /p09/integration/test_contract_billing.py'
     } finally {
-        Invoke-P09Compose down -v --remove-orphans
+        Invoke-P09Compose down -v --remove-orphans --rmi local
     }
 } finally {
     Pop-Location

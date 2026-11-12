@@ -18,7 +18,7 @@ try {
         Invoke-P10Compose up -d --build --wait --wait-timeout 240 nginx mailpit billing-outbox
         Invoke-P10Compose run --rm --no-deps notification sh -ec 'python -m pip install -q -r /p10/requirements-test.txt && PYTHONPATH=/app python -m pytest -q /app/tests /p10/integration/test_outbox_and_events.py'
     } finally {
-        Invoke-P10Compose down -v --remove-orphans
+        Invoke-P10Compose down -v --remove-orphans --rmi local
     }
 } finally {
     Pop-Location

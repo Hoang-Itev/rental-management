@@ -21,6 +21,6 @@ try {
 } finally {
   # Project is random, prefixed p02test, never the default rental-management project.
   Write-Host "Cleaning ONLY isolated test project: $project" -ForegroundColor Yellow
-  & docker compose -p $project -f compose.yaml down -v --remove-orphans | Out-Host
+  & docker compose -p $project -f compose.yaml down -v --remove-orphans --rmi local | Out-Host
   Pop-Location
 }

@@ -30,6 +30,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test_local.ps1
 
 Thêm `-UnitOnly` khi chỉ cần unit test. Các suite riêng nằm ở `scripts/tests/`, ví dụ `scripts/tests/billing-invoices.ps1`. Các kiểm tra HTTP qua gateway nằm ở `scripts/tests/gateway/`.
 
+Unit/API test nằm trong từng service. Test tích hợp với PostgreSQL hoặc broker của một service nằm cạnh service đó. Luồng đi qua nhiều service nằm trong `tests/integration/`. Chạy theo suite để mỗi service có Python import và cấu hình test riêng. Các suite Docker cô lập dọn container, volume và image tự đặt tên của project test khi kết thúc.
+
 GitHub Actions dùng một workflow `.github/workflows/ci.yml` cho kiểm tra tĩnh, unit test, migration, smoke và integration. Các suite nghiệp vụ chạy ở job riêng để nhìn thấy suite nào lỗi ngay trên PR.
 
 ## Cloud sau này
