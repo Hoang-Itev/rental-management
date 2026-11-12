@@ -8,7 +8,7 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 
 function Invoke-LocalCompose {
-    & docker compose -f compose.yaml @args
+    & docker compose -f compose.yaml -f compose.workers.yaml @args
     if ($LASTEXITCODE -ne 0) { throw "Docker Compose failed (exit $LASTEXITCODE)." }
 }
 

@@ -11,7 +11,7 @@ Khi MoMo timeout, phiên giữ PENDING. Scheduler đối soát mặc định m�
 Đặt `MOMO_PARTNER_CODE`, `MOMO_ACCESS_KEY`, `MOMO_SECRET_KEY` bằng thông tin Sandbox trong `.env`. Đặt `MOMO_IPN_URL=https://<gateway>/webhooks/momo/ipn`. Gateway phải truy cập được từ phía MoMo. Nếu chạy local, dùng tunnel HTTPS tới Nginx hoặc chạy thử trên cloud. `PUBLIC_BASE_URL` là địa chỉ người dùng mở từ trình duyệt. Đặt nó thành origin HTTPS trên cloud. Giữ bí mật ngoài Git.
 
 ```powershell
-docker compose -f compose.yaml -f compose.p09.yaml -f compose.p10.yaml -f compose.p11.yaml up -d --build
+docker compose -f compose.yaml -f compose.workers.yaml up -d --build
 ```
 
 Giữ thêm các overlay Tenant/Metering nếu bạn demo từ đầu quy trình. Mở email P10 trong Mailpit, copy link hóa đơn, rồi dùng PowerShell:
@@ -25,6 +25,6 @@ if ($payment.pay_url) { Start-Process $payment.pay_url }
 
 Dùng thông tin thẻ thử do MoMo Sandbox cung cấp trên trang thanh toán. Sau khi hoàn tất, mở lại link trong email để xem `PAID`. Mailpit sẽ nhận email biên nhận nếu Notification đang chạy.
 
-`scripts/test_p11.ps1` dùng PostgreSQL và RabbitMQ riêng, thay HTTP MoMo bằng fixture có chữ ký kiểm tra độc lập. Nó kiểm tra sai chữ ký/số tiền, callback trùng đồng thời, timeout, đối soát và routing event. Chạy demo với tài khoản Sandbox thật để xác nhận cấu hình IPN bên ngoài.
+`scripts/tests/momo-payments.ps1` dùng PostgreSQL và RabbitMQ riêng, thay HTTP MoMo bằng fixture có chữ ký kiểm tra độc lập. Nó kiểm tra sai chữ ký/số tiền, callback trùng đồng thời, timeout, đối soát và routing event. Chạy demo với tài khoản Sandbox thật để xác nhận cấu hình IPN bên ngoài.
 
 [Tài liệu MoMo ATM](https://developers.momo.vn/v3/vi/docs/payment/api/atm/onetime/) · [IPN](https://developers.momo.vn/v3/vi/docs/payment/api/result-handling/notification/) · [Đối soát](https://developers.momo.vn/v3/vi/docs/payment/api/payment-api/query/)

@@ -8,10 +8,10 @@ Tenant quét các hợp đồng ACTIVE còn từ 0 đến 7 ngày, theo giờ Vi
 
 ## Chạy demo
 
-Giữ các overlay đang dùng và thêm `-f compose.p12.yaml`. P12 dùng `tenant-scheduler` và `tenant-outbox` của P05, `billing-scheduler` và `billing-outbox` của P09, cùng `notification-worker` của P10. Giữ overlay P11 khi demo thanh toán. Đặt `OWNER_EMAIL` đúng hộp thư chủ trọ. Local dùng Mailpit, còn cloud dùng cấu hình SMTP của P10.
+Stack mặc định đã bật Tenant, Billing và Notification worker. Đặt `OWNER_EMAIL` theo môi trường.
 
 ```powershell
-docker compose -f compose.yaml -f compose.p03.yaml -f compose.p05.yaml -f compose.p09.yaml -f compose.p10.yaml -f compose.p11.yaml -f compose.p12.yaml up -d --build
+docker compose -f compose.yaml -f compose.workers.yaml up -d --build
 ```
 
-Nếu demo đồng hồ và cutoff, giữ thêm các overlay P06 và P07 đang dùng. Chạy `scripts/test_p12.ps1` để kiểm tra bằng PostgreSQL, RabbitMQ và Mailpit trong project Compose riêng. Test chạy lại scheduler, phát lại cùng event, kiểm tra Billing tạm mất kết nối và cả hai thứ tự đến của event thanh toán và reminder.
+Nếu demo đồng hồ và cutoff, giữ thêm các overlay P06 và P07 đang dùng. Chạy `scripts/tests/notification-rules.ps1` để kiểm tra bằng PostgreSQL, RabbitMQ và Mailpit trong project Compose riêng. Test chạy lại scheduler, phát lại cùng event, kiểm tra Billing tạm mất kết nối và cả hai thứ tự đến của event thanh toán và reminder.

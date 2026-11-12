@@ -39,8 +39,7 @@ try {
   }
 
   Write-Host 'Verifying the services included in this seed run...' -ForegroundColor Cyan
-  & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'verify_seed_demo.ps1') -ProjectRoot $ProjectRoot -SkipAuth:$SkipAuth
-  if ($LASTEXITCODE -ne 0) { throw 'Seed verification failed.' }
+  & (Join-Path $PSScriptRoot 'verify_seed_demo.ps1') -ProjectRoot $ProjectRoot -SkipAuth:$SkipAuth
   Write-Host 'SEED OK. Running it again does not duplicate deterministic rows.' -ForegroundColor Green
 } finally {
   Remove-Item Env:SEED_OWNER_PASSWORD -ErrorAction SilentlyContinue

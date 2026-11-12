@@ -8,14 +8,14 @@ Khi SMTP hoặc Billing tạm lỗi, job chờ retry theo cấp số nhân. Mặ
 
 ## Local và cloud
 
-Thêm `-f compose.p10.yaml` sau `compose.p09.yaml` và các overlay đang dùng. Để demo tối thiểu với các service của P09 và Mailpit:
+Stack mặc định đã bật Billing và Notification worker cùng Mailpit.
 
 ```powershell
-docker compose -f compose.yaml -f compose.p09.yaml -f compose.p10.yaml up -d --build
+docker compose -f compose.yaml -f compose.workers.yaml up -d --build
 ```
 
 Mailpit UI mặc định ở `http://localhost:8025`. URL trong email mặc định bắt đầu bằng `http://localhost:8080`. Chỉnh `PUBLIC_BASE_URL` nếu trình duyệt truy cập gateway qua host hoặc port khác. Đặt `PUBLIC_BASE_URL` thành origin HTTPS của gateway khi triển khai cloud. Cấu hình `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURITY` (`starttls` hoặc `tls`), `SMTP_FROM` và credential SMTP theo môi trường. Cùng một image ứng dụng dùng được cho cả hai môi trường.
 
 ## Kiểm thử
 
-`scripts/test_p10.ps1` khởi tạo project Compose tạm với PostgreSQL, RabbitMQ, Billing outbox publisher, Notification, Nginx và Mailpit. Ca integration khởi chạy worker với một cổng SMTP lỗi, kiểm tra lịch retry rồi chạy lại worker với Mailpit. Sau khi nhận email, test mở URL qua Nginx và kiểm tra hết hạn. Script xóa container, mạng và volume của project test.
+`scripts/tests/invoice-email.ps1` khởi tạo project Compose tạm với PostgreSQL, RabbitMQ, Billing outbox publisher, Notification, Nginx và Mailpit. Ca integration khởi chạy worker với một cổng SMTP lỗi, kiểm tra lịch retry rồi chạy lại worker với Mailpit. Sau khi nhận email, test mở URL qua Nginx và kiểm tra hết hạn. Script xóa container, mạng và volume của project test.
