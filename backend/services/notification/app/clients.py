@@ -60,6 +60,35 @@ class BillingClient:
             raise DeliveryFailure("Billing reminder eligibility unavailable") from exc
 
 
+class ContractNoLongerExpiring(Exception):
+    pass
+
+
+class TenantClient:
+    def __init__(self, http, settings):
+        self.http = http
+        self.settings = settings
+
+    def check_expiry(self, data):
+        base = str(self.settings.tenant_url).rstrip("/")
+        contract_id, end_date = data["contract_id"], data["end_date"]
+        try:
+            response = self.http.get(
+                f"{base}/internal/v1/contracts/{contract_id}/expiry-notification-eligibility",
+                params={"end_date": end_date},
+                headers={"X-Service-Token": self.settings.service_token.get_secret_value()},
+            )
+            response.raise_for_status()
+            result = response.json()
+            if (result["contract_id"] != contract_id or result["end_date"] != end_date
+                    or type(result["eligible"]) is not bool):
+                raise ValueError("Invalid contract expiry eligibility")
+        except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
+            raise DeliveryFailure("Tenant expiry eligibility unavailable") from exc
+        if not result["eligible"]:
+            raise ContractNoLongerExpiring
+
+
 class SmtpClient:
     def __init__(self, settings):
         self.settings = settings

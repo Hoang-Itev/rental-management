@@ -5,7 +5,7 @@ import os
 import aio_pika
 import httpx
 
-from app.clients import BillingClient, SmtpClient
+from app.clients import BillingClient, SmtpClient, TenantClient
 from app.config import get_settings
 from app.db import get_sessionmaker
 from app.messaging import QUEUE, handle_delivery
@@ -33,9 +33,10 @@ async def consume(sessions, settings):
 async def dispatch(sessions, settings):
     with httpx.Client(timeout=settings.notification_timeout_seconds, trust_env=False) as http:
         billing, smtp = BillingClient(http, settings), SmtpClient(settings)
+        tenant = TenantClient(http, settings)
         while True:
             try:
-                if await asyncio.to_thread(send_next, sessions, billing, smtp, settings):
+                if await asyncio.to_thread(send_next, sessions, billing, smtp, settings, tenant=tenant):
                     continue
             except Exception as exc:
                 logger.warning("Notification dispatcher failed (%s)", type(exc).__name__)

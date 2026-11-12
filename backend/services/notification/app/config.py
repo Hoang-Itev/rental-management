@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     billing_url: AnyHttpUrl = "http://billing:8000"
+    tenant_url: AnyHttpUrl = "http://tenant:8000"
     service_token: SecretStr = Field(min_length=24)
     owner_email: str = Field(default="owner@example.com", max_length=254, pattern=r"^[^\s@<>,;]+@[^\s@<>,;]+$")
     smtp_host: str = "mailpit"

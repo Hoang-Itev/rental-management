@@ -16,7 +16,7 @@ import aio_pika
 import httpx
 from sqlalchemy import create_engine, select, text
 
-from app.clients import BillingClient, SmtpClient
+from app.clients import BillingClient, SmtpClient, TenantClient
 from app.config import get_settings
 from app.db import get_sessionmaker
 from app.messaging import handle_delivery
@@ -123,6 +123,7 @@ def test_reminder_rules_and_owner_mail():
     try:
         invoices = seed_invoices(billing_db, today)
         contract_id = seed_contract(tenant_db, today)
+        renewed_id = seed_contract(tenant_db, today)
         for _ in range(2):
             enqueue_from_service("billing", billing_url, ("app.reminders", "enqueue_daily_reminders"), now)
             enqueue_from_service("tenant", tenant_url, ("app.scheduler", "enqueue_expiring_contracts"), now)
@@ -132,9 +133,13 @@ def test_reminder_rules_and_owner_mail():
             db.execute(text("UPDATE invoices SET status='PAID', paid_at=now() WHERE id=:id"),
                        {"id": invoices["paid_late"]})
 
-        received = asyncio.run(deliver_events(sessions, settings, expected=4))
+        with tenant_db.begin() as db:
+            db.execute(text("UPDATE contracts SET end_date = end_date + 30 WHERE id=:id"),
+                       {"id": renewed_id})
+
+        received = asyncio.run(deliver_events(sessions, settings, expected=5))
         assert {event["aggregate_id"] for event in received} == {
-            *(str(invoices[name]) for name in ("outstanding", "void_late", "paid_late")), str(contract_id),
+            *(str(invoices[name]) for name in ("outstanding", "void_late", "paid_late")), str(contract_id), str(renewed_id),
         }
 
         def status(invoice_id):
@@ -145,12 +150,14 @@ def test_reminder_rules_and_owner_mail():
             raise httpx.ConnectError("Billing test outage", request=request)
 
         smtp = SmtpClient(settings)
-        with httpx.Client(transport=httpx.MockTransport(unavailable)) as http:
+        with httpx.Client(transport=httpx.MockTransport(unavailable)) as http, \
+                httpx.Client(timeout=8, trust_env=False) as tenant_http:
             billing = BillingClient(http, settings)
             # Each of the three reminders checks Billing and defers, while owner mail sends.
             now_retry = datetime.now(timezone.utc)
-            for _ in range(4):
-                assert send_next(sessions, billing, smtp, settings, clock=lambda: now_retry + timedelta(seconds=1))
+            tenant = TenantClient(tenant_http, settings)
+            for _ in range(5):
+                assert send_next(sessions, billing, smtp, settings, tenant=tenant, clock=lambda: now_retry + timedelta(seconds=1))
         for name in ("outstanding", "void_late", "paid_late"):
             job = status(invoices[name])
             assert job.status == "PENDING" and job.attempt_count == 1 and job.next_attempt_at
@@ -160,8 +167,9 @@ def test_reminder_rules_and_owner_mail():
 
         with httpx.Client(timeout=8, trust_env=False) as http:
             billing = BillingClient(http, settings)
-            assert all(send_next(sessions, billing, smtp, settings) for _ in range(3))
-            assert not send_next(sessions, billing, smtp, settings)
+            tenant = TenantClient(http, settings)
+            assert all(send_next(sessions, billing, smtp, settings, tenant=tenant) for _ in range(3))
+            assert not send_next(sessions, billing, smtp, settings, tenant=tenant)
             assert status(invoices["paid_late"]).last_error == "ALREADY_PAID"
             assert status(invoices["void_late"]).last_error == "VOID"
             assert status(invoices["outstanding"]).status == "SENT"
@@ -173,8 +181,10 @@ def test_reminder_rules_and_owner_mail():
             assert settings.owner_email in json.dumps(owner_mail["To"])
         with sessions() as db:
             jobs = db.scalars(select(EmailJob)).all()
-            assert len(jobs) == 4
-            assert sum(job.status == "SKIPPED" for job in jobs) == 2
+            assert len(jobs) == 5
+            renewed = next(job for job in jobs if job.template_data.get("contract_id") == str(renewed_id))
+            assert renewed.last_error == "CONTRACT_NO_LONGER_EXPIRING"
+            assert sum(job.status == "SKIPPED" for job in jobs) == 3
 
         # Exercise both event orders on the shared Notification queue.
         invoice_id = invoices["outstanding"]
@@ -196,11 +206,12 @@ def test_reminder_rules_and_owner_mail():
             for event in (before, after):
                 assert jobs[event["event_id"]].status == "SKIPPED"
             assert jobs[paid["event_id"]].status == "PENDING"
-            assert len(jobs) == 7
+            assert len(jobs) == 8
         with httpx.Client(timeout=8, trust_env=False) as http:
             billing = BillingClient(http, settings)
-            assert send_next(sessions, billing, smtp, settings)
-            assert not send_next(sessions, billing, smtp, settings)
+            tenant = TenantClient(http, settings)
+            assert send_next(sessions, billing, smtp, settings, tenant=tenant)
+            assert not send_next(sessions, billing, smtp, settings, tenant=tenant)
             mailbox = http.get("http://mailpit:8025/api/v1/messages").raise_for_status().json()
             assert mailbox["total"] == 3
             assert sum(message["Subject"] == "Biên nhận outstanding" for message in mailbox["messages"]) == 1

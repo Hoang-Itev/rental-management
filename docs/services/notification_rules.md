@@ -4,7 +4,7 @@ Billing quét từ 09:00 theo giờ Việt Nam và tạo tối đa một event n
 
 Trước khi gửi, Notification hỏi Billing về tình trạng hóa đơn và xin link mới từ event nhắc nợ. Nếu Billing không phản hồi, job retry theo backoff. Nếu hóa đơn đã PAID, VOID hoặc không còn đủ điều kiện, job chuyển SKIPPED. Khi nhận PaymentSucceeded, Notification tạo job biên nhận và bỏ qua các reminder đang chờ. Reminder đến sau PaymentSucceeded cũng chuyển SKIPPED. Trạng thái được kiểm tra trước SMTP. Nếu trạng thái đổi sau khi SMTP đã nhận thư, thư đã gửi vẫn có thể đến hộp thư.
 
-Tenant quét các hợp đồng ACTIVE còn từ 0 đến 7 ngày, theo giờ Việt Nam, từ 09:00. Mỗi hợp đồng có tối đa một cảnh báo cho từng ngày kết thúc đã ghi. Nếu chủ trọ gia hạn, kỳ kết thúc mới có thể phát cảnh báo riêng khi đến gần hạn. Notification gửi cảnh báo tới `OWNER_EMAIL`.
+Tenant quét các hợp đồng ACTIVE còn từ 0 đến 7 ngày, theo giờ Việt Nam, từ 09:00. Mỗi hợp đồng có tối đa một cảnh báo cho từng ngày kết thúc đã ghi. Nếu chủ trọ gia hạn, kỳ kết thúc mới có thể phát cảnh báo riêng khi đến gần hạn. Notification hỏi lại Tenant trước khi gửi đến `OWNER_EMAIL`. Nếu hợp đồng đã gia hạn, chấm dứt hoặc đã qua ngày hết hạn, bỏ qua cảnh báo cũ. Nếu Tenant mất kết nối, job chờ retry.
 
 ## Chạy demo
 

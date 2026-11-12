@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from app import repository as repo
-from app.clients import DeliveryFailure, InvoiceNotIssued
+from app.clients import ContractNoLongerExpiring, DeliveryFailure, InvoiceNotIssued
 
 
 def record_invoice_event(sessions, event):
@@ -65,7 +65,7 @@ def invoice_body(data, link):
     )
 
 
-def send_next(sessions, billing, smtp, settings, *, clock=lambda: datetime.now(timezone.utc)):
+def send_next(sessions, billing, smtp, settings, *, tenant, clock=lambda: datetime.now(timezone.utc)):
     # Keep the row lock through bounded I/O. If the worker dies the transaction
     # rolls back. SMTP itself cannot guarantee exactly-once after acceptance.
     with sessions.begin() as db:
@@ -78,6 +78,7 @@ def send_next(sessions, billing, smtp, settings, *, clock=lambda: datetime.now(t
             if job.email_type == "PAYMENT_RECEIPT":
                 body = receipt_body(job.template_data)
             elif job.email_type == "CONTRACT_EXPIRING":
+                tenant.check_expiry(job.template_data)
                 body = expiry_body(job.template_data)
             elif job.email_type == "REMINDER":
                 billing.check_reminder(job)
@@ -85,6 +86,9 @@ def send_next(sessions, billing, smtp, settings, *, clock=lambda: datetime.now(t
             else:
                 body = invoice_body(job.template_data, billing.access_link(job))
             job.provider_message_id = smtp.send(job, body)
+        except ContractNoLongerExpiring:
+            job.status = "SKIPPED"
+            job.last_error = "CONTRACT_NO_LONGER_EXPIRING"
         except InvoiceNotIssued as exc:
             job.status = "SKIPPED"
             job.last_error = exc.reason

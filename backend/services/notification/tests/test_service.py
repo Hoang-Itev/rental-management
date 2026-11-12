@@ -7,7 +7,7 @@ from uuid import uuid4
 import pytest
 
 from app import repository
-from app.clients import DeliveryFailure, InvoiceNotIssued
+from app.clients import ContractNoLongerExpiring, DeliveryFailure, InvoiceNotIssued
 from app.service import record_invoice_event, reset_failed_job, send_next
 
 NOW = datetime(2026, 11, 12, tzinfo=timezone.utc)
@@ -29,7 +29,13 @@ def delivery(monkeypatch):
     smtp.send.return_value = "message-id"
     settings = SimpleNamespace(notification_retry_seconds=30, notification_max_attempts=2)
     sessions = SimpleNamespace(begin=lambda: nullcontext("db"))
-    return job, billing, smtp, lambda: send_next(sessions, billing, smtp, settings, clock=lambda: NOW)
+    tenant = Mock()
+
+    def send():
+        return send_next(sessions, billing, smtp, settings, tenant=tenant, clock=lambda: NOW)
+
+    send.tenant = tenant
+    return job, billing, smtp, send
 
 
 def test_sends_invoice(delivery):
@@ -122,3 +128,21 @@ def test_expiring_contract_email_does_not_call_billing(delivery):
     assert send() and job.status == "SENT"
     assert "2026-11-19" in smtp.send.call_args.args[1]
     assert not billing.mock_calls
+
+
+def test_stale_contract_expiry_is_skipped(delivery):
+    job, _, smtp, send = delivery
+    job.email_type = "CONTRACT_EXPIRING"
+    send.tenant.check_expiry.side_effect = ContractNoLongerExpiring
+    assert send() and job.status == "SKIPPED"
+    assert job.last_error == "CONTRACT_NO_LONGER_EXPIRING"
+    smtp.send.assert_not_called()
+
+
+def test_contract_expiry_retries_if_tenant_is_unavailable(delivery):
+    job, _, smtp, send = delivery
+    job.email_type = "CONTRACT_EXPIRING"
+    send.tenant.check_expiry.side_effect = DeliveryFailure("Tenant expiry eligibility unavailable")
+    assert send() and job.status == "PENDING"
+    assert job.next_attempt_at == NOW + timedelta(seconds=30)
+    smtp.send.assert_not_called()
