@@ -1,7 +1,7 @@
 """Consume durable billing jobs and retry waiting invoices."""
 import logging
 from datetime import datetime, timedelta
-from threading import Event
+from threading import Event, Thread
 import signal
 
 import httpx
@@ -12,6 +12,9 @@ from app.clients import BillingClients, DependencyUnavailable
 from app.config import get_settings
 from app.db import get_engine, get_sessionmaker
 from app.models import BillingRun, Invoice
+from app.momo import MomoClient
+from app.payment import PaymentService
+from app.schemas import ReconcilePayments
 from app.service import InvoiceConflict, InvoiceService, VN
 
 logger = logging.getLogger("billing.scheduler")
@@ -61,11 +64,26 @@ def tick(engine, service, now):
                 raise
 
 
+def reconcile_loop(stop, settings):
+    with httpx.Client(timeout=settings.momo_timeout_seconds, trust_env=False) as http:
+        momo = MomoClient(http, settings)
+        if not momo.enabled:
+            return
+        service = PaymentService(get_sessionmaker(), momo)
+        while not stop.is_set():
+            try:
+                service.reconcile(ReconcilePayments())
+            except Exception:
+                logger.exception("MoMo reconciliation tick failed")
+            stop.wait(settings.momo_reconcile_seconds)
+
+
 def run():
     settings = get_settings()
     stop = Event()
     for sig in (signal.SIGTERM, signal.SIGINT):
         signal.signal(sig, lambda *_: stop.set())
+    Thread(target=reconcile_loop, args=(stop, settings), daemon=True).start()
     with httpx.Client(timeout=settings.billing_http_timeout_seconds, trust_env=False) as http:
         service = InvoiceService(get_sessionmaker(), BillingClients(http, settings))
         while not stop.is_set():

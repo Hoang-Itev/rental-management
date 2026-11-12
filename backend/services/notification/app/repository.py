@@ -4,11 +4,11 @@ from sqlalchemy.dialects.postgresql import insert
 from app.models import EmailJob
 
 
-def insert_once(db, event, subject):
+def insert_once(db, event, subject, *, email_type="INVOICE"):
     data = event.data
     statement = insert(EmailJob).values(
         source_event_id=event.event_id, invoice_id=data.invoice_id,
-        email_type="INVOICE", recipient_email=data.recipient_email, subject=subject,
+        email_type=email_type, recipient_email=data.recipient_email, subject=subject,
         template_data=data.model_dump(mode="json", exclude={"recipient_email"}),
     ).on_conflict_do_nothing(index_elements=[EmailJob.source_event_id])
     db.execute(statement)
@@ -16,7 +16,7 @@ def insert_once(db, event, subject):
 
 def claim_due(db, now):
     return db.scalar(select(EmailJob).where(
-        EmailJob.email_type == "INVOICE", EmailJob.status == "PENDING",
+        EmailJob.email_type.in_(("INVOICE", "PAYMENT_RECEIPT")), EmailJob.status == "PENDING",
         or_(EmailJob.next_attempt_at.is_(None), EmailJob.next_attempt_at <= now),
     ).order_by(EmailJob.created_at, EmailJob.id).limit(1).with_for_update(skip_locked=True))
 

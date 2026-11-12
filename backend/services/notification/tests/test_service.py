@@ -71,3 +71,22 @@ def test_event_uses_repository_transaction(monkeypatch):
     event = SimpleNamespace(data=SimpleNamespace(invoice_code="INV-1"))
     record_invoice_event(SimpleNamespace(begin=lambda: nullcontext("db")), event)
     insert.assert_called_once_with("db", event, "Hóa đơn INV-1")
+
+
+def test_payment_receipt_does_not_request_invoice_link(delivery):
+    job, billing, smtp, send = delivery
+    job.email_type = "PAYMENT_RECEIPT"
+    job.template_data.update(paid_amount=1000000, provider_transaction_id="1234")
+    assert send() and job.status == "SENT"
+    billing.access_link.assert_not_called()
+    assert "1234" in smtp.send.call_args.args[1]
+
+
+def test_payment_event_creates_receipt_job(monkeypatch):
+    from app.service import record_payment_event
+
+    insert = Mock()
+    monkeypatch.setattr(repository, "insert_once", insert)
+    event = SimpleNamespace(data=SimpleNamespace(invoice_code="INV-1"))
+    record_payment_event(SimpleNamespace(begin=lambda: nullcontext("db")), event)
+    insert.assert_called_once_with("db", event, "Biên nhận INV-1", email_type="PAYMENT_RECEIPT")

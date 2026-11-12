@@ -3,29 +3,34 @@ import logging
 
 from pydantic import ValidationError
 
-from app.schemas import InvoiceIssued
-from app.service import record_invoice_event
+from app.schemas import InvoiceIssued, PaymentSucceeded
+from app.service import record_invoice_event, record_payment_event
 
 QUEUE = "notification.events.q"
-ROUTING_KEY = "invoice.issued.v1"
+HANDLERS = {
+    "invoice.issued.v1": (InvoiceIssued, record_invoice_event),
+    "payment.succeeded.v1": (PaymentSucceeded, record_payment_event),
+}
 logger = logging.getLogger(__name__)
 
 
 async def handle_delivery(message, sessions):
-    if message.routing_key != ROUTING_KEY:
+    handler = HANDLERS.get(message.routing_key)
+    if handler is None:
         # Other event types on this shared queue belong to later phases.
         await message.ack()
         return
+    schema, record = handler
     try:
-        event = InvoiceIssued.model_validate_json(message.body)
+        event = schema.model_validate_json(message.body)
     except ValidationError:
-        logger.warning("Rejected invalid InvoiceIssued payload")
+        logger.warning("Rejected invalid notification event")
         await message.reject(requeue=False)
         return
     try:
-        await asyncio.to_thread(record_invoice_event, sessions, event)
+        await asyncio.to_thread(record, sessions, event)
     except Exception:
-        logger.warning("Could not persist InvoiceIssued, requeueing")
+        logger.warning("Could not persist notification event, requeueing")
         await asyncio.sleep(2)
         await message.nack(requeue=True)
         return

@@ -48,7 +48,7 @@ async def publish_pending(
                     row.attempts += 1
                     # Do not persist broker URL, credentials, or exception text.
                     row.last_error = "Publish failed: " + type(exc).__name__
-                    logger.warning("InvoiceIssued publish failed for outbox ID %s (%s)", row.id, type(exc).__name__)
+                    logger.warning("Billing event publish failed for outbox ID %s (%s)", row.id, type(exc).__name__)
                     return published, True
                 row.published_at = datetime.now(timezone.utc)
                 row.attempts += 1
@@ -82,9 +82,12 @@ class RabbitPublisher:
             delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
         )
         confirmation = await asyncio.wait_for(
-            self.exchange.publish(msg, routing_key="invoice.issued.v1", mandatory=True),
+            self.exchange.publish(msg, routing_key={
+                "InvoiceIssued": "invoice.issued.v1",
+                "PaymentSucceeded": "payment.succeeded.v1",
+            }[body["event_type"]], mandatory=True),
             timeout=10,
         )
         # publisher_confirms=True produces a Basic.Ack when the broker confirms.
         if confirmation is None or type(confirmation).__name__ != "Ack":
-            raise RuntimeError("broker did not confirm InvoiceIssued")
+            raise RuntimeError("broker did not confirm Billing event")

@@ -10,6 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.api import router
 from app.api_internal import router as internal_router
 from app.api_public import router as public_router
+from app.api_webhook import router as webhook_router
 from app.db import get_engine
 
 app = FastAPI(title="billing", version="0.1.0")
@@ -55,3 +56,4 @@ async def validation_error(request, exc):
 app.include_router(router)
 app.include_router(internal_router)
 app.include_router(public_router)
+app.include_router(webhook_router)

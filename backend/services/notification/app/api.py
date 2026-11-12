@@ -43,5 +43,5 @@ def retry_job(job_id: UUID, db: Session = Depends(get_db)):
     with db.begin():
         job = require_job(db, job_id, lock=True)
         if not reset_failed_job(job):
-            raise api_error(409, "EMAIL_JOB_NOT_RETRYABLE", "Only failed invoice jobs can be retried")
+            raise api_error(409, "EMAIL_JOB_NOT_RETRYABLE", "Only failed invoice or receipt jobs can be retried")
     return job

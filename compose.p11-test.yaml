@@ -1,0 +1,11 @@
+services:
+  rabbitmq:
+    ports: !reset []
+  billing:
+    environment:
+      P11_EPHEMERAL_TEST: "1"
+      P11_RABBITMQ_TEST: "1"
+    volumes:
+      - ./tests/integration:/p11/integration:ro
+      - ./backend/services/billing/tests:/app/tests:ro
+      - ./requirements-test.txt:/p11/requirements-test.txt:ro
