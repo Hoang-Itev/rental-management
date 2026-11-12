@@ -5,12 +5,12 @@ The next phase (P09) collects and validates cross-service data before calling P0
 """
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator, model_validator
 
 
 VND = Annotated[int, Field(strict=True, ge=0, le=9223372036854775807)]
@@ -114,3 +114,109 @@ class InvoiceCalculationResult(StrictSnapshot):
     period_end: date
     items: list[CalculatedLine]
     total_amount: VND
+
+
+class BillingRunRequest(StrictSnapshot):
+    billing_month: date
+
+    @field_validator("billing_month")
+    @classmethod
+    def first_of_month(cls, value):
+        if value.day != 1:
+            raise ValueError("billing_month must be the first of the month")
+        return value
+
+
+class BillingContext(BaseModel):
+    contract_id: UUID
+    room_id: UUID
+    contract_status: str
+    tenant_name: str
+    tenant_email: str | None = None
+    room_code: str
+    chargeable_from: date
+    chargeable_to_exclusive: date
+    terms: list[TermSnapshot]
+
+
+class PageMeta(BaseModel):
+    page: int
+    page_size: int
+    total: int
+
+
+class InvoiceView(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    invoice_code: str
+    contract_id: UUID
+    room_id: UUID
+    invoice_type: Literal["PERIODIC", "FINAL"]
+    billing_month: date | None
+    period_start: date
+    period_end: date
+    status: Literal["DRAFT", "ISSUED", "PAID", "VOID"]
+    blocked_reason: str | None
+    revision: int
+    replaces_invoice_id: UUID | None
+    total_amount: int
+    due_date: date
+    issued_at: datetime | None
+    paid_at: datetime | None
+    tenant_name_snapshot: str
+    tenant_email_snapshot: str | None
+    room_code_snapshot: str
+
+
+class InvoiceItemView(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    invoice_id: UUID
+    item_type: LineType
+    description: str
+    quantity: Decimal
+    unit: str
+    unit_price: Decimal
+    amount: VND
+    period_start: date | None
+    period_end: date | None
+    meter_start_value: Decimal | None
+    meter_end_value: Decimal | None
+    source_term_id: UUID | None
+    source_cutoff_start_id: UUID | None
+    source_cutoff_end_id: UUID | None
+
+    @field_serializer("quantity", "unit_price", "meter_start_value", "meter_end_value")
+    def serialize_decimal(self, value: Decimal | None):
+        return float(value) if value is not None else None
+
+
+class InvoiceDetail(InvoiceView):
+    items: list[InvoiceItemView]
+
+
+class InvoiceList(BaseModel):
+    items: list[InvoiceView]
+    meta: PageMeta
+
+
+class BillingRunView(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    billing_month: date
+    trigger_type: Literal["MANUAL", "SCHEDULED"]
+    status: Literal["RUNNING", "COMPLETED", "FAILED"]
+    started_at: datetime
+    finished_at: datetime | None
+    issued_count: int
+    waiting_count: int
+    skipped_count: int
+    failed_count: int
+
+
+class BillingRunList(BaseModel):
+    items: list[BillingRunView]
+    meta: PageMeta

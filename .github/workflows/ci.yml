@@ -89,6 +89,8 @@ jobs:
           if grep -r -E -q '^[[:space:]]*(async[[:space:]]+)?def[[:space:]]+test_' tests --include='test_*.py'; then
             if [[ "${{ matrix.service }}" == "auth" || "${{ matrix.service }}" == "room" ]]; then
               python -m pytest tests -q --cov=app --cov-report=term-missing --cov-fail-under=95
+            elif [[ "${{ matrix.service }}" == "billing" ]]; then
+              python -m pytest tests -q --cov=app.calculator --cov-report=term-missing --cov-fail-under=80
             elif grep -E -q '^[[:space:]]*(async[[:space:]]+)?def[[:space:]]+test_' tests/test_service.py; then
               python -m pytest tests -q --cov=app.service --cov-report=term-missing --cov-fail-under=80
             else
