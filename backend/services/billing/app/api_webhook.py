@@ -50,7 +50,7 @@ def receive_sepay_ipn(
     payload: SePayIPN,
     x_secret_key: str | None = Header(None, alias="X-Secret-Key"),
     service: SePayPaymentService = Depends(get_sepay_payment_service),
-):
+) -> dict[str, bool]:
     try:
         service.receive_ipn(payload, x_secret_key)
     except LinkDenied as exc:
