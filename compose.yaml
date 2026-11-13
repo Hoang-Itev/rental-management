@@ -249,6 +249,10 @@ services:
       MOMO_IPN_URL: ${MOMO_IPN_URL:-}
       MOMO_TIMEOUT_SECONDS: ${MOMO_TIMEOUT_SECONDS:-30}
       MOMO_RECONCILE_SECONDS: ${MOMO_RECONCILE_SECONDS:-300}
+      SEPAY_MERCHANT_ID: ${SEPAY_MERCHANT_ID:-}
+      SEPAY_SECRET_KEY: ${SEPAY_SECRET_KEY:-}
+      SEPAY_IPN_SECRET_KEY: ${SEPAY_IPN_SECRET_KEY:-}
+      SEPAY_ENVIRONMENT: ${SEPAY_ENVIRONMENT:-sandbox}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3).read()"]
       interval: 10s
