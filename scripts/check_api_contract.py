@@ -150,14 +150,30 @@ def main():
         # Show an actionable bounded diff without relaxing contract enforcement.
         from difflib import unified_diff
         expected = {'paths': generated['paths'], 'schemas': generated['components']['schemas']}
-        before_lines = yaml.safe_dump(original_slice, allow_unicode=True, sort_keys=False).splitlines()
-        after_lines = yaml.safe_dump(expected, allow_unicode=True, sort_keys=False).splitlines()
-        diff = unified_diff(before_lines, after_lines, fromfile='committed', tofile='generated', lineterm='')
-        for index, line in enumerate(diff):
-            if index >= 200:
-                print('... diff truncated after 200 lines')
-                break
-            print(line)
+        # Compare by key so unrelated path ordering never obscures the actual drift.
+        differences = []
+        for path in sorted(set(original_slice['paths']) | set(expected['paths'])):
+            committed_ops = original_slice['paths'].get(path, {})
+            generated_ops = expected['paths'].get(path, {})
+            for method in sorted(set(committed_ops) | set(generated_ops)):
+                before, after = committed_ops.get(method), generated_ops.get(method)
+                if before != after:
+                    differences.append((f'{method.upper()} {path}', before, after))
+        for name in sorted(set(original_slice['schemas']) | set(expected['schemas'])):
+            before, after = original_slice['schemas'].get(name), expected['schemas'].get(name)
+            if before != after:
+                differences.append((f'SCHEMA {name}', before, after))
+        for label, before, after in differences[:10]:
+            print(f'CONTRACT DRIFT: {label}')
+            a = yaml.safe_dump(before, allow_unicode=True, sort_keys=True).splitlines()
+            b = yaml.safe_dump(after, allow_unicode=True, sort_keys=True).splitlines()
+            for index, line in enumerate(unified_diff(a, b, fromfile='committed', tofile='generated', lineterm='')):
+                if index >= 80:
+                    print('... individual diff truncated')
+                    break
+                print(line)
+        if len(differences) > 10:
+            print(f'... {len(differences) - 10} additional differing API entries')
         raise SystemExit(f'OpenAPI differs from {args.service}: run python scripts/check_api_contract.py --service {args.service} --write and review the diff.')
     else:
         print(f'API CONTRACT OK: {args.service}, {count} operations')
