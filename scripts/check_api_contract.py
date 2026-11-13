@@ -140,12 +140,24 @@ def main():
     target = ROOT / 'contracts/openapi.yaml'
     document = yaml.safe_load(target.read_text(encoding='utf-8'))
     generated = export_service(args.service)
+    original_slice = service_slice(document, args.service)
     equal = reconcile(document, generated, args.service)
     count = sum(len(ops) for ops in generated['paths'].values())
     if args.write:
         target.write_text(yaml.safe_dump(document, allow_unicode=True, sort_keys=False, width=110), encoding='utf-8')
         print(f'Updated {args.service}: {count} operations')
     elif not equal:
+        # Show an actionable bounded diff without relaxing contract enforcement.
+        from difflib import unified_diff
+        expected = {'paths': generated['paths'], 'schemas': generated['components']['schemas']}
+        before_lines = yaml.safe_dump(original_slice, allow_unicode=True, sort_keys=False).splitlines()
+        after_lines = yaml.safe_dump(expected, allow_unicode=True, sort_keys=False).splitlines()
+        diff = unified_diff(before_lines, after_lines, fromfile='committed', tofile='generated', lineterm='')
+        for index, line in enumerate(diff):
+            if index >= 200:
+                print('... diff truncated after 200 lines')
+                break
+            print(line)
         raise SystemExit(f'OpenAPI differs from {args.service}: run python scripts/check_api_contract.py --service {args.service} --write and review the diff.')
     else:
         print(f'API CONTRACT OK: {args.service}, {count} operations')
