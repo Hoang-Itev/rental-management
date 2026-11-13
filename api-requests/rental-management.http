@@ -1,0 +1,716 @@
+# Rental Management | main 23420d9 | VS Code REST Client
+# 73 operation khác nhau: 70 /api/v1 + 3 /public/v1.
+# Mở file .http, điền biến, bấm Send Request từng khối. Hướng dẫn chạy và kiểm thử thủ công nằm cuối file.
+# Chỉ dùng dữ liệu test. Các request POST/PATCH/DELETE có thể thay đổi dữ liệu.
+# Các biến REPLACE_... phải được điền trước khi chạy khối sử dụng chúng.
+# Đổi runTag mỗi lần tạo bộ dữ liệu mới. Login lại nếu JWT hết hạn.
+@baseUrl = http://127.0.0.1:8080
+@ownerEmail = hoangdv955@gmail.com
+@ownerPassword = 123456789011
+@runTag = T01
+@tenantEmail = demo-rental@example.test
+
+# Ngày mẫu theo giờ Việt Nam. Nếu đã qua ngày mẫu, cập nhật theo hướng dẫn.
+@startDate = 2026-11-11
+@termDate = 2026-11-12
+@endDate = 2026-11-30
+@renewEndDate = 2026-12-31
+@actualEndDate = 2026-11-12
+@billingMonth = 2026-10-01
+@cutoffAt = 2026-11-01T00:00:00+07:00
+
+# ID phải lấy từ response của các khối GET tương ứng.
+@meterId = 5dc361b0-6c70-4ab2-bec2-9ca056d9300f
+@pendingCutoffId = 221ee8de-caa8-4afe-b026-b5462c53ffc7
+@confirmedCutoffId = 221ee8de-caa8-4afe-b026-b5462c53ffc7
+@aliasCutoffId = 40ef000f-4249-4ba2-914f-0aedd72a94c5
+@manualReading = 0.000
+@correctedReading = 0.002
+@alertId = REPLACE_WITH_OPEN_ALERT_UUID
+@invoiceId = 4d015324-3cec-5270-8f9a-7909c1f6813c
+@draftInvoiceId = REPLACE_WITH_DRAFT_INVOICE_UUID
+@overdueInvoiceId = REPLACE_WITH_OVERDUE_ISSUED_INVOICE_UUID
+@reissueInvoiceId = REPLACE_WITH_ISSUED_OR_VOID_INVOICE_UUID
+@voidInvoiceId = REPLACE_WITH_UNPAID_INVOICE_UUID
+@paidInvoiceId = REPLACE_WITH_PAID_INVOICE_UUID
+@finalContractId = REPLACE_WITH_ENDED_CONTRACT_UUID
+@attemptId = REPLACE_WITH_PAYMENT_ATTEMPT_UUID
+@emailJobId = REPLACE_WITH_EMAIL_JOB_UUID
+@failedEmailJobId = REPLACE_WITH_FAILED_EMAIL_JOB_UUID
+@invoiceToken = REPLACE_WITH_TOKEN_FROM_EMAIL_LINK
+@unusedRoomId = REPLACE_WITH_UNUSED_ROOM_UUID
+@unusedFloorId = REPLACE_WITH_UNUSED_FLOOR_UUID
+@unusedBuildingId = REPLACE_WITH_UNUSED_BUILDING_UUID
+@unusedPropertyId = REPLACE_WITH_UNUSED_PROPERTY_UUID
+
+
+# ========= A. ĐĂNG NHẬP =========
+
+### Đăng nhập | 200
+# @name login
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{ownerEmail}}",
+  "password": "{{ownerPassword}}"
+}
+
+### Xem tài khoản đang đăng nhập | 200
+GET {{baseUrl}}/api/v1/auth/me
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+
+# ========= B. KHU TRỌ, DÃY, TẦNG, PHÒNG =========
+
+### Tạo khu | 201
+# @name createProperty
+POST {{baseUrl}}/api/v1/properties
+Authorization: Bearer {{login.response.body.$.access_token}}
+Content-Type: application/json
+
+{
+  "name": "REST Demo {{runTag}}",
+  "address": "Địa chỉ demo"
+}
+
+### Danh sách khu | 200
+GET {{baseUrl}}/api/v1/properties?page=1&page_size=20
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+### Chi tiết khu | 200
+GET {{baseUrl}}/api/v1/properties/{{createProperty.response.body.$.id}}
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+### Sửa thông tin khu | 200
+PATCH {{baseUrl}}/api/v1/properties/{{createProperty.response.body.$.id}}
+Authorization: Bearer {{login.response.body.$.access_token}}
+Content-Type: application/json
+
+{
+  "description": "Khu test REST Client mk"
+}
+
+### Tạo dãy | 201
+# @name createBuilding
+POST {{baseUrl}}/api/v1/properties/{{createProperty.response.body.$.id}}/buildings
+Authorization: Bearer {{login.response.body.$.access_token}}
+Content-Type: application/json
+
+{
+  "name": "Dãy A"
+}
+
+### Danh sách dãy của khu | 200
+GET {{baseUrl}}/api/v1/properties/{{createProperty.response.body.$.id}}/buildings
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+### Chi tiết dãy | 200
+GET {{baseUrl}}/api/v1/buildings/{{createBuilding.response.body.$.id}}
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+### Đổi tên dãy | 200
+PATCH {{baseUrl}}/api/v1/buildings/{{createBuilding.response.body.$.id}}
+Authorization: Bearer {{login.response.body.$.access_token}}
+Content-Type: application/json
+
+{
+  "name": "Dãy A cập nhật"
+}
+
+### Tạo tầng | 201
+# @name createFloor
+POST {{baseUrl}}/api/v1/buildings/{{createBuilding.response.body.$.id}}/floors
+Authorization: Bearer {{login.response.body.$.access_token}}
+Content-Type: application/json
+
+{
+  "floor_number": 1,
+  "name": "Tầng 1"
+}
+
+### Danh sách tầng của dãy | 200
+GET {{baseUrl}}/api/v1/buildings/{{createBuilding.response.body.$.id}}/floors
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+### Chi tiết tầng | 200
+GET {{baseUrl}}/api/v1/floors/{{createFloor.response.body.$.id}}
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+### Đổi tên tầng | 200
+PATCH {{baseUrl}}/api/v1/floors/{{createFloor.response.body.$.id}}
+Authorization: Bearer {{login.response.body.$.access_token}}
+Content-Type: application/json
+
+{
+  "name": "Tầng 1 cập nhật"
+}
+
+### Tạo phòng cho hợp đồng chính | 201
+# @name createRoom
+POST {{baseUrl}}/api/v1/floors/{{createFloor.response.body.$.id}}/rooms
+Authorization: Bearer {{login.response.body.$.access_token}}
+Idempotency-Key: room-one-{{runTag}}
+Content-Type: application/json
+
+{
+  "room_code": "REST-{{runTag}}-101",
+  "area_m2": "22.00",
+  "listed_rent": 2000000
+}
+
+### Tạo lô phòng (phòng đầu dùng để test hủy hợp đồng) | 201
+# @name createRoomsBulk
+POST {{baseUrl}}/api/v1/floors/{{createFloor.response.body.$.id}}/rooms/bulk
+Authorization: Bearer {{login.response.body.$.access_token}}
+Idempotency-Key: room-bulk-{{runTag}}
+Content-Type: application/json
+
+{
+  "rooms": [
+    {
+      "room_code": "REST-{{runTag}}-102",
+      "area_m2": "22.00",
+      "listed_rent": 2000000
+    },
+    {
+      "room_code": "REST-{{runTag}}-103",
+      "area_m2": "22.00",
+      "listed_rent": 2000000
+    }
+  ]
+}
+
+### Danh sách phòng trong khu vừa tạo | 200
+GET {{baseUrl}}/api/v1/rooms?property_id={{createProperty.response.body.$.id}}&page=1&page_size=20
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+### Xem phòng không lọc theo khu
+GET {{baseUrl}}/api/v1/rooms?page=1&page_size=100
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+### Chi tiết phòng | 200
+GET {{baseUrl}}/api/v1/rooms/{{createRoom.response.body.$.id}}
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+### Sửa diện tích phòng demo | 200
+PATCH {{baseUrl}}/api/v1/rooms/{{createRoom.response.body.$.id}}
+Authorization: Bearer {{login.response.body.$.access_token}}
+Content-Type: application/json
+
+{
+  "area_m2": "25.00"
+}
+
+
+# ========= C. NGƯỜI THUÊ, HỢP ĐỒNG =========
+
+### Tạo người thuê | 201
+# @name createTenant
+POST {{baseUrl}}/api/v1/tenants
+Authorization: Bearer {{login.response.body.$.access_token}}
+Content-Type: application/json
+
+{
+  "full_name": "2Người thuê demo  {{runTag}}",
+  "email": "{{tenantEmail}}",
+  "phone": "0300000000"
+}
+
+### Danh sách người thuê | 200
+GET {{baseUrl}}/api/v1/tenants?page=1&page_size=20
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+### Chi tiết người thuê | 200
+GET {{baseUrl}}/api/v1/tenants/{{createTenant.response.body.$.id}}
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+### Sửa ghi chú người thuê | 200
+PATCH {{baseUrl}}/api/v1/tenants/{{createTenant.response.body.$.id}}
+Authorization: Bearer {{login.response.body.$.access_token}}
+Content-Type: application/json
+
+{
+  "note": "Đã kiểm tra thông tin demo"
+}
+
+### Tạo DRAFT chính | 201
+### Tạo DRAFT chính | 201
+# @name createContract
+POST {{baseUrl}}/api/v1/contracts
+Authorization: Bearer {{login.response.body.$.access_token}}
+Content-Type: application/json
+
+{
+  "contract_code": "REST-{{$guid}}",
+  "room_id": "{{createRoom.response.body.$.id}}",
+  "representative_tenant_id": "{{createTenant.response.body.$.id}}",
+  "start_date": "{{startDate}}",
+  "end_date": "{{endDate}}",
+  "initial_terms": {
+    "effective_from": "{{startDate}}",
+    "monthly_rent": 5000000,
+    "electricity_unit_price": 3500,
+    "water_unit_price": 15000,
+    "monthly_service_fee": 100000
+  }
+}
+
+### Danh sách hợp đồng | 200
+GET {{baseUrl}}/api/v1/contracts?page=1&page_size=20
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+### Chi tiết hợp đồng | 200
+GET {{baseUrl}}/api/v1/contracts/{{createContract.response.body.$.id}}
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+### Xem giá thuê, điện, nước và phí dịch vụ
+GET {{baseUrl}}/api/v1/contracts/b518b148-2eac-481a-a020-d899eb354060/terms
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+### Sửa tiền cọc khi còn DRAFT | 200
+PATCH {{baseUrl}}/api/v1/contracts/{{createContract.response.body.$.id}}
+Authorization: Bearer {{login.response.body.$.access_token}}
+Content-Type: application/json
+
+{
+  "deposit_amount": 400000
+}
+
+### Thêm phiên bản giá khi còn DRAFT | 201
+# Có thể bỏ qua khối này nếu muốn làm FINAL dễ hơn: đổi giá làm phát sinh thêm mốc cutoff cần xác nhận.
+POST {{baseUrl}}/api/v1/contracts/{{createContract.response.body.$.id}}/terms
+Authorization: Bearer {{login.response.body.$.access_token}}
+Content-Type: application/json
+
+{
+  "effective_from": "{{termDate}}",
+  "monthly_rent": 2100000,
+  "electricity_unit_price": 3500,
+  "water_unit_price": 15000,
+  "monthly_service_fee": 100000
+}
+
+### Danh sách điều khoản | 200
+GET {{baseUrl}}/api/v1/contracts/{{createContract.response.body.$.id}}/terms
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+### Xác nhận hợp đồng chính | 200
+POST {{baseUrl}}/api/v1/contracts/{{createContract.response.body.$.id}}/confirm
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+### Chạy lifecycle theo thời điểm hiện tại | 202
+# Job tác động toàn bộ dữ liệu demo đủ điều kiện. GET hợp đồng chính để kiểm tra ACTIVE.
+POST {{baseUrl}}/api/v1/jobs/contracts/lifecycle/run
+Authorization: Bearer {{login.response.body.$.access_token}}
+Content-Type: application/json
+
+{}
+
+### Danh sách ACTIVE sắp hết hạn | 200
+GET {{baseUrl}}/api/v1/contracts/expiring?within_days=90
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+
+### Lịch sử hợp đồng chính | 200
+GET {{baseUrl}}/api/v1/contracts/{{createContract.response.body.$.id}}/events
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+### Gia hạn hợp đồng chính | 200
+# Chạy trước ghi nhận bàn giao. Ngày mới phải lớn hơn ngày kết thúc hiện tại.
+POST {{baseUrl}}/api/v1/contracts/{{createContract.response.body.$.id}}/renew
+Authorization: Bearer {{login.response.body.$.access_token}}
+Content-Type: application/json
+
+{
+  "new_end_date": "{{renewEndDate}}",
+  "reason": "Gia hạn demo"
+}
+
+### Tạo DRAFT thứ hai để test hủy | 201
+# @name createCancelContract
+POST {{baseUrl}}/api/v1/contracts
+Authorization: Bearer {{login.response.body.$.access_token}}
+Content-Type: application/json
+
+{
+  "contract_code": "REST-CANCEL-{{$guid}}",
+  "room_id": "{{createRoomsBulk.response.body.$[0].id}}",
+  "representative_tenant_id": "{{createTenant.response.body.$.id}}",
+  "start_date": "{{startDate}}",
+  "end_date": "{{endDate}}",
+  "initial_terms": {
+    "effective_from": "{{startDate}}",
+    "monthly_rent": 2000000,
+    "electricity_unit_price": 3500,
+    "water_unit_price": 15000,
+    "monthly_service_fee": 100000
+  }
+}
+
+### Hủy DRAFT thứ hai | 200
+# Gửi hai lần cùng ID để kiểm tra idempotency. Xem lịch sử bằng GET /contracts/{id}/events với ID DRAFT thứ hai.
+POST {{baseUrl}}/api/v1/contracts/{{createCancelContract.response.body.$.id}}/cancel
+Authorization: Bearer {{login.response.body.$.access_token}}
+Content-Type: application/json
+
+{
+  "reason": "Hủy hợp đồng demo trước kích hoạt"
+}
+
+### Ghi nhận kết thúc hợp đồng chính | 200
+# Tùy chọn, làm sau khi test luồng ACTIVE. Hợp đồng phải ACTIVE/EXPIRED_PENDING. Nếu ngày bàn giao là hôm nay, đợi qua 00:00 hôm sau mới ENDED.
+POST {{baseUrl}}/api/v1/contracts/{{createContract.response.body.$.id}}/end
+Authorization: Bearer {{login.response.body.$.access_token}}
+Content-Type: application/json
+
+{
+  "actual_end_date": "{{actualEndDate}}",
+  "reason": "Bàn giao phòng demo"
+}
+
+
+# ========= D. ĐỒNG HỒ, CHỐT CHỈ SỐ, CẢNH BÁO =========
+
+### Danh sách đồng hồ của phòng | 200
+# Nếu items rỗng ngay sau tạo phòng, kiểm tra worker Room/Metering và gửi lại sau. Copy một items[].id vào meterId.
+GET {{baseUrl}}/api/v1/rooms/{{createRoom.response.body.$.id}}/meters
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+### Lịch sử chỉ số | 200
+GET {{baseUrl}}/api/v1/meters/{{meterId}}/readings?page=1&page_size=20
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+### Các cutoff của đồng hồ | 200
+GET {{baseUrl}}/api/v1/meters/{{meterId}}/cutoffs
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+### Cảnh báo của đồng hồ | 200
+GET {{baseUrl}}/api/v1/meters/{{meterId}}/alerts
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+### Tìm cutoff PENDING để xác nhận | 200
+GET {{baseUrl}}/api/v1/meter-cutoffs?meter_id={{meterId}}&status=PENDING
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+### Chi tiết cutoff PENDING | 200
+GET {{baseUrl}}/api/v1/meter-cutoffs/{{pendingCutoffId}}
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+### Chạy chốt tại đầu tháng chỉ định | 202
+# Phải là 00:00 ngày 1 giờ Việt Nam và đã qua cửa sổ 15 phút. Đồng hồ tạo sau mốc không có cutoff tháng tại mốc đó.
+POST {{baseUrl}}/api/v1/jobs/meters/monthly-cutoffs/run
+Authorization: Bearer {{login.response.body.$.access_token}}
+Content-Type: application/json
+
+{
+  "cutoff_at": "{{cutoffAt}}"
+}
+
+### Chạy tạo/chốt cutoff và kiểm tra offline | 200
+# Job tác động toàn bộ dữ liệu demo đủ điều kiện.
+POST {{baseUrl}}/api/v1/jobs/meters/cutoffs
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+### Xác nhận cutoff PENDING | 200
+# Điền số tích lũy phù hợp các mốc CONFIRMED lân cận. Chỉ dùng dữ liệu test.
+POST {{baseUrl}}/api/v1/meter-cutoffs/{{pendingCutoffId}}/confirm
+Authorization: Bearer {{login.response.body.$.access_token}}
+Content-Type: application/json
+
+{
+  "reading_value": "{{manualReading}}",
+  "manual_reason": "Xac nhan chi so demo"
+}
+
+### Tạo phiên bản cutoff thay thế | 201
+# Dùng cutoff CONFIRMED hiện hành và giá trị hợp lệ. Dùng hai ID khác nhau khi thử cả corrections và revise.
+POST {{baseUrl}}/api/v1/meter-cutoffs/{{confirmedCutoffId}}/corrections
+Authorization: Bearer {{login.response.body.$.access_token}}
+Content-Type: application/json
+
+{
+  "reading_value": "{{correctedReading}}",
+  "manual_reason": "Dieu chinh chi so demo"
+}
+
+### Kiểm tra alias sửa cutoff | 201
+# Dùng cutoff CONFIRMED hiện hành và giá trị hợp lệ. Dùng hai ID khác nhau khi thử cả corrections và revise.
+POST {{baseUrl}}/api/v1/meter-cutoffs/{{aliasCutoffId}}/revise
+Authorization: Bearer {{login.response.body.$.access_token}}
+Content-Type: application/json
+
+{
+  "reading_value": "{{correctedReading}}",
+  "manual_reason": "Dieu chinh chi so demo"
+}
+
+### Danh sách cảnh báo mở | 200
+GET {{baseUrl}}/api/v1/meter-alerts?status=OPEN&page=1&page_size=20
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+### Xử lý một cảnh báo OPEN | 200
+POST {{baseUrl}}/api/v1/meter-alerts/{{alertId}}/resolve
+Authorization: Bearer {{login.response.body.$.access_token}}
+Content-Type: application/json
+
+{
+  "resolution_note": "Da kiem tra dong ho demo"
+}
+
+
+# ========= E. HÓA ĐƠN, THANH TOÁN VÀ EMAIL JOB =========
+
+### Xếp job lập hóa đơn tháng đã đóng | 202
+POST {{baseUrl}}/api/v1/billing-runs
+Authorization: Bearer {{login.response.body.$.access_token}}
+Idempotency-Key: bill-{{billingMonth}}-{{runTag}}
+Content-Type: application/json
+
+{
+  "billing_month": "{{billingMonth}}"
+}
+
+### Xem các lần chạy lập hóa đơn | 200
+GET {{baseUrl}}/api/v1/billing-runs?page=1&page_size=20
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+### Danh sách hóa đơn để lấy ID | 200
+GET {{baseUrl}}/api/v1/invoices?billing_month={{billingMonth}}&page=1&page_size=20
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+### Chi tiết hóa đơn | 200
+GET {{baseUrl}}/api/v1/invoices/{{invoiceId}}
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+### Phát hành DRAFT đủ cutoff | 200
+# Nếu thiếu cutoff, xác nhận đủ các mốc điện/nước rồi gửi lại. Kiểm tra trạng thái ISSUED và email.
+POST {{baseUrl}}/api/v1/invoices/{{draftInvoiceId}}/issue
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+### Tạo hóa đơn FINAL | 201
+# Cần hợp đồng ENDED, còn một khoảng chưa tính tiền. Nếu thiếu cutoff, có thể ra DRAFT.
+POST {{baseUrl}}/api/v1/final-invoices
+Authorization: Bearer {{login.response.body.$.access_token}}
+Content-Type: application/json
+
+{
+  "contract_id": "{{finalContractId}}"
+}
+
+### Nhắc nợ hóa đơn quá hạn | 200
+# Cần ISSUED, tổng tiền dương và due_date nhỏ hơn hôm nay theo giờ Việt Nam. Kiểm tra Mailpit sau khi gửi.
+POST {{baseUrl}}/api/v1/invoices/{{overdueInvoiceId}}/reminders
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+### Danh sách lần thử thanh toán | 200
+GET {{baseUrl}}/api/v1/invoices/{{invoiceId}}/payment-attempts
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+### Đối soát một payment attempt | 200
+# Cần MoMo đã cấu hình và attempt đủ điều kiện đối soát. Xem counts và đọc lại invoice/attempt.
+POST {{baseUrl}}/api/v1/jobs/payments/reconcile/run
+Authorization: Bearer {{login.response.body.$.access_token}}
+Content-Type: application/json
+
+{
+  "payment_attempt_id": "{{attemptId}}",
+  "limit": 1
+}
+
+### Phát hành lại hóa đơn demo | 200
+# Dùng ISSUED hoặc VOID đủ điều kiện. Với ISSUED, thao tác VOID bản cũ và thu hồi link. Không dùng bản đang chờ thanh toán.
+POST {{baseUrl}}/api/v1/invoices/{{reissueInvoiceId}}/reissue
+Authorization: Bearer {{login.response.body.$.access_token}}
+Content-Type: application/json
+
+{
+  "reason": "Phat hanh lai de test"
+}
+
+### VOID hóa đơn demo khác | 200
+# Dùng hóa đơn riêng, không dùng hóa đơn đang test thanh toán. PAID hoặc có attempt PENDING bị chặn.
+POST {{baseUrl}}/api/v1/invoices/{{voidInvoiceId}}/void
+Authorization: Bearer {{login.response.body.$.access_token}}
+Content-Type: application/json
+
+{
+  "reason": "Huy hoa don demo"
+}
+
+### Tạo hồ sơ điều chỉnh hóa đơn PAID | 201
+# @name createAdjustment
+POST {{baseUrl}}/api/v1/invoices/{{paidInvoiceId}}/adjustments
+Authorization: Bearer {{login.response.body.$.access_token}}
+Content-Type: application/json
+
+{
+  "reason": "Ghi nhan chenh lech demo",
+  "amount_delta": -10000
+}
+
+### Danh sách hồ sơ điều chỉnh | 200
+GET {{baseUrl}}/api/v1/invoices/{{paidInvoiceId}}/adjustments
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+### Xử lý hồ sơ điều chỉnh vừa tạo | 200
+POST {{baseUrl}}/api/v1/invoice-adjustments/{{createAdjustment.response.body.$.id}}/resolve
+Authorization: Bearer {{login.response.body.$.access_token}}
+Content-Type: application/json
+
+{
+  "status": "RESOLVED",
+  "resolution_note": "Da doi chieu demo"
+}
+
+### Danh sách email job | 200
+GET {{baseUrl}}/api/v1/email-jobs?page=1&page_size=20
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+### Chi tiết email job | 200
+GET {{baseUrl}}/api/v1/email-jobs/{{emailJobId}}
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+### Thử lại email job FAILED | 200
+# Job phải ở FAILED. Khi SMTP đã hoạt động lại, worker sẽ lấy job để gửi.
+POST {{baseUrl}}/api/v1/email-jobs/{{failedEmailJobId}}/retry
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+
+# ========= F. NGƯỜI THUÊ MỞ LINK VÀ THANH TOÁN =========
+
+### Xem hóa đơn bằng token từ email | 200
+GET {{baseUrl}}/public/v1/invoices/{{invoiceToken}}
+
+### Tạo checkout MoMo Sandbox | 200
+# Chỉ chạy khi đã có cấu hình Sandbox. Mở pay_url trong trình duyệt để hoàn tất giao dịch.
+POST {{baseUrl}}/public/v1/invoices/{{invoiceToken}}/payments/momo
+Idempotency-Key: momo-checkout-{{runTag}}
+
+### Xem trang return MoMo | 200
+# GET chỉ trả thông báo hướng dẫn. Trạng thái PAID phải được kiểm tra ở hóa đơn.
+GET {{baseUrl}}/public/v1/payments/momo/return
+
+
+# ========= G. VÔ HIỆU HÓA CÂY DỮ LIỆU TEST RIÊNG =========
+
+### Vô hiệu hóa phòng | 204
+# Chỉ dùng ID thuộc cây test không sử dụng. Chạy từ phòng lên khu; cấp cha chỉ tắt được khi không còn con ACTIVE.
+DELETE {{baseUrl}}/api/v1/rooms/{{unusedRoomId}}
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+### Vô hiệu hóa tầng | 204
+# Chỉ dùng ID thuộc cây test không sử dụng. Chạy từ phòng lên khu; cấp cha chỉ tắt được khi không còn con ACTIVE.
+DELETE {{baseUrl}}/api/v1/floors/{{unusedFloorId}}
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+### Vô hiệu hóa dãy | 204
+# Chỉ dùng ID thuộc cây test không sử dụng. Chạy từ phòng lên khu; cấp cha chỉ tắt được khi không còn con ACTIVE.
+DELETE {{baseUrl}}/api/v1/buildings/{{unusedBuildingId}}
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+### Vô hiệu hóa khu | 204
+# Chỉ dùng ID thuộc cây test không sử dụng. Chạy từ phòng lên khu; cấp cha chỉ tắt được khi không còn con ACTIVE.
+DELETE {{baseUrl}}/api/v1/properties/{{unusedPropertyId}}
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+# POST /webhooks/momo/ipn do MoMo gửi payload có chữ ký. Xem hướng dẫn test thủ công.
+
+# ========= HƯỚNG DẪN CHẠY =========
+#
+# 1. Trong VS Code cài REST Client (humao.rest-client), mở file này.
+#    Chạy backend + worker từ thư mục gốc repo bằng PowerShell:
+#    docker compose -f compose.yaml -f compose.workers.yaml up -d --build --wait
+#    Nếu muốn đo điện/nước thật từ simulator của repo:
+#    docker compose -f compose.yaml -f compose.workers.yaml --profile simulator up -d --wait simulator
+#    Nếu chưa có tài khoản, làm bước seed trong RUN_LOCAL.md.
+#
+# 2. Điền ownerEmail bằng OWNER_EMAIL trong .env, ownerPassword bằng mật khẩu
+#    đang dùng. Bấm Send Request ở Login, kiểm tra 200 rồi gửi GET /auth/me.
+#    Các khối dưới đọc access_token từ response Login. Khi mở lại VS Code
+#    hoặc token hết hạn, gửi Login lại. Không commit file đã điền mật khẩu/token.
+#
+# 3. Chạy B từ đầu đến cuối để tạo cây dữ liệu. Các ID tự lấy từ response.
+#    Muốn chạy C, hãy điền ngày theo giờ Việt Nam:
+#    startDate <= hôm nay <= endDate, termDate > startDate và <= endDate,
+#    renewEndDate > endDate. actualEndDate phải từ startDate đến hôm nay.
+#    Để ENDED ngay, dùng actualEndDate trước hôm nay và gửi end sau khi ACTIVE.
+#    Nếu muốn nhanh, chọn startDate là hôm qua và actualEndDate là hôm qua.
+#    Để test FINAL dễ hơn, có thể bỏ qua thêm phiên bản giá ở hợp đồng chính.
+#    Hai lần POST /contracts tạo hai hợp đồng trên hai phòng khác nhau.
+#    Nếu login hoặc request tạo trước đó lỗi, sửa và chạy lại trước khi dùng
+#    các request phụ thuộc. Đổi runTag nếu muốn chạy lại với bộ dữ liệu mới.
+#
+# 4. Chạy D/E theo từng ca, không chạy tất cả tuần tự. Dùng ID đúng trạng thái.
+#    Nếu đã seed demo, lọc billing_month=2026-10-01. B102 và B201 bắt đầu là
+#    DRAFT do thiếu cutoff 01/11 của điện/nước. Tìm đồng hồ từ phòng B102
+#    hoặc B201 rồi xác nhận cả hai cutoff cuối kỳ. Nhập giá trị từ bộ dữ liệu
+#    test, có thể tính theo hàm seed hoặc chọn một chỉ số tích lũy hợp lệ so
+#    với các mốc lân cận. Gửi issue hoặc xem scheduler đã tự phát hành chưa.
+#    A101/A102/A201/B101 bắt đầu ISSUED. Seed không sinh email, token hoặc
+#    giao dịch PAID; muốn có email/link mới thì phát hành một DRAFT đủ dữ liệu
+#    hoặc reissue hóa đơn riêng. Dùng danh sách invoices để lấy đúng ID.
+#    FINAL cần hợp đồng ENDED, còn kỳ chưa tính và cutoff CONFIRMED ở cả
+#    hai đầu của mọi đoạn tính. Nếu FINAL là DRAFT, dùng issue khi đủ cutoff.
+#    Billing run cần ngày đầu tháng đã đóng, trả 202 khi nhận job. Gửi GET
+#    /billing-runs và /invoices sau khi worker xử lý để xác minh kết quả.
+#
+# 5. Khối G dành cho cây test riêng chưa dùng, chạy phòng -> tầng -> dãy -> khu.
+#    Dùng GET để lấy ID, vô hiệu hóa hết các phòng/con ACTIVE trước khi thử
+#    DELETE cấp cha. Không dùng cây đang giữ cho demo hợp đồng.
+#
+# ========= CÁC BƯỚC KIỂM THỬ THỦ CÔNG =========
+#
+# 1. MoMo IPN — POST /webhooks/momo/ipn
+#    Đây là operation duy nhất ở ngoài mạng nội bộ không có khối Send Request.
+#    Cấu hình MOMO_PARTNER_CODE, MOMO_ACCESS_KEY, MOMO_SECRET_KEY và MOMO_IPN_URL
+#    bằng thông tin Sandbox của bạn. IPN URL phải trỏ tới /webhooks/momo/ipn
+#    trên gateway mà MoMo truy cập được qua HTTPS. localhost chỉ dùng để
+#    gửi REST Client trên máy bạn. Sau khi sửa .env, chạy lại Compose up
+#    để Billing API và worker nhận cấu hình mới.
+#    Phát hành hóa đơn demo 10.000–50.000.000 đồng, lấy token từ email Mailpit.
+#    Chạy GET hóa đơn public, sau đó POST checkout trong F, mở pay_url và
+#    hoàn tất thanh toán bằng dữ liệu test do MoMo Sandbox cung cấp.
+#    MoMo gọi IPN. Đọc GET chi tiết hóa đơn và GET payment-attempts ở E:
+#    thành công thì invoice PAID, có attempt SUCCESS. Trang return chỉ
+#    hướng dẫn mở lại link, nó không cập nhật thanh toán.
+#    Kiểm tra Mailpit có biên nhận. Nếu vẫn PENDING, xem log Billing và thử
+#    đối soát theo attemptId. Đối soát có thể hoàn tất giao dịch mà không
+#    chứng minh IPN đã đến, nên nếu cần nghiệm thu riêng IPN hãy kiểm tra
+#    log gateway có POST /webhooks/momo/ipn. Nếu chưa có Sandbox, bỏ qua
+#    bước thanh toán thật và các ca cần PAID. CI đã chạy MoMo giả lập.
+#
+# 2. Email và link — issue, reissue, reminders, email-jobs/{job_id}/retry
+#    Các route này có sẵn khối HTTP. Để kiểm tra email thực sự được gửi,
+#    mở http://127.0.0.1:8025 sau khi worker chạy. Đối chiếu người nhận,
+#    mã hóa đơn, số tiền và email job SENT. Mở link để xem trải nghiệm
+#    người thuê, hoặc lấy token ở đoạn cuối URL dán vào invoiceToken.
+#    Với nhắc nợ, chọn ISSUED quá hạn thật theo due_date; dữ liệu seed có
+#    hạn 15/11/2026. Email reminder đã được xếp hôm đó có thể không tạo thêm.
+#    Kiểm thử thu hồi link: lưu link cũ của hóa đơn test, VOID/reissue,
+#    gửi lại GET public với token cũ và kiểm tra link bị từ chối.
+#    Nếu muốn kiểm tra retry SMTP trên stack demo: docker compose stop mailpit,
+#    phát sinh một email mới, kiểm tra attempt_count và next_attempt_at tăng.
+#    Để thử endpoint retry, đợi job FAILED sau đủ lần thử. Sau đó
+#    docker compose start mailpit, điền failedEmailJobId, gửi retry và
+#    kiểm tra job SENT + thư trong Mailpit. Nếu chỉ cần xác nhận logic retry,
+#    dùng kết quả CI thay vì đợi đủ các lần backoff.
+#
+# 3. Điện/nước thực qua broker — readings, meter-alerts, alerts/{alert_id}/resolve
+#    REST Client đọc kết quả, không phát MQTT. Bật simulator, chờ các worker
+#    ghi telemetry rồi gửi GET readings. Mặc định khoảng gửi là 300 giây.
+#    Muốn test OFFLINE, dừng simulator trên stack demo bằng
+#    docker compose -f compose.yaml -f compose.workers.yaml --profile simulator stop simulator
+#    Chờ qua ngưỡng mặc định 20 phút, chạy job cutoff/scan và đọc cảnh báo OPEN.
+#    Chọn đúng alertId rồi thử resolve. Bật simulator lại sau khi kiểm tra.
+#
+# 4. Nội bộ — 13 operation /internal/v1 được bỏ qua theo yêu cầu.
+#    Không cần gọi qua gateway hoặc tự điền service token.
+#    CI mốc PR #18: https://github.com/Hoang-Itev/rental-management/actions/runs/43221522017
+#
+# KIỂM TRA NHANH
+# 401: gửi lại Login, xem credential và thời hạn JWT.
+# 404: xem ID thuộc đúng service/dữ liệu chưa hoặc token đã hết hạn/bị thu hồi.
+# 409: đọc lý do xung đột, thường là trạng thái không phù hợp hoặc trùng dữ liệu.
+# 422: đọc chi tiết field hoặc dữ liệu nghiệp vụ thiếu, ví dụ cutoff chưa đủ.
+# 503: kiểm tra service phụ thuộc hoặc MoMo chưa cấu hình.
