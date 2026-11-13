@@ -60,12 +60,31 @@ def check(service: str):
             for c in d["contracts"]:
                 inv=session.get(m.Invoice,sid("invoice",c["code"]))
                 assert inv and inv.contract_id==sid("contract",c["code"])
+                assert inv.due_date.isoformat() == d["invoice_due_date"]
+                assert inv.period_start.isoformat() == d["billing_month"]
+                assert inv.period_end.isoformat() == d["period_end"]
                 items=session.execute(select(m.InvoiceItem).where(m.InvoiceItem.invoice_id==inv.id)).scalars().all()
                 assert inv.total_amount == sum(item.amount for item in items)
                 if c["room_code"] in d["blocked_rooms"]:
-                    assert inv.status=="DRAFT" and not items
+                    assert inv.status=="DRAFT" and inv.blocked_reason=="PENDING_CUTOFF"
+                    assert inv.issued_at is None and inv.total_amount==0 and not items
                 else:
-                    assert inv.status=="ISSUED" and len(items)==4
+                    from decimal import Decimal
+                    assert inv.status=="ISSUED" and inv.blocked_reason is None and len(items)==4
+                    assert inv.issued_at is not None
+                    by_type={item.item_type:item for item in items}
+                    assert set(by_type)=={"RENT","SERVICE","ELECTRICITY","WATER"}
+                    for kind in ("RENT","SERVICE"):
+                        item=by_type[kind]
+                        assert item.unit=="DAY" and item.quantity==Decimal("31.000")
+                        assert item.period_start==inv.period_start and item.period_end==inv.period_end
+                        assert item.amount == (2500000+d["rooms"].index(c["room_code"])*100000 if kind=="RENT" else 100000)
+                    for kind,unit in (("ELECTRICITY","KWH"),("WATER","M3")):
+                        item=by_type[kind]
+                        assert item.unit==unit
+                        assert item.meter_end_value-item.meter_start_value==item.quantity
+                        assert item.source_cutoff_start_id==sid("cutoff",f"{c['room_code']}:{kind}:{d['billing_month']}")
+                        assert item.source_cutoff_end_id==sid("cutoff",f"{c['room_code']}:{kind}:{d['period_end']}")
             assert session.scalar(select(func.count()).select_from(m.PaymentAttempt))==0
             assert session.scalar(select(func.count()).select_from(m.OutboxEvent))==0
             print("[verify] billing: 4 ISSUED + 2 blocked DRAFT, 16 invoice items; no fake payments/outbox")
