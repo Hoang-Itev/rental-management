@@ -8651,7 +8651,6 @@ components:
           anyOf:
           - type: number
           - type: string
-            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
           title: Order Amount
       type: object
       required:
@@ -8677,7 +8676,6 @@ components:
           anyOf:
           - type: number
           - type: string
-            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
           title: Transaction Amount
         transaction_currency:
           type: string
