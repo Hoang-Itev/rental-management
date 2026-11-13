@@ -153,47 +153,76 @@ def seed_metering(session,m,d:dict)->int:
     return n
 
 
-def seed_billing(session,m,d:dict)->int:
-    n=0
-    date0=date.fromisoformat(d["billing_month"])
-    date1=date.fromisoformat(d["period_end"])
-    due=date.fromisoformat(d["invoice_due_date"])
-    for c in d["contracts"]:
-        code=c["room_code"]
-        blocked=code in d["blocked_rooms"]
-        inv=sid("invoice",c["code"])
-        tenant=d["tenants"][c["tenant_index"]]
-        items=[]
+def seed_billing(session, m, d: dict) -> int:
+    """Use the production Billing calculator so demo line items cannot drift."""
+    from app.calculator import calculate_invoice
+    from app.schemas import InvoiceCalculationInput, TermSnapshot, UsageSnapshot
+
+    n = 0
+    period_start = date.fromisoformat(d["billing_month"])
+    period_end = date.fromisoformat(d["period_end"])
+    due = date.fromisoformat(d["invoice_due_date"])
+    # The demo invoice is issued on the second day of the month after its period.
+    issued_day = period_end + timedelta(days=1)
+    if due != issued_day.replace(day=5):
+        raise RuntimeError("Demo invoice due date must be day 5 of the issue month")
+
+    for contract in d["contracts"]:
+        room_code = contract["room_code"]
+        blocked = room_code in d["blocked_rooms"]
+        invoice_id = sid("invoice", contract["code"])
+        contract_id = sid("contract", contract["code"])
+        term_id = sid("term", contract["code"])
+        tenant = d["tenants"][contract["tenant_index"]]
+        lines = []
+        amount = 0
+
         if not blocked:
-            rent=money_for_room(code,d)
-            electricity=delta_meter_value(code,"ELECTRICITY",d)
-            water=delta_meter_value(code,"WATER",d)
-            items=[
-                ("RENT","Tiền phòng tháng 10",Decimal("1.000"),"MONTH",Decimal(rent),rent,None),
-                ("ELECTRICITY","Tiền điện tháng 10",electricity,"KWH",Decimal(3500),int(electricity*Decimal(3500)),"ELECTRICITY"),
-                ("WATER","Tiền nước tháng 10",water,"M3",Decimal(15000),int(water*Decimal(15000)),"WATER"),
-                ("SERVICE","Phí dịch vụ tháng 10",Decimal("1.000"),"MONTH",Decimal(100000),100000,None),
-            ]
-        amount=sum(i[5] for i in items)
-        n+=add_if_missing(session,m.Invoice,id=inv,invoice_code=f"DEMO-INV-{code}-202610",
-            contract_id=sid("contract",c["code"]),room_id=sid("room",code),
-            invoice_type="PERIODIC",billing_month=date0,period_start=date0,period_end=date1,
+            term = TermSnapshot(
+                id=term_id, effective_from=date.fromisoformat(contract["start_date"]),
+                effective_to=None, monthly_rent=money_for_room(room_code, d),
+                electricity_unit_price=3500, water_unit_price=15000,
+                monthly_service_fee=100000,
+            )
+            usage_segments = []
+            for meter_type in ("ELECTRICITY", "WATER"):
+                base = initial_meter_value(room_code, meter_type, d)
+                usage_segments.append(UsageSnapshot(
+                    meter_type=meter_type,
+                    meter_id=sid("meter", f"{room_code}:{meter_type}"),
+                    period_start=period_start, period_end=period_end,
+                    source_cutoff_start_id=sid("cutoff", f"{room_code}:{meter_type}:{period_start.isoformat()}"),
+                    source_cutoff_end_id=sid("cutoff", f"{room_code}:{meter_type}:{period_end.isoformat()}"),
+                    start_cutoff_status="CONFIRMED", end_cutoff_status="CONFIRMED",
+                    start_reading=base,
+                    end_reading=base + delta_meter_value(room_code, meter_type, d),
+                ))
+            result = calculate_invoice(InvoiceCalculationInput(
+                period_start=period_start, period_end=period_end,
+                terms=[term], usage_segments=usage_segments,
+            ))
+            lines = result.items
+            amount = result.total_amount
+
+        n += add_if_missing(
+            session, m.Invoice, id=invoice_id,
+            invoice_code=f"DEMO-INV-{room_code}-{period_start:%Y%m}",
+            contract_id=contract_id, room_id=sid("room", room_code),
+            invoice_type="PERIODIC", billing_month=period_start,
+            period_start=period_start, period_end=period_end,
             status="DRAFT" if blocked else "ISSUED",
-            blocked_reason="MISSING_CONFIRMED_CUTOFF" if blocked else None,
-            revision=1,total_amount=amount,due_date=due,
-            issued_at=None if blocked else midnight_vn("2026-11-02"),
-            tenant_name_snapshot=tenant["name"],tenant_email_snapshot=tenant["email"],
-            room_code_snapshot=code)
-        for j,(item_type,description,qty,unit,unit_price,value,meter_type) in enumerate(items):
-            n+=add_if_missing(session,m.InvoiceItem,id=sid("invoice_item",f"{c['code']}:{j}"),
-                invoice_id=inv,item_type=item_type,description=description,
-                quantity=qty,unit=unit,unit_price=unit_price,amount=value,
-                period_start=date0,period_end=date1,
-                source_term_id=sid("term",c["code"]),
-                meter_start_value=initial_meter_value(code,meter_type,d) if meter_type else None,
-                meter_end_value=initial_meter_value(code,meter_type,d)+delta_meter_value(code,meter_type,d) if meter_type else None,
-                source_cutoff_start_id=sid("cutoff",f"{code}:{meter_type}:2026-10-01") if meter_type else None,
-                source_cutoff_end_id=sid("cutoff",f"{code}:{meter_type}:2026-11-01") if meter_type else None)
+            blocked_reason="PENDING_CUTOFF" if blocked else None,
+            revision=1, total_amount=amount, due_date=due,
+            issued_at=None if blocked else midnight_vn(issued_day.isoformat()),
+            tenant_name_snapshot=tenant["name"],
+            tenant_email_snapshot=tenant["email"], room_code_snapshot=room_code,
+        )
+        for j, line in enumerate(lines):
+            n += add_if_missing(
+                session, m.InvoiceItem,
+                id=sid("invoice_item", f"{contract['code']}:{j}"),
+                invoice_id=invoice_id, **line.model_dump(),
+            )
     return n
 
 
