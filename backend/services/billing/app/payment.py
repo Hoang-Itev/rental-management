@@ -45,8 +45,9 @@ class PaymentService:
             invoice = db.get(m.Invoice, link.invoice_id, with_for_update=True)
             if invoice.status == "PAID":
                 success = repo.payment_attempt(db, invoice.id, status="SUCCESS")
-                if success is not None:
+                if success is not None and success.provider == "MOMO":
                     return self.view(success, reused=False)
+                raise LinkDenied(409, "INVOICE_ALREADY_PAID")
             if invoice.status != "ISSUED":
                 raise LinkDenied(409, "INVOICE_NOT_PAYABLE")
             if not 10000 <= invoice.total_amount <= 50000000:
@@ -57,6 +58,8 @@ class PaymentService:
                 raise LinkDenied(409, "PAYMENT_ATTEMPT_CLOSED")
             existing = previous or repo.payment_attempt(db, invoice.id, status="PENDING")
             if existing is not None:
+                if existing.provider != "MOMO":
+                    raise LinkDenied(409, "PAYMENT_PROVIDER_CONFLICT")
                 return self.view(existing, reused=True)
             attempt = m.PaymentAttempt(
                 id=uuid4(), invoice_id=invoice.id, provider="MOMO", amount=invoice.total_amount,

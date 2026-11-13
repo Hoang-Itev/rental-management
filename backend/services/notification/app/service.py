@@ -51,7 +51,7 @@ def receipt_body(data):
     return (
         f"Chào {data['tenant_name']},\n\n"
         f"Đã nhận thanh toán cho hóa đơn {data['invoice_code']} của phòng {data['room_code']}.\n"
-        f"Số tiền: {data['paid_amount']:,} VND. Mã giao dịch MoMo: {data['provider_transaction_id']}.\n"
+        f"Số tiền: {data['paid_amount']:,} VND. Mã giao dịch thanh toán: {data['provider_transaction_id']}.\n"
     )
 
 

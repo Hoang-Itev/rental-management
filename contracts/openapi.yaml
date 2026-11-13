@@ -5329,6 +5329,172 @@ paths:
       tags:
       - Billing
       security: []
+
+  /public/v1/invoices/{token}/payments/sepay:
+    post:
+      summary: Checkout Sepay
+      operationId: billing_checkout_sepay_public_v1_invoices__token__payments_sepay_post
+      parameters:
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Token
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            maxLength: 200
+          - type: 'null'
+          title: Idempotency-Key
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/billing__SePayCheckoutSession'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - correlation_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  correlation_id:
+                    type: string
+        default:
+          description: Domain, authentication or dependency error; inspect HTTP status and response body.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - correlation_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  correlation_id:
+                    type: string
+      x-service: billing
+      tags:
+      - Billing
+      security: []
+  /public/v1/payments/sepay/return:
+    get:
+      summary: Return From Sepay
+      operationId: billing_return_from_sepay_public_v1_payments_sepay_return_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            text/plain:
+              schema:
+                type: string
+        default:
+          description: Domain, authentication or dependency error; inspect HTTP status and response body.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - correlation_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  correlation_id:
+                    type: string
+      x-service: billing
+      tags:
+      - Billing
+      security: []
+  /webhooks/sepay/ipn:
+    post:
+      summary: Receive Sepay Ipn
+      operationId: billing_receive_sepay_ipn_webhooks_sepay_ipn_post
+      parameters:
+      - name: X-Secret-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Secret-Key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/billing__SePayIPN'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: boolean
+                title: Response Receive Sepay Ipn Webhooks Sepay Ipn Post
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - correlation_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  correlation_id:
+                    type: string
+        default:
+          description: Domain, authentication or dependency error; inspect HTTP status and response body.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                - correlation_id
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  correlation_id:
+                    type: string
+      x-service: billing
+      tags:
+      - Billing
+      security: []
 components:
   securitySchemes:
     BearerAuth:
@@ -8398,5 +8564,129 @@ components:
       - msg
       - type
       title: ValidationError
+    billing__SePayCheckoutSession:
+      properties:
+        payment_attempt_id:
+          type: string
+          format: uuid
+          title: Payment Attempt Id
+        status:
+          type: string
+          enum:
+          - PENDING
+          - SUCCESS
+          title: Status
+        reused_pending_attempt:
+          type: boolean
+          title: Reused Pending Attempt
+        checkout_status:
+          type: string
+          enum:
+          - READY
+          - PAID
+          title: Checkout Status
+        action_url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Action Url
+        method:
+          type: string
+          const: POST
+          title: Method
+          default: POST
+        fields:
+          anyOf:
+          - additionalProperties:
+              type: string
+            type: object
+          - type: 'null'
+          title: Fields
+      type: object
+      required:
+      - payment_attempt_id
+      - status
+      - reused_pending_attempt
+      - checkout_status
+      title: SePayCheckoutSession
+      description: The browser MUST submit a real HTML POST form to action_url using fields.
+    billing__SePayIPN:
+      properties:
+        timestamp:
+          type: integer
+          exclusiveMinimum: 0.0
+          title: Timestamp
+        notification_type:
+          type: string
+          enum:
+          - ORDER_PAID
+          - TRANSACTION_VOID
+          title: Notification Type
+        order:
+          $ref: '#/components/schemas/billing__SePayIPNOrder'
+        transaction:
+          $ref: '#/components/schemas/billing__SePayIPNTransaction'
+      type: object
+      required:
+      - timestamp
+      - notification_type
+      - order
+      - transaction
+      title: SePayIPN
+      description: SePay sends independently configured X-Secret-Key authentication.
+    billing__SePayIPNOrder:
+      properties:
+        order_invoice_number:
+          type: string
+          maxLength: 120
+          minLength: 1
+          title: Order Invoice Number
+        order_status:
+          type: string
+          title: Order Status
+        order_currency:
+          type: string
+          title: Order Currency
+        order_amount:
+          anyOf:
+          - type: number
+          - type: string
+          title: Order Amount
+      type: object
+      required:
+      - order_invoice_number
+      - order_status
+      - order_currency
+      - order_amount
+      title: SePayIPNOrder
+    billing__SePayIPNTransaction:
+      properties:
+        transaction_id:
+          type: string
+          maxLength: 120
+          minLength: 1
+          title: Transaction Id
+        transaction_type:
+          type: string
+          title: Transaction Type
+        transaction_status:
+          type: string
+          title: Transaction Status
+        transaction_amount:
+          anyOf:
+          - type: number
+          - type: string
+          title: Transaction Amount
+        transaction_currency:
+          type: string
+          title: Transaction Currency
+      type: object
+      required:
+      - transaction_id
+      - transaction_type
+      - transaction_status
+      - transaction_amount
+      - transaction_currency
+      title: SePayIPNTransaction
 security:
 - BearerAuth: []
