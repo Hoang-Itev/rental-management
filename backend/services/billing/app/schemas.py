@@ -398,3 +398,54 @@ class ReconcileResult(BaseModel):
     succeeded_count: int
     failed_count: int
     still_pending_count: int
+
+
+class SePayCheckoutSession(BaseModel):
+    """The browser MUST submit a real HTML POST form to action_url using fields."""
+    payment_attempt_id: UUID
+    status: Literal["PENDING", "SUCCESS"]
+    reused_pending_attempt: bool
+    checkout_status: Literal["READY", "PAID"]
+    action_url: str | None = None
+    method: Literal["POST"] = "POST"
+    fields: dict[str, str] | None = None
+
+
+class SePayIPNOrder(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    order_invoice_number: str = Field(min_length=1, max_length=120)
+    order_status: str
+    order_currency: str
+    order_amount: Decimal
+
+    @field_validator("order_amount", mode="before")
+    @classmethod
+    def exact_amount(cls, value):
+        if isinstance(value, (float, bool)):
+            raise ValueError("Amount must be an exact decimal string or integer")
+        return value
+
+
+class SePayIPNTransaction(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    transaction_id: str = Field(min_length=1, max_length=120)
+    transaction_type: str
+    transaction_status: str
+    transaction_amount: Decimal
+    transaction_currency: str
+
+    @field_validator("transaction_amount", mode="before")
+    @classmethod
+    def exact_amount(cls, value):
+        if isinstance(value, (float, bool)):
+            raise ValueError("Amount must be an exact decimal string or integer")
+        return value
+
+
+class SePayIPN(BaseModel):
+    """SePay sends independently configured X-Secret-Key authentication."""
+    model_config = ConfigDict(extra="ignore")
+    timestamp: int = Field(gt=0)
+    notification_type: Literal["ORDER_PAID", "TRANSACTION_VOID"]
+    order: SePayIPNOrder
+    transaction: SePayIPNTransaction
