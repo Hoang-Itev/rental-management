@@ -3676,6 +3676,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/billing__MomoPaymentSession'
+        '202':
+          description: Checkout is awaiting reconciliation; no payment URL is available. Retry after the indicated
+            interval; do not create a new order.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/billing__MomoPaymentSession'
         '422':
           description: Request validation failed
           content:
@@ -7939,6 +7950,20 @@ components:
         reused_pending_attempt:
           type: boolean
           title: Reused Pending Attempt
+        checkout_status:
+          type: string
+          enum:
+          - READY
+          - RECONCILING
+          - PAID
+          title: Checkout Status
+          description: READY has a pay_url; RECONCILING has no checkout URL yet; PAID is confirmed by the backend.
+        retry_after_seconds:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Retry After Seconds
         pay_url:
           anyOf:
           - type: string
@@ -7955,6 +7980,7 @@ components:
       - payment_attempt_id
       - status
       - reused_pending_attempt
+      - checkout_status
       title: MomoPaymentSession
     billing__PageMeta:
       properties:

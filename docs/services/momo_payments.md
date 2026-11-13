@@ -14,13 +14,19 @@ Khi MoMo timeout, phiên giữ PENDING. Scheduler đối soát mặc định m�
 docker compose -f compose.yaml -f compose.workers.yaml up -d --build
 ```
 
-Giữ thêm các overlay Tenant/Metering nếu bạn demo từ đầu quy trình. Mở email P10 trong Mailpit, copy link hóa đơn, rồi dùng PowerShell:
+Compose chính và compose.workers.yaml đã bao gồm các service và worker cần cho luồng này. Mở email P10 trong Mailpit, copy link hóa đơn, rồi dùng PowerShell:
 
 ```powershell
 $invoiceUrl = Read-Host 'Dán link hóa đơn từ email'
 $payment = Invoke-RestMethod -Method Post -Uri "$invoiceUrl/payments/momo"
 $payment
-if ($payment.pay_url) { Start-Process $payment.pay_url }
+if ($payment.checkout_status -eq 'READY') {
+    Start-Process $payment.pay_url
+} elseif ($payment.checkout_status -eq 'PAID') {
+    Write-Host 'Hóa đơn đã thanh toán.'
+} else {
+    Write-Host "Đang chờ đối soát; thử lại sau $($payment.retry_after_seconds) giây. Không tạo hóa đơn khác."
+}
 ```
 
 Dùng thông tin thẻ thử do MoMo Sandbox cung cấp trên trang thanh toán. Sau khi hoàn tất, mở lại link trong email để xem `PAID`. Mailpit sẽ nhận email biên nhận nếu Notification đang chạy.
@@ -28,3 +34,43 @@ Dùng thông tin thẻ thử do MoMo Sandbox cung cấp trên trang thanh toán.
 `scripts/tests/momo-payments-integration.ps1` dùng PostgreSQL và RabbitMQ riêng, thay HTTP MoMo bằng fixture có chữ ký kiểm tra độc lập. Nó kiểm tra sai chữ ký/số tiền, callback trùng đồng thời, timeout, đối soát và routing event. Chạy demo với tài khoản Sandbox thật để xác nhận cấu hình IPN bên ngoài.
 
 [Tài liệu MoMo ATM](https://developers.momo.vn/v3/vi/docs/payment/api/atm/onetime/) · [IPN](https://developers.momo.vn/v3/vi/docs/payment/api/result-handling/notification/) · [Đối soát](https://developers.momo.vn/v3/vi/docs/payment/api/payment-api/query/)
+
+## Cấu hình thực sự được đọc ở đâu?
+
+Compose đọc `.env` để thay `${MOMO_*}` rồi truyền các biến vào `environment` của
+`billing` và `billing-scheduler`. `app/config.py:Settings` đọc môi trường của
+container; nó không tự mở file `.env` trên Windows. `get_payment_service()` tạo
+`MomoClient` từ Settings cho API; `reconcile_loop()` làm tương tự cho scheduler.
+Không hardcode khóa trong Python. Khi thiếu một trong bốn biến, checkout trả
+503 MOMO_UNAVAILABLE và scheduler không chạy đối soát; các chức năng Billing khác
+vẫn hoạt động.
+
+Sau khi sửa `.env`, tạo lại hai container (restart đơn thuần không nạp biến mới):
+
+```powershell
+docker compose -f compose.yaml -f compose.workers.yaml up -d --force-recreate billing billing-scheduler
+```
+
+Tạo thanh toán: `POST /public/v1/invoices/{token}/payments/momo`.
+Nhận thông báo từ MoMo: `POST /webhooks/momo/ipn` (không dùng JWT, xác thực bằng chữ ký MoMo).
+Chuyển trình duyệt về: `GET /public/v1/payments/momo/return` (không cập nhật PAID).
+
+## Timeout và đối soát
+
+Checkout trả 200 với `checkout_status=READY` và `pay_url` khi đã có trang thanh toán,
+hoặc `checkout_status=PAID` nếu đã thanh toán. Khi lượt PENDING chưa có URL, trả
+202 với `checkout_status=RECONCILING`, `retry_after_seconds` và header `Retry-After`.
+Frontend hiển thị đang đối soát, chờ rồi gọi lại checkout; không điều hướng khi thiếu URL.
+HTTP 202 không có nghĩa đã thanh toán thành công.
+
+Lỗi HTTP 504/HTML, timeout, JSON sai định dạng hoặc sai mã đơn đều giữ PENDING.
+Log `app.momo` ghi operation, order_id, loại lỗi và HTTP status, không ghi khóa,
+chữ ký, body hay link thanh toán. Không tự đổi FAILED hoặc tạo order mới chỉ vì timeout.
+Scheduler mặc định hỏi lại mỗi 300 giây. Chỉ khi query xác nhận mã 42 (không tìm thấy
+đơn) và đã qua khoảng chờ, hệ thống mới thử create lại bằng cùng orderId/requestId.
+Nếu MoMo vẫn trả 504, hệ thống tiếp tục chờ; sửa log không thể khắc phục sự cố gateway bên ngoài.
+
+CI dùng HTTP MoMo giả lập có kiểm tra chữ ký, cùng PostgreSQL/RabbitMQ thật trong
+project test riêng. Nó không chứng nhận bộ khóa Sandbox hay đường IPN Internet đang
+hoạt động. Nghiệm thu Sandbox thật cần mở checkout, thanh toán bằng thẻ test,
+kiểm tra hóa đơn PAID và biên nhận; không dùng thẻ thật.

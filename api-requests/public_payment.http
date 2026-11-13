@@ -7,6 +7,8 @@
 GET {{baseUrl}}/public/v1/invoices/{{invoiceToken}}
 
 ### Create/retry MoMo Sandbox checkout. Requires configured Sandbox credentials.
+# 200 READY includes pay_url; 202 RECONCILING has no URL: wait Retry-After, then retry.
+# 200 PAID means the backend already confirmed payment.
 # A disabled MoMo provider returns 503. This request does not itself mark an invoice PAID.
 POST {{baseUrl}}/public/v1/invoices/{{invoiceToken}}/payments/momo
 Idempotency-Key: manual-checkout-{{invoiceToken}}

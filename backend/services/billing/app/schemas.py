@@ -265,6 +265,10 @@ class MomoPaymentSession(BaseModel):
     payment_attempt_id: UUID
     status: Literal["PENDING", "SUCCESS"]
     reused_pending_attempt: bool
+    checkout_status: Literal["READY", "RECONCILING", "PAID"] = Field(
+        description="READY has a pay_url; RECONCILING has no checkout URL yet; PAID is confirmed by the backend."
+    )
+    retry_after_seconds: int | None = Field(default=None, ge=1)
     pay_url: str | None = None
     expires_at: datetime | None = None
 
