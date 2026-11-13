@@ -2,14 +2,16 @@
 from collections.abc import Iterator
 
 import httpx
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Header, Response
 
 from app.api import error
 from app.config import get_settings
 from app.db import get_sessionmaker
 from app.momo import MomoClient
 from app.payment import PaymentService
-from app.schemas import MomoIPN, ReconcilePayments, ReconcileResult
+from app.schemas import MomoIPN, ReconcilePayments, ReconcileResult, SePayIPN
+from app.sepay import SePayGateway
+from app.sepay_payment import SePayPaymentService
 from app.service import LinkDenied
 
 router = APIRouter()
@@ -37,3 +39,20 @@ def reconcile_payments(payload: ReconcilePayments | None = None,
         return service.reconcile(payload or ReconcilePayments())
     except LinkDenied as exc:
         raise error(exc.status, exc.code, "MoMo reconciliation unavailable") from exc
+
+
+def get_sepay_payment_service() -> SePayPaymentService:
+    return SePayPaymentService(get_sessionmaker(), SePayGateway(get_settings()))
+
+
+@router.post("/webhooks/sepay/ipn", status_code=200)
+def receive_sepay_ipn(
+    payload: SePayIPN,
+    x_secret_key: str | None = Header(None, alias="X-Secret-Key"),
+    service: SePayPaymentService = Depends(get_sepay_payment_service),
+):
+    try:
+        service.receive_ipn(payload, x_secret_key)
+    except LinkDenied as exc:
+        raise error(exc.status, exc.code, "SePay notification rejected") from exc
+    return {"success": True}
