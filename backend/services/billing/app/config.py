@@ -1,5 +1,6 @@
 """Billing configuration shared by the API, scheduler and publisher."""
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import AnyHttpUrl, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings
@@ -19,6 +20,11 @@ class Settings(BaseSettings):
     momo_ipn_url: AnyHttpUrl | None = None
     momo_timeout_seconds: float = Field(default=30, ge=30, le=90)
     momo_reconcile_seconds: int = Field(default=300, ge=15)
+    # Separate merchant signing and callback authentication credentials.
+    sepay_merchant_id: str = ""
+    sepay_secret_key: SecretStr = SecretStr("")
+    sepay_ipn_secret_key: SecretStr = SecretStr("")
+    sepay_environment: Literal["sandbox", "production"] = "sandbox"
 
     @field_validator("momo_ipn_url", mode="before")
     @classmethod
