@@ -1,0 +1,206 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Noto+Serif+Display:ital,wght@0,400;0,600;1,400&family=Lora:ital,wght@0,400;1,400&display=swap');
+
+/* =========================================================
+   1. BẢNG MÀU & BIẾN TOÀN CỤC
+   ========================================================= */
+:root {
+  --night-0: #0a0e17; --night-1: #121a28; --night-2: #1c2436; --night-3: #2a3450;
+  --stone: #3a4256; --stone-2: #2a3040;
+  --moss: #4a6b4a; --moss-2: #35503a; --moss-3: #5a8b5a;
+  --wood: #4a2a18; --wood-2: #2e1a0e; --wood-3: #6b3d22; --wood-hi: #8a5a34;
+  --tile: #3a4a5c; --tile-2: #25303e; --tile-hi: #5a6a7c;
+  --cinnabar: #c52e1a; --cinnabar-2: #8a1e10; --cinnabar-3: #e8472b;
+  --jade: #3d8a7a; --jade-2: #2a5f52; --jade-hi: #6bbfab;
+  --gold: #d4a340; --gold-2: #f2d070; --gold-3: #8a6a1e;
+  --amber: #e89a3a; --amber-2: #c97519;
+  --indigo: #3a4a7a; --indigo-2: #252f52;
+  --plum: #6a2a3a; --plum-2: #4a1a28;
+  --ink: #f4e8cc; --ink-soft: #c9b48a; --ink-dim: #8a7a5a;
+  --paper: #ead9b8; --paper-2: #d9c398;
+  --koi-1: #f2e8d0; --koi-2: #e8472b; --koi-3: #c52e1a;
+  --water-hi: #6bbfab;
+}
+
+body.dawn {
+  --night-0: #f5e6c8; --night-1: #f0d9b0; --night-2: #e8c894; --night-3: #d9b078;
+  --stone: #a89878; --stone-2: #8a7a5a;
+  --moss: #6a8b5a; --moss-2: #4a6b3a; --moss-3: #7a9b6a;
+  --wood: #6b4a28; --wood-2: #4a2a18; --wood-3: #8a5a34; --wood-hi: #a87a4a;
+  --tile: #8a6a4a; --tile-2: #6b4a2a; --tile-hi: #a88a5a;
+  --cinnabar: #d94a2e; --cinnabar-2: #a82e1a; --cinnabar-3: #f25a3a;
+  --jade: #4a9a8a; --jade-2: #2a6f62; --jade-hi: #8bcfbf;
+  --gold: #e8b44a; --gold-2: #f8d880; --gold-3: #a87a1e;
+  --amber: #f2aa4a; --amber-2: #d98529;
+  --indigo: #6a8aba; --indigo-2: #4a6a9a;
+  
+  /* Màu chữ khi ở chế độ sáng */
+  --ink: #2a1a0e; --ink-soft: #5a3a1e; --ink-dim: #8a6a4a;
+  --paper: #f8ecd0; --paper-2: #e8d4a8;
+  --water-hi: #a8e0c8;
+}
+
+/* =========================================================
+   2. RESET & LAYOUT CƠ BẢN
+   ========================================================= */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body, #root {
+  min-height: 100vh;
+  width: 100%;
+  overflow-x: hidden; /* Ngăn trình duyệt tự động zoom-out khi có phần tử tràn */
+  background: var(--night-0); 
+  color: var(--ink);
+  font-family: 'Lora', 'Noto Serif Display', Georgia, serif;
+  font-size: 16px; line-height: 1.55;
+  transition: background 0.8s ease, color 0.8s ease;
+}
+
+h1, h2, h3 { font-family: 'Cormorant Garamond', serif; font-weight: 700; }
+
+button { font-family: 'Noto Serif Display', serif; cursor: pointer; }
+
+label { display: block; font-size: 11px; text-transform: uppercase; color: var(--ink-dim); margin-bottom: 6px; }
+
+input, textarea, select {
+  font-family: 'Lora', serif; color: var(--ink); background: var(--night-1);
+  border: 1px solid var(--gold-3); padding: 10px 14px; width: 100%;
+  transition: border-color 0.25s, box-shadow 0.25s;
+}
+input:focus, textarea:focus, select:focus {
+  outline: none; border-color: var(--gold-2); box-shadow: 0 0 0 2px rgba(242, 208, 112, 0.15);
+}
+
+/* =========================================================
+   3. SỬA LỖI CHỮ DÍNH TRÊN NAVBAR & MÀU CHỮ
+   ========================================================= */
+.layout-root { display: flex; flex-direction: column; min-height: 100vh; }
+.top-nav {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 40px; height: 70px; background: var(--night-2);
+  border-bottom: 2px solid var(--gold-3); position: sticky; top: 0; z-index: 100;
+}
+body.dawn .top-nav { background: var(--night-1); }
+
+/* Sửa lỗi chữ "Minh An" và "Quản lý trọ" bị dính */
+.top-nav-brand {
+  display: flex; 
+  flex-direction: column; 
+  gap: 4px; /* Tạo khoảng cách giữa 2 dòng chữ */
+  cursor: pointer;
+}
+.brand-title { 
+  font-family: 'Cormorant Garamond', serif; 
+  font-size: 24px; 
+  font-weight: 700;
+  line-height: 1.1; 
+  color: var(--gold-2); 
+}
+body.dawn .brand-title { color: var(--cinnabar-2); }
+.brand-sub { 
+  font-size: 10px; 
+  letter-spacing: 0.2em; 
+  text-transform: uppercase; 
+  color: var(--ink-dim); 
+}
+
+.top-nav-links { display: flex; gap: 8px; height: 100%; }
+.top-nav-item { 
+  display: flex; align-items: center; padding: 0 16px; 
+  color: var(--ink-soft); text-decoration: none; position: relative; 
+  transition: color 0.3s;
+}
+body.dawn .top-nav-item { color: #5a3a1e; }
+body.dawn .top-nav-item:hover { color: var(--cinnabar); }
+.top-nav-item.active { color: var(--gold-2); font-weight: 700; }
+body.dawn .top-nav-item.active { color: var(--cinnabar-2); }
+.top-nav-item.active::after { 
+  content: ''; position: absolute; bottom: 0; left: 16px; right: 16px; 
+  height: 3px; background: var(--gold); border-radius: 2px 2px 0 0;
+}
+body.dawn .top-nav-item.active::after { background: var(--cinnabar); }
+
+.top-nav-user { display: flex; align-items: center; gap: 20px; }
+.user-name { font-size: 14px; color: var(--ink); font-style: italic; }
+body.dawn .user-name { color: #2a1a0e; }
+
+.layout-main { flex: 1; overflow-y: auto; }
+
+/* =========================================================
+   4. NÚT BẤM VÁT GÓC (FIX LỖI ĐEN THUI / CHÌM)
+   ========================================================= */
+.btn-vat, .btn-primary, .btn-secondary, .login-submit, .modal-btn {
+  padding: 10px 24px; 
+  background: var(--wood-3); 
+  color: var(--gold-2); 
+  border: 1px solid var(--wood-2); 
+  font-size: 14px; 
+  cursor: pointer;
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+  transition: all 0.3s;
+}
+.btn-vat:hover, .btn-secondary:hover, .modal-btn:hover {
+  background: var(--gold); color: var(--night-0);
+}
+.btn-primary { 
+  background: var(--cinnabar); 
+  border-color: var(--cinnabar-2); 
+  color: #f8d880 !important; /* Ép màu vàng sáng */
+  font-weight: bold;
+}
+.btn-primary:hover { 
+  background: var(--cinnabar-3); 
+  color: #ffffff !important; /* Trắng sáng khi hover */
+  box-shadow: 0 0 15px rgba(232, 71, 43, 0.4);
+}
+
+/* =========================================================
+   5. SỬA LỖI MÀU LINK "CHI TIẾT" VÀ SỐ TIỀN (FIX CHÌM)
+   ========================================================= */
+a { color: var(--gold-2); text-decoration: none; transition: color 0.3s; }
+a:hover { color: var(--gold); }
+
+body.dawn a { color: var(--jade-2); font-weight: 700; } 
+body.dawn a:hover { color: var(--moss-2); }
+
+body.dawn .data-table td a,
+body.dawn .data-table td .amount,
+body.dawn .data-table td strong { 
+  color: var(--jade-2) !important; 
+  font-weight: 700;
+}
+
+/* =========================================================
+   6. BẢNG, FORM, PHÂN TRANG
+   ========================================================= */
+.login-shell { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: radial-gradient(ellipse at 50% 0%, var(--night-3), var(--night-1) 60%, var(--night-0)); }
+.login-card { width: min(420px, 100%); padding: 40px; border: 1px solid var(--gold-3); background: var(--night-2); box-shadow: inset 0 0 60px rgba(0,0,0,0.6), 0 30px 80px rgba(0,0,0,0.6); }
+.login-title { font-size: 44px; margin: 8px 0 4px; background: linear-gradient(180deg, var(--gold-2), var(--gold), var(--gold-3)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+body.dawn .login-title { background: linear-gradient(180deg, var(--cinnabar-3), var(--cinnabar-2)); -webkit-background-clip: text; background-clip: text; }
+.login-field { margin-bottom: 18px; }
+.login-error { color: var(--cinnabar-3); margin-bottom: 16px; padding: 10px; border: 1px solid var(--cinnabar-2); background: rgba(197, 46, 26, 0.1); }
+.login-submit { width: 100%; padding: 12px; font-size: 15px; }
+
+.page-container { padding: 40px; max-width: 1200px; margin: 0 auto; }
+.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 20px; }
+.page-title { font-size: 32px; color: var(--gold-2); margin: 0; }
+body.dawn .page-title { color: var(--cinnabar-2); }
+
+.data-table { width: 100%; border-collapse: collapse; background: var(--night-2); border: 1px solid var(--gold-3); }
+.data-table th, .data-table td { padding: 14px 16px; text-align: left; border-bottom: 1px solid rgba(212,163,64,0.15); }
+.data-table th { font-size: 12px; text-transform: uppercase; color: var(--gold-3); }
+body.dawn .data-table th { color: var(--cinnabar-2); }
+.data-table tr:hover { background: rgba(212, 163, 64, 0.05); }
+
+.pagination { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; }
+.page-info { color: var(--ink-soft); }
+.page-actions { display: flex; gap: 8px; }
+.page-btn { padding: 8px 16px; background: transparent; border: 1px solid var(--gold-3); color: var(--gold-2); cursor: pointer; transition: all 0.3s; }
+body.dawn .page-btn { border-color: var(--cinnabar-2); color: var(--cinnabar-2); }
+body.dawn .page-btn:hover:not(:disabled) { background: var(--cinnabar); color: #fff; }
+
+/* Class cho số tiền trong bảng */
+.text-amount {
+  color: var(--gold);
+}
+body.dawn .text-amount {
+  color: var(--jade-2) !important; /* Xanh ngọc đậm ở nền sáng */
+}

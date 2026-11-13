@@ -1,0 +1,325 @@
+/* =========================================================
+   BẢNG MÀU 2 CHẾ ĐỘ
+   ========================================================= */
+:root {
+  --night-0: #0a0e17; --night-1: #121a28; --night-2: #1c2436; --night-3: #2a3450;
+  --stone: #3a4256; --stone-2: #2a3040;
+  --moss: #4a6b4a; --moss-2: #35503a; --moss-3: #5a8b5a;
+  --wood: #4a2a18; --wood-2: #2e1a0e; --wood-3: #6b3d22; --wood-hi: #8a5a34;
+  --tile: #3a4a5c; --tile-2: #25303e; --tile-hi: #5a6a7c;
+  --cinnabar: #c52e1a; --cinnabar-2: #8a1e10; --cinnabar-3: #e8472b;
+  --jade: #3d8a7a; --jade-2: #2a5f52; --jade-hi: #6bbfab;
+  --gold: #d4a340; --gold-2: #f2d070; --gold-3: #8a6a1e;
+  --amber: #e89a3a; --amber-2: #c97519;
+  --indigo: #3a4a7a; --indigo-2: #252f52;
+  --plum: #6a2a3a; --plum-2: #4a1a28;
+  --ink: #f4e8cc; --ink-soft: #c9b48a; --ink-dim: #8a7a5a;
+  --paper: #ead9b8; --paper-2: #d9c398;
+  --koi-1: #f2e8d0; --koi-2: #e8472b; --koi-3: #c52e1a;
+  --water-hi: #6bbfab;
+}
+body.dawn {
+  --night-0: #f5e6c8; --night-1: #f0d9b0; --night-2: #e8c894; --night-3: #d9b078;
+  --stone: #a89878; --stone-2: #8a7a5a;
+  --moss: #6a8b5a; --moss-2: #4a6b3a; --moss-3: #7a9b6a;
+  --wood: #6b4a28; --wood-2: #4a2a18; --wood-3: #8a5a34; --wood-hi: #a87a4a;
+  --tile: #8a6a4a; --tile-2: #6b4a2a; --tile-hi: #a88a5a;
+  --cinnabar: #d94a2e; --cinnabar-2: #a82e1a; --cinnabar-3: #f25a3a;
+  --jade: #4a9a8a; --jade-2: #2a6f62; --jade-hi: #8bcfbf;
+  --gold: #e8b44a; --gold-2: #f8d880; --gold-3: #a87a1e;
+  --amber: #f2aa4a; --amber-2: #d98529;
+  --indigo: #6a8aba; --indigo-2: #4a6a9a;
+  --ink: #2a1a0e; --ink-soft: #5a3a1e; --ink-dim: #8a6a4a;
+  --paper: #f8ecd0; --paper-2: #e8d4a8;
+  --water-hi: #a8e0c8;
+}
+
+/* =========================================================
+   KHUNG CẢNH CHÍNH
+   ========================================================= */
+.scene-root {
+  position: relative; overflow: hidden;
+  margin: 0 auto 60px; max-width: 1400px;
+  border: 1px solid var(--gold-3);
+  box-shadow: inset 0 0 100px rgba(0,0,0,.5), 0 0 0 1px rgba(212,163,64,.15), 0 20px 60px rgba(0,0,0,.4);
+  min-height: 1080px; transition: background .8s ease;
+  background: radial-gradient(ellipse at 50% 0%, var(--night-3) 0%, var(--night-2) 40%, var(--night-1) 70%, var(--night-0) 100%);
+}
+
+/* SAO */
+.stars { position: absolute; inset: 0 0 auto 0; height: 340px; pointer-events: none; z-index: 1; transition: opacity .8s; }
+body.dawn .stars { opacity: 0; }
+.star { position: absolute; width: 2px; height: 2px; background: #fff; border-radius: 50%; animation: twinkle 4s ease-in-out infinite; box-shadow: 0 0 4px rgba(255,255,255,.9), 0 0 8px rgba(242,208,112,.5); }
+.star.big { width: 3px; height: 3px; box-shadow: 0 0 6px #fff, 0 0 12px rgba(242,208,112,.7); }
+@keyframes twinkle { 0%,100% { opacity: .15; transform: scale(.8); } 50% { opacity: .9; transform: scale(1.2); } }
+
+/* Trăng / Mặt trời */
+.celestial { position: absolute; top: 50px; right: 12%; width: 90px; height: 90px; border-radius: 50%; z-index: 2; transition: all .8s ease; }
+.celestial.moon { background: radial-gradient(circle at 38% 38%, #fff5d8, #f2d070 50%, #c9a24a 85%); box-shadow: 0 0 50px rgba(242,208,112,.6), 0 0 100px rgba(242,208,112,.3), inset -10px -10px 0 rgba(138,106,30,.3); animation: moonPulse 8s ease-in-out infinite; }
+.celestial.sun { background: radial-gradient(circle at 38% 38%, #fff5d8, #ffd24a 40%, #e8a030 85%); box-shadow: 0 0 60px rgba(255,210,74,.8), 0 0 120px rgba(232,154,58,.5), inset -10px -10px 0 rgba(200,140,30,.3); animation: sunPulse 4s ease-in-out infinite; }
+@keyframes moonPulse { 0%,100% { box-shadow: 0 0 50px rgba(242,208,112,.6), 0 0 100px rgba(242,208,112,.3), inset -10px -10px 0 rgba(138,106,30,.3); } 50% { box-shadow: 0 0 70px rgba(242,208,112,.8), 0 0 140px rgba(242,208,112,.4), inset -10px -10px 0 rgba(138,106,30,.3); } }
+@keyframes sunPulse { 0%,100% { box-shadow: 0 0 60px rgba(255,210,74,.8), 0 0 120px rgba(232,154,58,.5), inset -10px -10px 0 rgba(200,140,30,.3); } 50% { box-shadow: 0 0 100px rgba(255,210,74,1), 0 0 180px rgba(232,154,58,.6), inset -10px -10px 0 rgba(200,140,30,.3); } }
+
+/* Mây */
+.clouds { position: absolute; inset: 0 0 auto 0; height: 400px; pointer-events: none; z-index: 1; overflow: hidden; transition: opacity .8s; }
+.cloud { position: absolute; border-radius: 50%; filter: blur(2px); transition: background .8s; }
+.cloud::before, .cloud::after { content: ""; position: absolute; border-radius: 50%; background: inherit; }
+.c1 { width: 180px; height: 36px; top: 80px; left: 5%; background: rgba(200,210,230,.10); animation: drift1 60s linear infinite; }
+.c1::before { width: 120px; height: 28px; top: -10px; left: 20px; }
+.c1::after { width: 90px; height: 22px; top: -4px; left: 110px; }
+.c2 { width: 140px; height: 28px; top: 140px; left: 38%; background: rgba(200,210,230,.08); animation: drift2 80s linear infinite; animation-delay: -20s; }
+.c2::before { width: 100px; height: 24px; top: -8px; left: 18px; }
+.c3 { width: 220px; height: 40px; top: 52px; left: 62%; background: rgba(200,210,230,.06); animation: drift1 100s linear infinite; animation-delay: -40s; }
+.c3::before { width: 150px; height: 30px; top: -12px; left: 30px; }
+.c4 { width: 160px; height: 30px; top: 180px; left: 82%; background: rgba(200,210,230,.05); animation: drift2 90s linear infinite; animation-delay: -10s; }
+body.dawn .c1 { background: rgba(255,240,220,.65); }
+body.dawn .c2 { background: rgba(255,230,200,.5); }
+body.dawn .c3 { background: rgba(255,245,225,.55); }
+body.dawn .c4 { background: rgba(255,235,215,.45); }
+@keyframes drift1 { 0% { transform: translateX(-40px); } 50% { transform: translateX(60px); } 100% { transform: translateX(-40px); } }
+@keyframes drift2 { 0% { transform: translateX(0); } 50% { transform: translateX(-80px); } 100% { transform: translateX(0); } }
+
+/* Núi xa */
+.mountains { position: absolute; left: 0; right: 0; top: 160px; height: 260px; pointer-events: none; z-index: 1; }
+.mountain { position: absolute; left: 0; right: 0; bottom: 0; transition: filter .8s; }
+.mountain.m1 { height: 220px; background: linear-gradient(180deg, transparent 0%, var(--indigo-2) 30%, var(--indigo) 100%); clip-path: polygon(0 100%, 8% 40%, 15% 60%, 25% 25%, 35% 55%, 45% 35%, 55% 65%, 68% 30%, 78% 50%, 88% 40%, 100% 100%); opacity: .7; }
+.mountain.m2 { height: 180px; background: linear-gradient(180deg, transparent 0%, var(--indigo) 40%, var(--jade-2) 100%); clip-path: polygon(0 100%, 5% 60%, 12% 75%, 22% 40%, 32% 70%, 42% 50%, 52% 75%, 62% 45%, 72% 65%, 82% 55%, 92% 70%, 100% 100%); opacity: .55; }
+.mountain.m3 { height: 130px; background: linear-gradient(180deg, transparent 0%, var(--jade-2) 50%, var(--moss-2) 100%); clip-path: polygon(0 100%, 10% 70%, 20% 85%, 30% 60%, 40% 80%, 50% 65%, 60% 85%, 70% 70%, 80% 85%, 90% 75%, 100% 100%); opacity: .4; }
+
+/* Chim */
+.birds { position: absolute; inset: 0 0 auto 0; height: 300px; pointer-events: none; z-index: 2; }
+.bird { position: absolute; width: 16px; height: 6px; animation: fly 32s linear infinite; }
+.bird svg { width: 100%; height: 100%; fill: none; stroke: var(--ink-soft); stroke-width: 1.5; stroke-linecap: round; }
+.b1 { top: 70px; left: 5%; animation-delay: -2s; }
+.b2 { top: 100px; left: 30%; animation-delay: -12s; transform: scale(.8); }
+.b3 { top: 50px; left: 55%; animation-delay: -22s; transform: scale(1.1); }
+.b4 { top: 130px; left: 75%; animation-delay: -8s; transform: scale(.7); }
+.b5 { top: 90px; left: 20%; animation-delay: -16s; transform: scale(.9); }
+.b6 { top: 60px; left: 65%; animation-delay: -26s; transform: scale(.85); }
+body.dawn .birds .bird { stroke: var(--ink); opacity: .85; }
+@keyframes fly { 0% { transform: translate(0,0); } 50% { transform: translate(calc(100vw - 100px), -60px); } 100% { transform: translate(0,0); } }
+
+/* Đèn trời ban mai */
+.sky-lanterns { position: absolute; inset: 0; pointer-events: none; z-index: 1; opacity: 0; transition: opacity .8s; }
+body.dawn .sky-lanterns { opacity: 1; }
+.sky-lantern { position: absolute; width: 18px; height: 26px; background: radial-gradient(circle at 40% 40%, #ffd88a, #e8a03a 50%, #b87820); border-radius: 40% 40% 25% 25%; box-shadow: 0 0 20px rgba(255,210,74,.8), 0 0 40px rgba(232,154,58,.5); bottom: 0; animation: skyLanternRise 22s linear infinite; }
+.sky-lantern::after { content: ""; position: absolute; left: 50%; bottom: -6px; width: 6px; height: 6px; background: #ffd88a; border-radius: 1px; transform: translateX(-50%); box-shadow: 0 0 8px #ffd88a; }
+.sl1 { left: 15%; animation-delay: 0s; }
+.sl2 { left: 45%; animation-delay: -7s; }
+.sl3 { left: 75%; animation-delay: -14s; }
+@keyframes skyLanternRise { 0% { transform: translateY(0) translateX(0); opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { transform: translateY(-950px) translateX(-30px); opacity: 0; } }
+
+/* Sương mù ban mai */
+.mist { position: absolute; inset: 0; pointer-events: none; z-index: 1; opacity: 0; transition: opacity 1.5s; }
+body.dawn .mist { opacity: .7; }
+.mist svg { width: 100%; height: 100%; }
+.mist-path { animation: mistDrift 30s linear infinite; }
+@keyframes mistDrift { 0% { transform: translateX(-100px); } 100% { transform: translateX(100px); } }
+
+/* Bướm ban mai */
+.butterflies { position: absolute; inset: 0; pointer-events: none; z-index: 3; opacity: 0; transition: opacity .8s; }
+body.dawn .butterflies { opacity: 1; }
+.butterfly { position: absolute; width: 20px; height: 16px; animation: bflyFloat 12s ease-in-out infinite; }
+.butterfly svg { width: 100%; height: 100%; }
+.butterfly .wing-l, .butterfly .wing-r { transform-origin: center; animation: wingFlapB .35s ease-in-out infinite alternate; }
+.butterfly .wing-r { animation-direction: alternate-reverse; }
+.bf1 { top: 180px; left: 15%; animation-delay: 0s; }
+.bf2 { top: 240px; left: 55%; animation-delay: -4s; }
+.bf3 { top: 200px; left: 80%; animation-delay: -8s; }
+@keyframes bflyFloat { 0%,100% { transform: translate(0,0) rotate(0); } 25% { transform: translate(30px,-20px) rotate(10deg); } 50% { transform: translate(60px,10px) rotate(-5deg); } 75% { transform: translate(30px,30px) rotate(8deg); } }
+@keyframes wingFlapB { 0% { transform: scaleX(1); } 100% { transform: scaleX(.4); } }
+
+/* Lá liễu rơi (ban mai) */
+.leaves-fall { position: absolute; inset: 0; pointer-events: none; z-index: 4; opacity: 0; transition: opacity 1s; }
+body.dawn .leaves-fall { opacity: 1; }
+.leaf-fall { position: absolute; width: 10px; height: 20px; animation: leafDrift 14s linear infinite; }
+.leaf-fall svg { width: 100%; height: 100%; }
+.leaf-fall:nth-child(1) { left: 30%; top: 20%; animation-delay: 0s; }
+.leaf-fall:nth-child(2) { left: 40%; top: 15%; animation-delay: -1.5s; }
+.leaf-fall:nth-child(3) { left: 50%; top: 25%; animation-delay: -3s; }
+.leaf-fall:nth-child(4) { left: 35%; top: 30%; animation-delay: -4.5s; }
+.leaf-fall:nth-child(5) { left: 45%; top: 10%; animation-delay: -6s; }
+.leaf-fall:nth-child(6) { left: 55%; top: 20%; animation-delay: -7.5s; }
+.leaf-fall:nth-child(7) { left: 60%; top: 30%; animation-delay: -9s; }
+.leaf-fall:nth-child(8) { left: 38%; top: 35%; animation-delay: -10.5s; }
+.leaf-fall:nth-child(9) { left: 48%; top: 5%; animation-delay: -12s; }
+.leaf-fall:nth-child(10) { left: 52%; top: 40%; animation-delay: -13.5s; }
+.leaf-fall:nth-child(11) { left: 42%; top: 42%; animation-delay: -2s; }
+.leaf-fall:nth-child(12) { left: 58%; top: 28%; animation-delay: -5s; }
+@keyframes leafDrift { 0% { transform: translate(0,0) rotate(0); opacity: 0; } 10% { opacity: .9; } 50% { transform: translate(-40px,200px) rotate(180deg); } 90% { opacity: .9; } 100% { transform: translate(-80px,400px) rotate(360deg); opacity: 0; } }
+
+/* Đom đóm */
+.fireflies-scene { position: absolute; inset: 0; pointer-events: none; z-index: 2; transition: opacity .8s; }
+body.dawn .fireflies-scene { opacity: 0; }
+.firefly { position: absolute; width: 4px; height: 4px; background: #fff; border-radius: 50%; box-shadow: 0 0 10px rgba(242,208,112,1), 0 0 20px rgba(232,154,58,.8), 0 0 30px rgba(242,208,112,.5); animation: fireflyFloat 8s ease-in-out infinite; }
+.firefly:nth-child(1) { left: 10%; top: 60%; animation-delay: 0s; }
+.firefly:nth-child(2) { left: 20%; top: 75%; animation-delay: .8s; }
+.firefly:nth-child(3) { left: 30%; top: 65%; animation-delay: 1.6s; }
+.firefly:nth-child(4) { left: 40%; top: 80%; animation-delay: 2.4s; }
+.firefly:nth-child(5) { left: 50%; top: 70%; animation-delay: 3.2s; }
+.firefly:nth-child(6) { left: 60%; top: 85%; animation-delay: 4s; }
+.firefly:nth-child(7) { left: 70%; top: 75%; animation-delay: 4.8s; }
+.firefly:nth-child(8) { left: 80%; top: 65%; animation-delay: 5.6s; }
+.firefly:nth-child(9) { left: 90%; top: 80%; animation-delay: 6.4s; }
+.firefly:nth-child(10) { left: 15%; top: 85%; animation-delay: 7.2s; }
+.firefly:nth-child(11) { left: 35%; top: 70%; animation-delay: 1s; }
+.firefly:nth-child(12) { left: 55%; top: 88%; animation-delay: 2s; }
+.firefly:nth-child(13) { left: 75%; top: 72%; animation-delay: 3s; }
+.firefly:nth-child(14) { left: 85%; top: 90%; animation-delay: 4s; }
+.firefly:nth-child(15) { left: 25%; top: 80%; animation-delay: 5s; }
+.firefly:nth-child(16) { left: 45%; top: 75%; animation-delay: 6s; }
+.firefly:nth-child(17) { left: 65%; top: 68%; animation-delay: 7s; }
+.firefly:nth-child(18) { left: 95%; top: 78%; animation-delay: 1.5s; }
+.firefly:nth-child(19) { left: 5%; top: 88%; animation-delay: 3.5s; }
+.firefly:nth-child(20) { left: 50%; top: 95%; animation-delay: 5.5s; }
+@keyframes fireflyFloat { 0%,100% { transform: translate(0,0); opacity: 0; } 20% { opacity: 1; } 50% { transform: translate(30px,-40px); opacity: 1; } 80% { opacity: .5; } }
+
+/* Lưới phòng */
+.facade { position: relative; z-index: 3; display: grid; grid-template-columns: repeat(4,1fr); gap: 44px 32px; padding: 340px 48px 340px; }
+@media (max-width: 1024px) { .facade { grid-template-columns: repeat(2,1fr); padding: 320px 24px 300px; gap: 36px 24px; } }
+@media (max-width: 560px) { .facade { grid-template-columns: 1fr; padding: 300px 16px 260px; } }
+
+.shop { position: relative; aspect-ratio: 3/4; cursor: pointer; isolation: isolate; perspective: 800px; }
+.shop svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.shop svg .wall-bg { transition: transform .45s cubic-bezier(.4,.2,.2,1); transform-origin: center; }
+.shop:hover svg .wall-bg { transform: translateY(-3px); }
+
+/* =========================================================
+   GIỮ NGUYÊN HIỆU ỨNG CỬA MỞ 2 BÊN (ĐANG ĐÚNG)
+   ========================================================= */
+.shop .door-left, .shop .door-right {
+  transition: transform .6s cubic-bezier(.34,.1,.2,1);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.shop .door-left { transform-origin: left center; }
+.shop .door-right { transform-origin: right center; }
+.shop:hover .door-left { transform: rotateY(-85deg); }
+.shop:hover .door-right { transform: rotateY(85deg); }
+
+/* Chân đèn, hoa, mèo... */
+.shop .lantern-group { animation: lanternSwing 5s ease-in-out infinite; transform-origin: center top; }
+.shop:nth-child(2) .lantern-group { animation-delay: .4s; animation-duration: 5.5s; }
+.shop:nth-child(3) .lantern-group { animation-delay: .8s; animation-duration: 4.8s; }
+.shop:nth-child(5) .lantern-group { animation-delay: 1.2s; animation-duration: 5.2s; }
+.shop:nth-child(7) .lantern-group { animation-delay: .2s; animation-duration: 6s; }
+.shop:nth-child(9) .lantern-group { animation-delay: 1.6s; animation-duration: 4.5s; }
+.shop:nth-child(11) .lantern-group { animation-delay: .6s; animation-duration: 5.8s; }
+@keyframes lanternSwing { 0%,100% { transform: rotate(-7deg); } 50% { transform: rotate(7deg); } }
+.shop .windchime-group { transform-origin: center top; }
+.shop:hover .windchime-group { animation: windchimeShake .3s ease-in-out infinite; }
+@keyframes windchimeShake { 0%,100% { transform: rotate(-4deg); } 50% { transform: rotate(4deg); } }
+.shop .flower-group { transform-origin: center bottom; animation: flowerSway 4s ease-in-out infinite; }
+@keyframes flowerSway { 0%,100% { transform: rotate(-2deg); } 50% { transform: rotate(2deg); } }
+.shop .lantern-halo { opacity: .6; animation: haloPulse 3s ease-in-out infinite; }
+@keyframes haloPulse { 0%,100% { opacity: .4; } 50% { opacity: .9; } }
+.shop .dust-dot { opacity: 0; transition: opacity .4s; }
+.shop:hover .dust-dot { opacity: 1; animation: dustFloat 3s ease-in-out infinite; }
+.shop .dust-dot:nth-child(1) { animation-delay: 0s; }
+.shop .dust-dot:nth-child(2) { animation-delay: .5s; }
+.shop .dust-dot:nth-child(3) { animation-delay: 1s; }
+.shop .dust-dot:nth-child(4) { animation-delay: 1.5s; }
+.shop .dust-dot:nth-child(5) { animation-delay: 2s; }
+@keyframes dustFloat { 0%,100% { transform: translate(0,0); opacity: 0; } 30% { opacity: 1; } 100% { transform: translate(4px,-30px); opacity: 0; } }
+.shop .incense-smoke { opacity: 0; transition: opacity .4s; }
+.shop:hover .incense-smoke { opacity: .7; animation: smokeRise 3s ease-out infinite; transform-origin: center bottom; }
+@keyframes smokeRise { 0% { transform: translateY(0) scaleY(.3); opacity: 0; } 50% { opacity: .7; } 100% { transform: translateY(-25px) scaleY(1.5); opacity: 0; } }
+.shop .room-glow { opacity: 0; transition: opacity .5s; pointer-events: none; }
+.shop:hover .room-glow { opacity: 1; }
+.shop .cat-tail { 
+  transform-origin: 0% 50%; 
+  animation: catTail 2s ease-in-out infinite; 
+}
+@keyframes catTail { 
+  0%, 100% { transform: rotate(-5deg); } 
+  50% { transform: rotate(10deg); } 
+}
+.shop .cat-ear { animation: catEar 4s ease-in-out infinite; }
+@keyframes catEar { 0%,90%,100% { transform: rotate(0); } 95% { transform: rotate(-8deg); } }
+
+/* Cảnh dưới */
+.river-scene { position: absolute; left: 0; right: 0; bottom: 0; height: 340px; pointer-events: none; z-index: 2; }
+
+/* Liễu khổng lồ sau nhà */
+.giant-willow {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+}
+.giant-willow svg { width: 100%; height: 100%; overflow: visible; }
+.giant-willow .gw-branch { transform-origin: center top; animation: gwSway 6s ease-in-out infinite; }
+.giant-willow .gw-branch:nth-child(2) { animation-delay: .5s; }
+.giant-willow .gw-branch:nth-child(3) { animation-delay: 1s; }
+.giant-willow .gw-branch:nth-child(4) { animation-delay: 1.5s; }
+.giant-willow .gw-branch:nth-child(5) { animation-delay: 2s; }
+.giant-willow .gw-branch:nth-child(6) { animation-delay: 2.5s; }
+.giant-willow .gw-branch:nth-child(7) { animation-delay: 3s; }
+.giant-willow .gw-branch:nth-child(8) { animation-delay: 3.5s; }
+.giant-willow .gw-branch:nth-child(9) { animation-delay: .3s; }
+.giant-willow .gw-branch:nth-child(10) { animation-delay: .8s; }
+.giant-willow .gw-branch:nth-child(11) { animation-delay: 1.3s; }
+.giant-willow .gw-branch:nth-child(12) { animation-delay: 1.8s; }
+@keyframes gwSway { 0%,100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }
+
+/* Sông */
+.river { position: absolute; left: 0; right: 0; bottom: 0; height: 200px; background: linear-gradient(180deg, rgba(42,52,80,.9) 0%, rgba(58,74,122,.75) 40%, rgba(37,47,82,.95) 100%); overflow: hidden; transition: background .8s; }
+body.dawn .river { background: linear-gradient(180deg, rgba(120,160,200,.85) 0%, rgba(90,140,180,.75) 40%, rgba(60,100,140,.9) 100%); }
+.river::before { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(107,191,171,.06) 0 2px, transparent 2px 20px); animation: waterRipple 8s linear infinite; }
+.river::after { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(212,163,64,.05) 0 1px, transparent 1px 16px); animation: waterRipple 12s linear infinite reverse; }
+@keyframes waterRipple { from { transform: translateY(0); } to { transform: translateY(-20px); } }
+
+.moon-reflect { position: absolute; bottom: 20px; right: 14%; width: 60px; height: 120px; background: radial-gradient(ellipse at 50% 0%, rgba(242,208,112,.6) 0%, rgba(242,208,112,.2) 30%, transparent 70%); filter: blur(6px); animation: reflectPulse 6s ease-in-out infinite; transition: background .8s; }
+body.dawn .moon-reflect { background: radial-gradient(ellipse at 50% 0%, rgba(255,210,74,.7) 0%, rgba(255,210,74,.25) 30%, transparent 70%); }
+@keyframes reflectPulse { 0%,100% { opacity: .5; } 50% { opacity: .95; } }
+
+/* Cầu đá */
+.stone-bridge { position: absolute; left: 6%; right: 6%; bottom: 160px; height: 90px; z-index: 4; }
+.stone-bridge svg { width: 100%; height: 100%; display: block; }
+
+/* Liễu nhỏ bên trái */
+.willow { position: absolute; bottom: 170px; left: 2%; width: 200px; height: 300px; z-index: 5; }
+.willow svg { width: 100%; height: 100%; overflow: visible; }
+.willow .branch { transform-origin: center top; animation: willowSway 5s ease-in-out infinite; }
+.willow .branch:nth-child(1) { animation-delay: 0s; }
+.willow .branch:nth-child(2) { animation-delay: .4s; }
+.willow .branch:nth-child(3) { animation-delay: .8s; }
+.willow .branch:nth-child(4) { animation-delay: 1.2s; }
+.willow .branch:nth-child(5) { animation-delay: 1.6s; }
+.willow .branch:nth-child(6) { animation-delay: 2s; }
+@keyframes willowSway { 0%,100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }
+
+/* Tre */
+.bamboo { position: absolute; bottom: 190px; right: 2%; width: 140px; height: 280px; z-index: 5; }
+.bamboo svg { width: 100%; height: 100%; overflow: visible; }
+.bamboo .stalk { transform-origin: center bottom; animation: bambooSway 4s ease-in-out infinite; }
+.bamboo .stalk:nth-child(1) { animation-delay: 0s; }
+.bamboo .stalk:nth-child(2) { animation-delay: .5s; }
+.bamboo .stalk:nth-child(3) { animation-delay: 1s; }
+@keyframes bambooSway { 0%,100% { transform: rotate(-2deg); } 50% { transform: rotate(2deg); } }
+
+/* =========================================================
+   THUYỀN & CÁ — ĐÃ LẬT HÌNH ĐỂ ĐẦU HƯỚNG SANG PHẢI
+   ========================================================= */
+.boat { position: absolute; bottom: 40px; left: -240px; width: 180px; height: 80px; z-index: 6; animation: boatSail 42s linear infinite; }
+.boat svg { width: 100%; height: 100%; overflow: visible; transform: scaleX(-1); }
+@keyframes boatSail { 
+  0% { transform: translateX(-240px) scaleX(1); } 
+  100% { transform: translateX(100vw) scaleX(1); } 
+}
+
+.koi-school { position: absolute; inset: 0; pointer-events: none; z-index: 3; overflow: hidden; }
+.koi { position: absolute; width: 130px; height: 60px; }
+.koi svg { width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 0 6px rgba(255,210,74,.25)); transform: scaleX(1); }
+.koi.koi-1 { bottom: 70px; left: 5%; animation: koiSwim 28s linear infinite; }
+.koi.koi-2 { bottom: 30px; left: 60%; animation: koiSwimRev 32s linear infinite; animation-delay: -8s; }
+.koi .koi-body { transform-origin: center; animation: koiWiggle 2s ease-in-out infinite; }
+
+@keyframes koiSwim { 
+  0% { transform: translateX(100vw) scaleX(1); } 
+  100% { transform: translateX(-150px) scaleX(1); } 
+}
+@keyframes koiSwimRev {
+  0% { transform: translateX(100vw) scaleX(1); }
+  100% { transform: translateX(-150px) scaleX(1); }
+}
+@keyframes koiWiggle { 0%,100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }

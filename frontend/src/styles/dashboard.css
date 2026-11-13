@@ -1,0 +1,62 @@
+.dash-root { min-height: 100vh; }
+.dash-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  padding: 32px 48px 16px;
+  flex-wrap: wrap;
+}
+.dash-eyebrow {
+  letter-spacing: 0.36em;
+  text-transform: uppercase;
+  font-size: 11px;
+  color: var(--gold-3);
+  font-style: italic;
+  font-family: 'Cormorant Garamond', serif;
+}
+.dash-title {
+  font-size: 44px;
+  margin: 6px 0 4px;
+  background: linear-gradient(180deg, var(--gold-2), var(--gold) 55%, var(--gold-3));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.dash-subtitle { color: var(--ink-soft); font-style: italic; }
+
+.dash-actions { display: flex; gap: 12px; align-items: center; }
+
+/* Nút đổi icon tròn */
+.mode-toggle-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--night-2);
+  border: 1px solid var(--gold-3);
+  color: var(--gold-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+.mode-toggle-btn svg {
+  width: 22px;
+  height: 22px;
+}
+.mode-toggle-btn:hover {
+  background: var(--gold-3);
+  color: var(--night-0);
+  transform: rotate(15deg) scale(1.1);
+}
+body.dawn .mode-toggle-btn {
+  background: var(--paper);
+  color: var(--amber);
+}
+body.dawn .mode-toggle-btn:hover {
+  background: var(--amber);
+  color: var(--paper);
+}
+
+.dash-error { padding: 24px; color: var(--cinnabar-3); text-align: center; }

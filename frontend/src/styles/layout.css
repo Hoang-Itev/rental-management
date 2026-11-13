@@ -1,0 +1,28 @@
+.layout-root { display: flex; flex-direction: column; min-height: 100vh; background: var(--night-0); }
+.top-nav { display: flex; align-items: center; justify-content: space-between; padding: 0 40px; height: 70px; background: var(--night-2); border-bottom: 2px solid var(--gold-3); position: sticky; top: 0; z-index: 100; }
+body.dawn .top-nav { background: var(--night-1); }
+.brand-title { font-family: 'Cormorant Garamond', serif; font-size: 24px; color: var(--gold-2); }
+body.dawn .brand-title { color: var(--cinnabar-2); }
+.top-nav-links { display: flex; gap: 8px; height: 100%; }
+.top-nav-item { display: flex; align-items: center; padding: 0 16px; color: var(--ink-soft); text-decoration: none; position: relative; }
+body.dawn .top-nav-item { color: #5a3a1e; }
+body.dawn .top-nav-item:hover { color: var(--cinnabar); }
+.top-nav-item.active { color: var(--gold-2); font-weight: 700; }
+body.dawn .top-nav-item.active { color: var(--cinnabar-2); }
+.top-nav-item.active::after { content: ''; position: absolute; bottom: 0; left: 16px; right: 16px; height: 3px; background: var(--gold); }
+body.dawn .top-nav-item.active::after { background: var(--cinnabar); }
+
+/* Sửa lỗi dính chữ ở góc phải Navbar */
+.top-nav-user { 
+  display: flex; 
+  align-items: center; 
+  gap: 20px; /* Tạo khoảng cách giữa tên và nút */
+}
+.user-name {
+  font-size: 14px;
+  color: var(--ink);
+  font-style: italic;
+}
+body.dawn .user-name { color: #2a1a0e; }
+
+.layout-main { flex: 1; overflow-y: auto; }
