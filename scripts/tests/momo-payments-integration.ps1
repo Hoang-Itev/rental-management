@@ -16,7 +16,7 @@ Push-Location $root
 try {
     try {
         Invoke-P11Compose up -d --build --wait --wait-timeout 240 billing
-        Invoke-P11Compose run --rm --no-deps billing sh -ec 'python -m pip install -q -r /p11/requirements-test.txt && PYTHONPATH=/app python -m pytest -q /app/tests /p11/integration/test_momo_payment.py'
+        Invoke-P11Compose run --rm --no-deps billing sh -ec 'python -m pip install -q -r /p11/requirements-test.txt && PYTHONPATH=/app python -m pytest -q /app/tests /p11/integration/test_momo_payment.py /p11/integration/test_sepay_payment.py'
     } finally {
         Invoke-P11Compose down -v --remove-orphans --rmi local
     }
