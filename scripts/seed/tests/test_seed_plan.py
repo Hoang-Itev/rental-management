@@ -42,3 +42,14 @@ def test_business_period_end_exclusive():
     d=seed.dataset()
     assert date.fromisoformat(d['billing_month']) < date.fromisoformat(d['period_end'])
     assert seed.midnight_vn('2026-10-01').isoformat()=='2026-09-30T17:00:00+00:00'
+
+
+
+def test_seed_invoice_due_date_follows_billing_rule():
+    from datetime import date, timedelta
+    d=seed.dataset()
+    period_end=date.fromisoformat(d['period_end'])
+    issued_day=period_end+timedelta(days=1)
+    assert date.fromisoformat(d['invoice_due_date'])==issued_day.replace(day=5)
+    assert issued_day.isoformat()=='2026-11-02'
+    assert set(d['issued_rooms']) | set(d['blocked_rooms'])==set(d['occupied_rooms'])
