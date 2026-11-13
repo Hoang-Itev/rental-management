@@ -31,7 +31,12 @@ def view_invoice(token: str, response: Response, db: Session = Depends(get_db)):
 
 
 @router.post("/invoices/{token}/payments/momo", response_model=MomoPaymentSession,
-             response_model_exclude_none=True)
+             response_model_exclude_none=True,
+             responses={202: {
+                 "model": MomoPaymentSession,
+                 "description": "Checkout is awaiting reconciliation; no payment URL is available. Retry after the indicated interval; do not create a new order.",
+                 "headers": {"Retry-After": {"schema": {"type": "integer"}}},
+             }})
 def checkout_momo(
     token: str, response: Response, service: PaymentService = Depends(get_payment_service),
     key: str | None = Header(None, alias="Idempotency-Key", min_length=1, max_length=200),
@@ -45,6 +50,9 @@ def checkout_momo(
         failure.headers = PRIVACY_HEADERS
         raise failure from exc
     response.headers.update(PRIVACY_HEADERS)
+    if session.checkout_status == "RECONCILING":
+        response.status_code = 202
+        response.headers["Retry-After"] = str(session.retry_after_seconds)
     return session
 
 

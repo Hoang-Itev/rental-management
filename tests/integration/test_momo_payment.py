@@ -64,7 +64,7 @@ def fixture():
         db.flush()
         db.add(InvoiceAccessToken(invoice_id=invoice_id, token_hash=hash_link_token(token),
                                   expires_at=utcnow() + timedelta(hours=1)))
-    state = {"create_calls": 0, "timeout": False, "query_code": 1000, "query_trans_id": int(invoice_id.hex[:13], 16)}
+    state = {"create_requests": [], "create_504": False, "query_504": False, "create_calls": 0, "timeout": False, "query_code": 1000, "query_trans_id": int(invoice_id.hex[:13], 16)}
 
     def gateway(request):
         data = json.loads(request.content)
@@ -73,6 +73,9 @@ def fixture():
             names = ("amount", "extraData", "ipnUrl", "orderId", "orderInfo", "partnerCode",
                      "redirectUrl", "requestId", "requestType")
             state["create_calls"] += 1
+            state["create_requests"].append((data["orderId"], data["requestId"]))
+            if state["create_504"]:
+                return httpx.Response(504, text="<html>504 Gateway Time-out openresty APISIX</html>")
             assert data["requestType"] == "payWithATM" and data["amount"] == 1500000
             assert token not in json.dumps(data)
             if state["timeout"]:
@@ -80,6 +83,8 @@ def fixture():
             extras = {"resultCode": 0, "payUrl": "https://test-payment.momo.vn/gateway/pay?t=test"}
         else:
             assert request.url.path.endswith("/query")
+            if state["query_504"]:
+                return httpx.Response(504, text="<html>504 Gateway Time-out openresty APISIX</html>")
             names = ("orderId", "partnerCode", "requestId")
             extras = {"resultCode": state["query_code"], "transId": state["query_trans_id"]}
         raw = f"accessKey={ACCESS}&" + "&".join(f"{key}={data[key]}" for key in names)
@@ -114,7 +119,7 @@ def test_signed_ipn_rejects_mismatch_and_is_idempotent(fixture):
     headers = {"Idempotency-Key": "checkout-invoice"}
     with ThreadPoolExecutor(max_workers=2) as pool:
         results = list(pool.map(lambda _: api.post(endpoint, headers=headers), range(2)))
-    assert [result.status_code for result in results] == [200, 200]
+    assert all(result.status_code in (200, 202) for result in results)
     attempt_ids = {result.json()["payment_attempt_id"] for result in results}
     assert len(attempt_ids) == state["create_calls"] == 1
     assert any(result.json().get("pay_url") for result in results)
@@ -205,3 +210,48 @@ async def check_broker(sessions, event_id):
         async with message.process():
             assert message.routing_key == "payment.succeeded.v1"
             assert message.message_id == str(event_id)
+
+
+def test_html_504_recovery_reuses_order_and_emits_only_one_payment_event(fixture):
+    sessions, api, invoice_id, url, state = fixture
+    state["create_504"] = state["query_504"] = True
+    endpoint = url + "/payments/momo"
+    response = api.post(endpoint)
+    assert response.status_code == 202
+    assert response.json()["checkout_status"] == "RECONCILING"
+    attempt_id = response.json()["payment_attempt_id"]
+    assert api.post(endpoint).json()["payment_attempt_id"] == attempt_id
+    reconcile = "/api/v1/jobs/payments/reconcile/run"
+    query = {"payment_attempt_id": attempt_id}
+    assert api.post(reconcile, json=query).json()["still_pending_count"] == 1
+    assert state["create_calls"] == 1
+    with sessions.begin() as db:
+        attempt = db.get(PaymentAttempt, UUID(attempt_id))
+        assert attempt.status == "PENDING" and attempt.pay_url is None
+        attempt.created_at = utcnow() - timedelta(minutes=10)
+        assert db.scalar(select(func.count()).select_from(OutboxEvent)
+                         .where(OutboxEvent.aggregate_id == invoice_id)) == 0
+    # Only a successful query explicitly saying order-not-found permits retry.
+    state["query_504"] = state["create_504"] = False
+    state["query_code"] = 42
+    assert api.post(reconcile, json=query).json()["still_pending_count"] == 1
+    assert state["create_calls"] == 2
+    assert state["create_requests"][0] == state["create_requests"][1]
+    response = api.post(endpoint)
+    assert response.status_code == 200
+    assert response.json()["payment_attempt_id"] == attempt_id
+    assert response.json()["checkout_status"] == "READY"
+    assert response.json()["pay_url"]
+    assert api.get(url).json()["status"] == "ISSUED"
+    state["query_code"] = 0
+    assert api.post(reconcile, json=query).json()["succeeded_count"] == 1
+    assert api.get(url).json()["status"] == "PAID"
+    attempt = attempt_row(sessions, attempt_id)
+    assert api.post("/webhooks/momo/ipn", json=signed_ipn(
+        attempt, transId=state["query_trans_id"])).status_code == 204
+    with sessions() as db:
+        assert db.scalar(select(func.count()).select_from(PaymentAttempt)
+                         .where(PaymentAttempt.invoice_id == invoice_id)) == 1
+        assert db.scalar(select(func.count()).select_from(OutboxEvent)
+                         .where(OutboxEvent.aggregate_id == invoice_id,
+                                OutboxEvent.event_type == "PaymentSucceeded")) == 1

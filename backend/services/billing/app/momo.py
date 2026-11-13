@@ -1,12 +1,15 @@
 """MoMo Sandbox domestic ATM checkout, IPN and transaction query."""
 import hashlib
 import hmac
+import logging
 from uuid import uuid4
 from urllib.parse import urlsplit
 
 import httpx
 
 from app.schemas import MomoResult
+
+logger = logging.getLogger(__name__)
 
 SANDBOX = "https://test-payment.momo.vn"
 CREATE_FIELDS = ("amount", "extraData", "ipnUrl", "orderId", "orderInfo", "partnerCode",
@@ -52,8 +55,15 @@ class MomoClient:
                 payload["partnerCode"], payload["orderId"], payload["requestId"],
             ):
                 raise ValueError("Unmatched MoMo response")
+            if result.resultCode != 0:
+                logger.warning("MoMo operation=%s order_id=%s result_code=%s",
+                               operation, payload["orderId"], result.resultCode)
             return result
         except (httpx.HTTPError, ValueError) as exc:
+            # Never log request/response bodies, signatures, secrets or checkout URLs.
+            status = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
+            logger.warning("MoMo operation=%s order_id=%s error=%s http_status=%s",
+                           operation, payload["orderId"], type(exc).__name__, status)
             raise MomoUnavailable("MoMo response unavailable or ambiguous") from exc
 
     def create(self, attempt):
@@ -69,6 +79,8 @@ class MomoClient:
             pay_url = urlsplit(result.payUrl or "")
             if (result.amount not in (None, attempt.amount) or pay_url.scheme != "https"
                     or pay_url.hostname != urlsplit(SANDBOX).hostname or pay_url.username or pay_url.password):
+                logger.warning("MoMo operation=create order_id=%s invalid_checkout_response",
+                               attempt.order_id)
                 raise MomoUnavailable("MoMo checkout response is incomplete")
         return result
 

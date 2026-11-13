@@ -24,9 +24,12 @@ class PaymentService:
         self.sessions = sessions
         self.momo = momo
 
-    @staticmethod
-    def view(attempt, *, reused):
+    def view(self, attempt, *, reused):
+        waiting = attempt.status == "PENDING" and not attempt.pay_url
+        checkout_status = "PAID" if attempt.status == "SUCCESS" else ("RECONCILING" if waiting else "READY")
         return MomoPaymentSession(
+            checkout_status=checkout_status,
+            retry_after_seconds=self.momo.settings.momo_reconcile_seconds if waiting else None,
             payment_attempt_id=attempt.id, status=attempt.status, reused_pending_attempt=reused,
             pay_url=attempt.pay_url if attempt.status == "PENDING" else None,
             expires_at=attempt.expires_at,
