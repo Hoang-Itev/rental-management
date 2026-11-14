@@ -122,34 +122,67 @@ export function PropertyListPage() {
         emptyText="Chưa có khu trọ nào."
         onRetry={load}
       >
-        <div className="property-grid">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           {properties.map((p) => (
-            <div key={p.id} className="property-card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <h3>{p.name}</h3>
-                <Badge value={p.status} />
+            <div key={p.id} className="property-card-custom">
+              
+              {/* TRANG TRÍ: Cửa sổ & Đèn lồng */}
+              <div className="property-decorations">
+                {/* Cửa sổ gỗ */}
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--gold-3)' }}>
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  <path d="M3 12h18M12 3v18" />
+                </svg>
+                {/* Đèn lồng cổ */}
+                <svg className="lantern-svg" width="24" height="30" viewBox="0 0 24 30" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--cinnabar-3)' }}>
+                  <path d="M12 2v4" />
+                  <rect x="8" y="6" width="8" height="16" rx="4" fill="var(--cinnabar-2)" fillOpacity="0.3" />
+                  <path d="M9 22h6M12 22v4" />
+                  <path d="M8 10h8M8 14h8M8 18h8" strokeOpacity="0.5" />
+                </svg>
               </div>
-              <p className="text-muted">{p.address}</p>
-              {p.description && <p style={{ fontSize: 13 }}>{p.description}</p>}
-              <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
-                <button className="btn-secondary" onClick={() => setSelected(p)}>Xem cấu trúc</button>
-                <button className="btn-secondary" onClick={() => openEdit(p)}>Sửa</button>
-                {p.status === 'ACTIVE' && (
-                  <button
-                    className="btn-secondary"
-                    style={{ color: 'var(--cinnabar-3)' }}
-                    onClick={() => setConfirm({ property: p })}
-                  >
-                    Vô hiệu hóa
-                  </button>
-                )}
+
+              {/* NỘI DUNG KHU TRỌ */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16, position: 'relative', zIndex: 1 }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 26, color: 'var(--gold-2)', fontFamily: "'Cormorant Garamond', serif" }}>
+                    {p.name}
+                  </h3>
+                  <p className="text-muted" style={{ margin: '8px 0', fontSize: 15, fontStyle: 'italic' }}>
+                    {p.address}
+                  </p>
+                  {p.description && (
+                    <p style={{ margin: 0, fontSize: 14, opacity: 0.8 }}>{p.description}</p>
+                  )}
+                </div>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 12 }}>
+                  <Badge value={p.status} />
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    <button className="btn-secondary" onClick={() => setSelected(p)}>
+                      Xem cấu trúc
+                    </button>
+                    <button className="btn-secondary" onClick={() => openEdit(p)}>
+                      Sửa
+                    </button>
+                    {p.status === 'ACTIVE' && (
+                      <button
+                        className="btn-secondary"
+                        style={{ color: 'var(--cinnabar-3)', borderColor: 'var(--cinnabar-2)' }}
+                        onClick={() => setConfirm({ property: p })}
+                      >
+                        Vô hiệu hóa
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           ))}
         </div>
 
         {total > 0 && (
-          <div className="pagination">
+          <div className="pagination" style={{ marginTop: 24 }}>
             <span className="page-info">Trang {page} / {totalPages} ({total} khu trọ)</span>
             <div className="page-actions">
               <button className="page-btn" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Trước</button>
@@ -159,6 +192,7 @@ export function PropertyListPage() {
         )}
       </PageState>
 
+      {/* MODAL THÊM/SỬA KHU TRỌ */}
       {showForm && (
         <div className="modal-backdrop active" onClick={(e) => e.target === e.currentTarget && setShowForm(false)}>
           <div className="room-modal" style={{ width: 520 }}>
@@ -189,6 +223,7 @@ export function PropertyListPage() {
         </div>
       )}
 
+      {/* CONFIRM XÓA */}
       {confirm && (
         <ConfirmDialog
           title="Vô hiệu hóa khu trọ?"
@@ -201,6 +236,7 @@ export function PropertyListPage() {
         />
       )}
 
+      {/* BUILDING PANEL */}
       {selected && (
         <BuildingPanel property={selected} onClose={() => setSelected(null)} />
       )}

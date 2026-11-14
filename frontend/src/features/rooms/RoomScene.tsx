@@ -323,15 +323,9 @@ export function RoomScene({ rooms, onSelect, mode }: Props) {
         <div className="butterfly bf3"><svg viewBox="0 0 20 16"><ellipse className="wing-l" cx="6" cy="8" rx="5" ry="7" fill="var(--plum)" opacity=".85"/><ellipse className="wing-r" cx="14" cy="8" rx="5" ry="7" fill="var(--gold-2)" opacity=".85"/><ellipse cx="10" cy="8" rx="1" ry="5" fill="var(--ink)"/></svg></div>
       </div>
 
-      <div className="leaves-fall">
-        {Array.from({length: 12}).map((_, i) => (
-          <div key={i} className="leaf-fall"><svg viewBox="0 0 10 20"><ellipse cx="5" cy="10" rx="3" ry="9" fill="var(--moss)" opacity=".85"/><line x1="5" y1="1" x2="5" y2="19" stroke="var(--moss-2)" strokeWidth=".5"/></svg></div>
-        ))}
-      </div>
+      
 
-      <div className="fireflies-scene">
-        {Array.from({length: 20}).map((_, i) => <span key={i} className="firefly"></span>)}
-      </div>
+      
 
       <div className="facade" ref={containerRef}>
         {rooms.map((r) => (

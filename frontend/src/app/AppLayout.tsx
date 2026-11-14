@@ -1,5 +1,6 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../features/auth/AuthContext';
+import { AmbientEffects } from '../components/AmbientEffects';
 import '../styles/layout.css';
 
 export function AppLayout() {
@@ -7,19 +8,22 @@ export function AppLayout() {
   const navigate = useNavigate();
 
   const navItems = [
-  { path: '/', label: 'Sân vườn' },
-  { path: '/cau-truc', label: 'Khu trọ' },
-  { path: '/phong', label: 'Phòng' },
-  { path: '/nguoi-thue', label: 'Người thuê' },
-  { path: '/hop-dong', label: 'Hợp đồng' },
-  { path: '/dong-ho', label: 'Đồng hồ' },
-  { path: '/hoa-don', label: 'Hóa đơn' },
-  { path: '/email', label: 'Email' },
-];
+    { path: '/', label: 'Sân vườn' },
+    { path: '/cau-truc', label: 'Khu trọ' },
+    { path: '/phong', label: 'Phòng' },
+    { path: '/nguoi-thue', label: 'Người thuê' },
+    { path: '/hop-dong', label: 'Hợp đồng' },
+    { path: '/dong-ho', label: 'Đồng hồ' },
+    { path: '/hoa-don', label: 'Hóa đơn' },
+    { path: '/email', label: 'Email' },
+  ];
 
   return (
     <div className="layout-root">
-      <nav className="top-nav">
+      {/* Đưa hiệu ứng vào đây để chạy toàn trang */}
+      <AmbientEffects />
+
+      <nav className="top-nav" style={{ zIndex: 10 }}>
         <div className="top-nav-brand" onClick={() => navigate('/')}>
           <span className="brand-title">Minh An</span>
           <span className="brand-sub">Quản lý trọ</span>
@@ -46,7 +50,8 @@ export function AppLayout() {
         </div>
       </nav>
       
-      <main className="layout-main">
+      {/* Thêm z-index cho main để nội dung nổi lên trên hiệu ứng nền */}
+      <main className="layout-main" style={{ position: 'relative', zIndex: 1 }}>
         <Outlet />
       </main>
     </div>

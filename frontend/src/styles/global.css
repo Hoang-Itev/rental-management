@@ -269,3 +269,107 @@ body.dawn .room-modal .modal-state.inactive { color: var(--stone-2); }
   z-index: 10000 !important;
   background: rgba(0, 0, 0, 0.85); /* Làm tối nền thêm chút để nổi bật modal con */
 }
+
+/* =========================================================
+   STYLE CHO KHU TRỌ (CẢM HỨNG NHÀ CỔ)
+   ========================================================= */
+.property-card-custom {
+  position: relative;
+  background: var(--night-2);
+  border: 1px solid var(--gold-3);
+  padding: 28px 24px 24px;
+  border-radius: 4px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+  overflow: hidden;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.property-card-custom::before {
+  /* Tạo họa tiết mái ngói ở viền trên */
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 6px;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--gold-3),
+    var(--gold-3) 10px,
+    transparent 10px,
+    transparent 20px
+  );
+  opacity: 0.6;
+}
+
+.property-card-custom::after {
+  /* Viền trong tạo cảm giác khung tranh cổ */
+  content: '';
+  position: absolute;
+  inset: 8px;
+  border: 1px solid var(--gold-3);
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+.property-card-custom:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 15px 40px rgba(0,0,0,0.4), 0 0 15px rgba(212,163,64,0.1);
+}
+
+/* Đổi màu chữ ở chế độ Sáng cho dễ đọc */
+body.dawn .property-card-custom {
+  background: #fdf6e3; /* Nền giấy cổ */
+  border-color: var(--cinnabar-2);
+  box-shadow: 0 10px 30px rgba(138, 30, 16, 0.1);
+}
+body.dawn .property-card-custom::before {
+  background: repeating-linear-gradient(
+    90deg,
+    var(--cinnabar-2),
+    var(--cinnabar-2) 10px,
+    transparent 10px,
+    transparent 20px
+  );
+  opacity: 0.3;
+}
+body.dawn .property-card-custom::after {
+  border-color: var(--cinnabar-2);
+  opacity: 0.2;
+}
+body.dawn .property-card-custom h3 {
+  color: var(--cinnabar-2) !important; /* Chữ đỏ đô nổi bật */
+  text-shadow: 1px 1px 0px rgba(255,255,255,0.5);
+}
+
+/* =========================================================
+   TRANG TRÍ KHU TRỌ (CỬA SỔ & ĐÈN LỒNG)
+   ========================================================= */
+.property-decorations {
+  position: absolute;
+  top: 20px;
+  left: 24px;
+  display: flex;
+  gap: 16px;
+  opacity: 0.6;
+  z-index: 0;
+  pointer-events: none; /* Không cản trở click */
+}
+
+body.dawn .property-decorations {
+  opacity: 0.3;
+}
+
+/* Hiệu ứng đèn lồng phát sáng khi ở chế độ Tối */
+@keyframes lanternGlow {
+  0%, 100% { filter: drop-shadow(0 0 2px var(--cinnabar-3)) drop-shadow(0 0 8px var(--cinnabar-3)); }
+  50% { filter: drop-shadow(0 0 6px var(--cinnabar-3)) drop-shadow(0 0 15px var(--cinnabar-3)); }
+}
+
+.lantern-svg {
+  animation: lanternGlow 3s ease-in-out infinite;
+}
+
+body.dawn .lantern-svg {
+  animation: none;
+  filter: drop-shadow(0 0 0 transparent);
+}
+
