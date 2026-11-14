@@ -1,111 +1,63 @@
-import { useState, useEffect, useCallback } from 'react';
-import { api } from '../../lib/api/client';
-import type { Page, RoomOut } from '../../lib/api/types';
-import { Pagination } from '../../components/Pagination';
-import { SearchBar } from '../../components/SearchBar';
-import { formatVnd } from '../../lib/utils/format';
+import { useCallback, useEffect, useState } from 'react';
+import { api, ApiError } from '../../lib/api/client';
+import type { Page, PropertyOut } from '../../lib/api/types';
+import { PageState } from '../../components/PageState';
+import { BuildingPanel } from '../properties/BuildingPanel';
 
 export function RoomListPage() {
-  const [data, setData] = useState<Page<RoomOut> | null>(null);
+  const [properties, setProperties] = useState<PropertyOut[]>([]);
   const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
-  const [keyword, setKeyword] = useState('');
-  const [status, setStatus] = useState<string>('');
+  const [error, setError] = useState<string | null>(null);
+  const [selectedProperty, setSelectedProperty] = useState<PropertyOut | null>(null);
 
-  const fetchRooms = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async () => {
+    setLoading(true); setError(null);
     try {
-      // Gọi API list rooms có phân trang, truyền query params
-      const q = new URLSearchParams({
-        page: page.toString(),
-        page_size: '10',
-        ...(status ? { status } : {}),
-      });
-      // Lưu ý: Backend Room API hiện tại chưa hỗ trợ search keyword qua query param, 
-      // ta sẽ filter tạm ở client sau khi fetch để đảm bảo UX.
-      const res = await api.get<Page<RoomOut>>(`/api/v1/rooms?${q.toString()}`);
-      
-      // Client-side search filter fallback
-      if (keyword) {
-        const filteredItems = res.items.filter(r => 
-          r.room_code.toLowerCase().includes(keyword.toLowerCase())
-        );
-        setData({ items: filteredItems, meta: res.meta });
-      } else {
-        setData(res);
-      }
-    } catch (err) {
-      console.error(err);
+      const res = await api.get<Page<PropertyOut>>('/api/v1/properties?page=1&page_size=100');
+      setProperties(res.items);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Không tải được danh sách khu trọ.');
     } finally {
       setLoading(false);
     }
-  }, [page, status, keyword]);
+  }, []);
 
-  useEffect(() => {
-    fetchRooms();
-  }, [fetchRooms]);
+  useEffect(() => { load(); }, [load]);
 
   return (
     <div className="page-container">
       <div className="page-header">
-        <h1 className="page-title">Danh sách Phòng</h1>
-        <button className="btn-primary">Thêm phòng mới</button>
+        <h1 className="page-title">Quản lý Phòng theo Khu trọ</h1>
       </div>
 
-      <div className="filter-bar">
-        <SearchBar onSearch={setKeyword} placeholder="Tìm mã phòng..." />
-        <select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
-          <option value="">Tất cả trạng thái</option>
-          <option value="ACTIVE">Đang hoạt động</option>
-          <option value="INACTIVE">Ngừng sử dụng</option>
-        </select>
-      </div>
+      <PageState loading={loading} error={error} onRetry={load}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {properties.map((prop) => (
+            <div key={prop.id} style={{ border: '1px solid var(--gold-3)', background: 'var(--night-2)' }}>
+              <div 
+                style={{ padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', borderBottom: '1px solid var(--gold-3)' }}
+                onClick={() => setSelectedProperty(prop)}
+              >
+                <div>
+                  <h3 style={{ margin: 0, color: 'var(--gold-2)' }}>{prop.name}</h3>
+                  <p className="text-muted" style={{ margin: 0, fontSize: 13 }}>{prop.address}</p>
+                </div>
+                <button className="btn-primary">Xem chi tiết / Thêm tầng</button>
+              </div>
+            </div>
+          ))}
+          {properties.length === 0 && <p className="text-muted">Chưa có khu trọ nào.</p>}
+        </div>
+      </PageState>
 
-      {loading ? (
-        <div className="loading-text">Đang tải dữ liệu...</div>
-      ) : (
-        <>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Mã phòng</th>
-                <th>Diện tích</th>
-                <th>Giá niêm yết</th>
-                <th>Trạng thái</th>
-                <th>Người thuê</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data?.items.map((room) => (
-                <tr key={room.id}>
-                  <td>{room.room_code}</td>
-                  <td>{room.area_m2} m²</td>
-                  <td>{formatVnd(room.listed_rent)}</td>
-                  <td>
-                    <span className={`badge ${room.status.toLowerCase()}`}>
-                      {room.status === 'ACTIVE' ? 'Hoạt động' : 'Ngừng'}
-                    </span>
-                  </td>
-                  <td>
-                    {room.display_occupancy === 'OCCUPIED' ? 'Đang thuê' : 'Trống'}
-                  </td>
-                </tr>
-              ))}
-              {data?.items.length === 0 && (
-                <tr><td colSpan={5} className="empty-row">Không tìm thấy phòng nào.</td></tr>
-              )}
-            </tbody>
-          </table>
-          
-          {data && (
-            <Pagination 
-              page={data.meta.page} 
-              pageSize={data.meta.page_size} 
-              total={data.meta.total} 
-              onPageChange={setPage} 
-            />
-          )}
-        </>
+      {selectedProperty && (
+        <BuildingPanel 
+          property={selectedProperty} 
+          onClose={() => {
+            setSelectedProperty(null);
+            load(); // Reload lại khi đóng
+          }} 
+        />
       )}
     </div>
   );

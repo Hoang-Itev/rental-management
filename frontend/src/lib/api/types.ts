@@ -208,3 +208,80 @@ export interface SePayCheckoutSession {
   method: 'POST';
   fields: Record<string, string> | null;
 }
+
+// ===== Billing runs =====
+export interface BillingRunView {
+  id: string;
+  billing_month: string;
+  trigger_type: 'MANUAL' | 'SCHEDULED';
+  status: 'RUNNING' | 'COMPLETED' | 'FAILED';
+  started_at: string;
+  finished_at: string | null;
+  issued_count: number;
+  waiting_count: number;
+  skipped_count: number;
+  failed_count: number;
+}
+
+// ===== Payment / Adjustment =====
+export interface PaymentAttemptView {
+  id: string;
+  invoice_id: string;
+  provider: string;
+  order_id: string;
+  request_id: string;
+  provider_transaction_id: string | null;
+  amount: number;
+  status: string;
+  pay_url: string | null;
+  expires_at: string | null;
+  result_code: string | null;
+  confirmed_at: string | null;
+}
+
+export interface AdjustmentView {
+  id: string;
+  invoice_id: string;
+  reason: string;
+  amount_delta: number;
+  status: 'OPEN' | 'RESOLVED' | 'REJECTED';
+  resolution_note: string | null;
+  created_by: string | null;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+// ===== Meter alerts / readings =====
+export interface MeterAlertOut {
+  id: string;
+  meter_id: string;
+  alert_type: string;
+  status: 'OPEN' | 'RESOLVED';
+  related_measured_at: string | null;
+  detected_at: string;
+  detail: Record<string, unknown>;
+}
+
+export interface ReadingOut {
+  meter_id: string;
+  measured_at: string;
+  reading_value: string | number;
+  received_at: string;
+  validation_status: 'VALID' | 'SUSPECT' | 'REJECTED';
+  anomaly_reason: string | null;
+}
+
+// ===== Email job =====
+export interface EmailJobView {
+  id: string;
+  source_event_id: string;
+  email_type: string;
+  invoice_id: string | null;
+  recipient_email: string;
+  subject: string;
+  status: string;
+  attempt_count: number;
+  next_attempt_at: string | null;
+  sent_at: string | null;
+  last_error: string | null;
+}

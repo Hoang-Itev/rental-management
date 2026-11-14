@@ -7,15 +7,15 @@ export function AppLayout() {
   const navigate = useNavigate();
 
   const navItems = [
-    { path: '/', label: 'Sân vườn' },
-    { path: '/cau-truc', label: 'Khu trọ' },
-    { path: '/phong', label: 'Phòng' },
-    { path: '/nguoi-thue', label: 'Người thuê' },
-    { path: '/hop-dong', label: 'Hợp đồng' },
-    { path: '/dong-ho', label: 'Đồng hồ' },
-    { path: '/hoa-don', label: 'Hóa đơn' },
-    { path: '/email', label: 'Email' },
-  ];
+  { path: '/', label: 'Sân vườn' },
+  { path: '/cau-truc', label: 'Khu trọ' },
+  { path: '/phong', label: 'Phòng' },
+  { path: '/nguoi-thue', label: 'Người thuê' },
+  { path: '/hop-dong', label: 'Hợp đồng' },
+  { path: '/dong-ho', label: 'Đồng hồ' },
+  { path: '/hoa-don', label: 'Hóa đơn' },
+  { path: '/email', label: 'Email' },
+];
 
   return (
     <div className="layout-root">

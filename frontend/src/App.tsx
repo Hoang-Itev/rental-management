@@ -15,10 +15,10 @@ import { MeterListPage } from './features/meters/MeterListPage';
 import { InvoiceListPage } from './features/invoices/InvoiceListPage';
 import { InvoiceDetailPage } from './features/invoices/InvoiceDetailPage';
 import { EmailListPage } from './features/notifications/EmailListPage';
+import { NotFoundPage } from './app/NotFoundPage';
 
 export default function App() {
   const { user, loading } = useAuth();
-
   if (loading) return <div className="boot-loader">Đang khởi động…</div>;
 
   return (
@@ -37,10 +37,10 @@ export default function App() {
           <Route path="/hoa-don" element={<InvoiceListPage />} />
           <Route path="/hoa-don/:id" element={<InvoiceDetailPage />} />
           <Route path="/email" element={<EmailListPage />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Route>
       <Route path="/hoa-don-cong-khai/:token" element={<PublicInvoicePage />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }

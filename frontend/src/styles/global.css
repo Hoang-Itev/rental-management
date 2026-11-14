@@ -204,3 +204,80 @@ body.dawn .page-btn:hover:not(:disabled) { background: var(--cinnabar); color: #
 body.dawn .text-amount {
   color: var(--jade-2) !important; /* Xanh ngọc đậm ở nền sáng */
 }
+
+.loading-text { padding: 32px; text-align: center; color: var(--ink-soft); font-style: italic; }
+.page-error { padding: 20px; border: 1px solid var(--cinnabar-2); background: rgba(197,46,26,.08); color: var(--cinnabar-3); margin-bottom: 20px; }
+.empty-row { text-align: center; padding: 24px; color: var(--ink-dim); font-style: italic; }
+.filter-bar { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; }
+.filter-bar select, .filter-bar input { max-width: 260px; }
+.badge.active { background: rgba(61,138,122,.15); color: var(--jade-hi); border: 1px solid var(--jade-2); padding: 2px 8px; border-radius: 3px; font-size: 12px; }
+.badge.inactive { background: rgba(122,122,122,.15); color: var(--stone); border: 1px solid var(--stone-2); padding: 2px 8px; border-radius: 3px; font-size: 12px; }
+body.dawn .badge.active { color: var(--jade-2); }
+body.dawn .badge.inactive { color: var(--stone-2); }
+.text-muted { color: var(--ink-dim); }
+.text-gold { color: var(--gold-2); }
+.text-amount { color: var(--gold); font-weight: 600; }
+body.dawn .text-amount { color: var(--jade-2); }
+
+/* Page states & badges (bổ sung cho các trang mới) */
+.loading-text { padding: 32px; text-align: center; color: var(--ink-soft); font-style: italic; }
+.page-error { padding: 20px; border: 1px solid var(--cinnabar-2); background: rgba(197,46,26,.08); color: var(--cinnabar-3); margin-bottom: 20px; }
+.empty-row { text-align: center; padding: 24px; color: var(--ink-dim); font-style: italic; }
+.filter-bar { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; }
+.filter-bar select, .filter-bar input[type="month"] { max-width: 220px; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 12px; border: 1px solid transparent; }
+.badge.active { background: rgba(61,138,122,.15); color: var(--jade-hi); border-color: var(--jade-2); }
+.badge.inactive { background: rgba(122,122,122,.15); color: var(--stone); border-color: var(--stone-2); }
+body.dawn .badge.active { color: var(--jade-2); }
+body.dawn .badge.inactive { color: var(--stone-2); }
+.text-muted { color: var(--ink-dim); }
+.text-amount { color: var(--gold); font-weight: 600; }
+body.dawn .text-amount { color: var(--jade-2); }
+.btn-secondary.primary { background: var(--cinnabar); color: #f8d880 !important; border-color: var(--cinnabar-2); }
+.detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; padding: 20px; border: 1px solid var(--gold-3); background: var(--night-2); margin-bottom: 20px; }
+body.dawn .detail-grid { background: var(--night-1); }
+.detail-item label { display: block; font-size: 11px; text-transform: uppercase; color: var(--ink-dim); margin-bottom: 4px; }
+.detail-item div { color: var(--ink); }
+body.dawn .detail-item div { color: #2a1a0e; }
+
+/* Fix lỗi Modal nổi lên trên cùng */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999; /* Luôn nổi lên trên */
+}
+
+.room-modal {
+  background: var(--night-2);
+  border: 1px solid var(--gold-3);
+  padding: 24px;
+  position: relative;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+  border-radius: 4px;
+}
+
+body.dawn .room-modal {
+  background: var(--night-1);
+}
+
+.modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: transparent;
+  border: none;
+  color: var(--ink-soft);
+  font-size: 24px;
+  cursor: pointer;
+  line-height: 1;
+}
+.modal-close:hover {
+  color: var(--cinnabar-3);
+}

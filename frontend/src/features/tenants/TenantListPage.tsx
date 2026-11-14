@@ -1,69 +1,73 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '../../lib/api/client';
 import type { Page, TenantOut } from '../../lib/api/types';
 import { Pagination } from '../../components/Pagination';
+import { PageState } from '../../components/PageState';
+
+interface FormState {
+  full_name: string;
+  email: string;
+  phone: string;
+  note: string;
+}
+
+const empty: FormState = { full_name: '', email: '', phone: '', note: '' };
 
 export function TenantListPage() {
   const [data, setData] = useState<Page<TenantOut> | null>(null);
   const [page, setPage] = useState(1);
+  const [pageSize] = useState(10);
   const [loading, setLoading] = useState(true);
-  
-  // Modal State
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [formData, setFormData] = useState({ full_name: '', email: '', phone: '' });
-  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [error, setError] = useState<string | null>(null);
+
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<TenantOut | null>(null);
+  const [form, setForm] = useState<FormState>(empty);
+  const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const fetchTenants = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async () => {
+    setLoading(true); setError(null);
     try {
-      const res = await api.get<Page<TenantOut>>(`/api/v1/tenants?page=${page}&page_size=10`);
+      const res = await api.get<Page<TenantOut>>(`/api/v1/tenants?page=${page}&page_size=${pageSize}`);
       setData(res);
-    } catch (err) {
-      console.error(err);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Không tải được danh sách người thuê.');
     } finally {
       setLoading(false);
     }
-  }, [page]);
+  }, [page, pageSize]);
 
-  useEffect(() => { fetchTenants(); }, [fetchTenants]);
+  useEffect(() => { load(); }, [load]);
 
-  // Hàm Validate Form
-  function validateForm() {
-    const errors: Record<string, string> = {};
-    if (!formData.full_name.trim()) {
-      errors.full_name = 'Họ tên không được để trống';
-    }
-    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      errors.email = 'Email không hợp lệ';
-    }
-    if (formData.phone && formData.phone.length < 5) {
-      errors.phone = 'Số điện thoại quá ngắn';
-    }
-    setFormErrors(errors);
-    return Object.keys(errors).length === 0;
+  function openCreate() { setEditing(null); setForm(empty); setFormError(null); setOpen(true); }
+  function openEdit(t: TenantOut) {
+    setEditing(t);
+    setForm({ full_name: t.full_name, email: t.email ?? '', phone: t.phone ?? '', note: t.note ?? '' });
+    setFormError(null);
+    setOpen(true);
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!validateForm()) return;
-
+    setFormError(null);
+    if (!form.full_name.trim()) { setFormError('Họ tên bắt buộc.'); return; }
+    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) { setFormError('Email không hợp lệ.'); return; }
+    if (form.phone && form.phone.trim().length < 5) { setFormError('SĐT quá ngắn.'); return; }
     setSubmitting(true);
     try {
-      await api.post('/api/v1/tenants', {
-        full_name: formData.full_name.trim(),
-        email: formData.email.trim() || null,
-        phone: formData.phone.trim() || null,
-      });
-      setIsModalOpen(false);
-      setFormData({ full_name: '', email: '', phone: '' });
-      fetchTenants(); // Reload danh sách
+      const body = {
+        full_name: form.full_name.trim(),
+        email: form.email.trim() || null,
+        phone: form.phone.trim() || null,
+        note: form.note.trim() || null,
+      };
+      if (editing) await api.patch(`/api/v1/tenants/${editing.id}`, body);
+      else await api.post('/api/v1/tenants', body);
+      setOpen(false);
+      await load();
     } catch (err) {
-      if (err instanceof ApiError && err.status === 422) {
-        setFormErrors({ global: 'Dữ liệu không hợp lệ từ máy chủ. Vui lòng kiểm tra lại.' });
-      } else {
-        setFormErrors({ global: 'Đã có lỗi xảy ra khi lưu dữ liệu.' });
-      }
+      setFormError(err instanceof ApiError ? err.message : 'Lỗi khi lưu.');
     } finally {
       setSubmitting(false);
     }
@@ -73,84 +77,65 @@ export function TenantListPage() {
     <div className="page-container">
       <div className="page-header">
         <h1 className="page-title">Hồ sơ Người thuê</h1>
-        <button className="btn-primary" onClick={() => setIsModalOpen(true)}>
-          Thêm người thuê
-        </button>
+        <button className="btn-primary" onClick={openCreate}>Thêm người thuê</button>
       </div>
 
-      {loading ? (
-        <div className="loading-text">Đang tải dữ liệu...</div>
-      ) : (
-        <>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Họ tên</th>
-                <th>Email</th>
-                <th>Điện thoại</th>
-                <th>Ghi chú</th>
+      <p className="text-muted" style={{ marginBottom: 12, fontSize: 13 }}>
+        Người đại diện cần có email trước khi xác nhận hợp đồng để nhận hóa đơn.
+      </p>
+
+      <PageState loading={loading} error={error} empty={!loading && !error && (data?.items.length ?? 0) === 0} emptyText="Chưa có người thuê." onRetry={load}>
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Họ tên</th>
+              <th>Email</th>
+              <th>Điện thoại</th>
+              <th>Ghi chú</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {data?.items.map((t) => (
+              <tr key={t.id}>
+                <td>{t.full_name}</td>
+                <td>{t.email || <span className="text-muted">—</span>}</td>
+                <td>{t.phone || <span className="text-muted">—</span>}</td>
+                <td>{t.note || <span className="text-muted">—</span>}</td>
+                <td><button className="btn-secondary" onClick={() => openEdit(t)}>Sửa</button></td>
               </tr>
-            </thead>
-            <tbody>
-              {data?.items.map((t) => (
-                <tr key={t.id}>
-                  <td>{t.full_name}</td>
-                  <td>{t.email || '—'}</td>
-                  <td>{t.phone || '—'}</td>
-                  <td>{t.note || '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {data && <Pagination page={data.meta.page} pageSize={data.meta.page_size} total={data.meta.total} onPageChange={setPage} />}
-        </>
-      )}
+            ))}
+          </tbody>
+        </table>
+        {data && <Pagination page={data.meta.page} pageSize={data.meta.page_size} total={data.meta.total} onPageChange={setPage} />}
+      </PageState>
 
-      {/* Modal Form */}
-      {isModalOpen && (
-        <div className="modal-backdrop active" onClick={(e) => e.target === e.currentTarget && setIsModalOpen(false)}>
+      {open && (
+        <div className="modal-backdrop active" onClick={(e) => e.target === e.currentTarget && setOpen(false)}>
           <div className="room-modal" style={{ width: 500 }}>
-            <button className="modal-close" onClick={() => setIsModalOpen(false)}>×</button>
-            <h2 className="modal-title">Thêm Người Thuê</h2>
-            
-            {formErrors.global && <div className="login-error">{formErrors.global}</div>}
-
-            <form onSubmit={handleSubmit}>
+            <button className="modal-close" onClick={() => setOpen(false)}>×</button>
+            <h2 className="modal-title">{editing ? 'Sửa người thuê' : 'Thêm người thuê'}</h2>
+            {formError && <div className="login-error">{formError}</div>}
+            <form onSubmit={submit}>
               <div className="login-field">
                 <label>Họ và tên *</label>
-                <input
-                  type="text"
-                  value={formData.full_name}
-                  onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                />
-                {formErrors.full_name && <div className="field-error">{formErrors.full_name}</div>}
+                <input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} required />
               </div>
-
               <div className="login-field">
-                <label>Email</label>
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                />
-                {formErrors.email && <div className="field-error">{formErrors.email}</div>}
+                <label>Email (cần có để nhận hóa đơn)</label>
+                <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
               </div>
-
               <div className="login-field">
                 <label>Số điện thoại</label>
-                <input
-                  type="text"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                />
-                {formErrors.phone && <div className="field-error">{formErrors.phone}</div>}
+                <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
               </div>
-
-              <div className="modal-actions" style={{ marginTop: 24 }}>
-                <button type="button" className="modal-btn" onClick={() => setIsModalOpen(false)}>Hủy</button>
-                <button type="submit" className="modal-btn primary" disabled={submitting}>
-                  {submitting ? 'Đang lưu...' : 'Lưu lại'}
-                </button>
+              <div className="login-field">
+                <label>Ghi chú</label>
+                <textarea rows={3} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="modal-btn" onClick={() => setOpen(false)} disabled={submitting}>Hủy</button>
+                <button type="submit" className="modal-btn primary" disabled={submitting}>{submitting ? 'Đang lưu…' : 'Lưu'}</button>
               </div>
             </form>
           </div>
