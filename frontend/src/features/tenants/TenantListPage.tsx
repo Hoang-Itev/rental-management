@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '../../lib/api/client';
-import type { Page, TenantOut } from '../../lib/api/types';
+import type { Page, TenantOut, ContractOut } from '../../lib/api/types';
 import { Pagination } from '../../components/Pagination';
 import { PageState } from '../../components/PageState';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 
 interface FormState {
   full_name: string;
@@ -25,6 +26,10 @@ export function TenantListPage() {
   const [form, setForm] = useState<FormState>(empty);
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  
+  // State cho việc Xóa
+  const [confirmDelete, setConfirmDelete] = useState<TenantOut | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -40,7 +45,13 @@ export function TenantListPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  function openCreate() { setEditing(null); setForm(empty); setFormError(null); setOpen(true); }
+  function openCreate() {
+    setEditing(null);
+    setForm(empty);
+    setFormError(null);
+    setOpen(true);
+  }
+
   function openEdit(t: TenantOut) {
     setEditing(t);
     setForm({ full_name: t.full_name, email: t.email ?? '', phone: t.phone ?? '', note: t.note ?? '' });
@@ -54,6 +65,7 @@ export function TenantListPage() {
     if (!form.full_name.trim()) { setFormError('Họ tên bắt buộc.'); return; }
     if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) { setFormError('Email không hợp lệ.'); return; }
     if (form.phone && form.phone.trim().length < 5) { setFormError('SĐT quá ngắn.'); return; }
+    
     setSubmitting(true);
     try {
       const body = {
@@ -73,6 +85,47 @@ export function TenantListPage() {
     }
   }
 
+  async function doDelete() {
+    if (!confirmDelete) return;
+    setDeleting(true);
+    setError(null);
+    
+    try {
+      // 1. Kiểm tra xem khách này có hợp đồng nào đang hiệu lực không
+      // Vì API hiện tại không hỗ trợ lọc theo tenant_id, ta tải 100 hợp đồng gần nhất về và tự lọc.
+      const contractsRes = await api.get<Page<ContractOut>>('/api/v1/contracts?page_size=100');
+      
+      const activeContracts = contractsRes.items.filter(
+        (c) => c.representative_tenant_id === confirmDelete.id && 
+               ['ACTIVE', 'SCHEDULED', 'EXPIRED_PENDING'].includes(c.status)
+      );
+
+      if (activeContracts.length > 0) {
+        setError(`Không thể xóa! Người thuê "${confirmDelete.full_name}" đang có hợp đồng hiệu lực (${activeContracts[0].contract_code}). Vui lòng vào mục Hợp đồng để Ghi nhận bàn giao trước.`);
+        setConfirmDelete(null);
+        setDeleting(false);
+        return;
+      }
+
+      // 2. Nếu không vướng hợp đồng, tiến hành gọi API xóa
+      // (Lưu ý: Backend hiện tại chưa code API DELETE /tenants/{id}. 
+      // Nếu bạn đã code API này ở Backend, nó sẽ chạy. Nếu chưa, nó sẽ báo lỗi 404/405).
+      await api.delete(`/api/v1/tenants/${confirmDelete.id}`);
+      
+      setConfirmDelete(null);
+      await load();
+    } catch (err) {
+      if (err instanceof ApiError && (err.status === 404 || err.status === 405)) {
+         setError('Backend chưa hỗ trợ tính năng Xóa người thuê (Cần bổ sung API DELETE /api/v1/tenants/{id}).');
+      } else {
+         setError(err instanceof ApiError ? err.message : 'Không thể xóa người thuê này.');
+      }
+      setConfirmDelete(null);
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <div className="page-container">
       <div className="page-header">
@@ -84,7 +137,9 @@ export function TenantListPage() {
         Người đại diện cần có email trước khi xác nhận hợp đồng để nhận hóa đơn.
       </p>
 
-      <PageState loading={loading} error={error} empty={!loading && !error && (data?.items.length ?? 0) === 0} emptyText="Chưa có người thuê." onRetry={load}>
+      {error && <div className="login-error">{error}</div>}
+
+      <PageState loading={loading} error={null} empty={!loading && (data?.items.length ?? 0) === 0} emptyText="Chưa có người thuê." onRetry={load}>
         <table className="data-table">
           <thead>
             <tr>
@@ -92,17 +147,28 @@ export function TenantListPage() {
               <th>Email</th>
               <th>Điện thoại</th>
               <th>Ghi chú</th>
-              <th></th>
+              <th style={{ width: 160 }}>Thao tác</th>
             </tr>
           </thead>
           <tbody>
             {data?.items.map((t) => (
               <tr key={t.id}>
-                <td>{t.full_name}</td>
+                <td style={{ fontWeight: 'bold' }}>{t.full_name}</td>
                 <td>{t.email || <span className="text-muted">—</span>}</td>
                 <td>{t.phone || <span className="text-muted">—</span>}</td>
                 <td>{t.note || <span className="text-muted">—</span>}</td>
-                <td><button className="btn-secondary" onClick={() => openEdit(t)}>Sửa</button></td>
+                <td>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button className="btn-secondary" onClick={() => openEdit(t)}>Sửa</button>
+                    <button 
+                      className="btn-secondary" 
+                      style={{ color: 'var(--cinnabar-3)', borderColor: 'var(--cinnabar-2)' }} 
+                      onClick={() => setConfirmDelete(t)}
+                    >
+                      Xóa
+                    </button>
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -140,6 +206,18 @@ export function TenantListPage() {
             </form>
           </div>
         </div>
+      )}
+
+      {confirmDelete && (
+        <ConfirmDialog
+          title="Xóa người thuê?"
+          message={`Bạn có chắc muốn xóa hồ sơ "${confirmDelete.full_name}"? Hệ thống sẽ kiểm tra xem người này còn hợp đồng nào đang hiệu lực không trước khi xóa.`}
+          confirmLabel="Kiểm tra & Xóa"
+          variant="danger"
+          loading={deleting}
+          onCancel={() => setConfirmDelete(null)}
+          onConfirm={doDelete}
+        />
       )}
     </div>
   );

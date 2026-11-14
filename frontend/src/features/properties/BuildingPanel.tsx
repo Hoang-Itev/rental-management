@@ -1,23 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '../../lib/api/client';
-import type { Page, PropertyOut } from '../../lib/api/types';
+import type { Page, PropertyOut, RoomOut } from '../../lib/api/types';
 import { PageState } from '../../components/PageState';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { BulkRoomModal } from '../rooms/BulkRoomModal';
 
-interface Building {
-  id: string;
-  property_id: string;
-  name: string;
-  status: 'ACTIVE' | 'INACTIVE';
-}
-
-interface Floor {
-  id: string;
-  building_id: string;
-  floor_number: number;
-  name: string | null;
-  status: 'ACTIVE' | 'INACTIVE';
-}
+interface Building { id: string; property_id: string; name: string; status: 'ACTIVE' | 'INACTIVE'; }
+interface Floor { id: string; building_id: string; floor_number: number; name: string | null; status: 'ACTIVE' | 'INACTIVE'; }
 
 interface Props {
   property: PropertyOut;
@@ -27,37 +16,42 @@ interface Props {
 export function BuildingPanel({ property, onClose }: Props) {
   const [buildings, setBuildings] = useState<Building[]>([]);
   const [floorsByBuilding, setFloorsByBuilding] = useState<Record<string, Floor[]>>({});
+  const [roomsByFloor, setRoomsByFloor] = useState<Record<string, RoomOut[]>>({});
+  
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [buildingForm, setBuildingForm] = useState<{ open: boolean; editing: Building | null; name: string }>({
-    open: false, editing: null, name: '',
-  });
-  const [floorForm, setFloorForm] = useState<{ open: boolean; buildingId: string | null; editing: Floor | null; floor_number: string; name: string }>({
-    open: false, buildingId: null, editing: null, floor_number: '1', name: '',
-  });
-  const [roomForm, setRoomForm] = useState<{ open: boolean; floorId: string | null; rooms: { room_code: string; area_m2: string; listed_rent: string }[] }>({
-    open: false, floorId: null, rooms: [{ room_code: '', area_m2: '20', listed_rent: '2000000' }],
-  });
+  const [buildingForm, setBuildingForm] = useState<{ open: boolean; editing: Building | null; name: string }>({ open: false, editing: null, name: '' });
+  const [floorForm, setFloorForm] = useState<{ open: boolean; buildingId: string | null; editing: Floor | null; floor_number: string; name: string }>({ open: false, buildingId: null, editing: null, floor_number: '1', name: '' });
+  const [bulkRoomFloorId, setBulkRoomFloorId] = useState<string | null>(null);
+  
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<{ kind: 'building' | 'floor'; id: string; name: string } | null>(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
 
   const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+    setLoading(true); setError(null);
     try {
-      const res = await api.get<Page<Building>>(
-        `/api/v1/properties/${property.id}/buildings?page=1&page_size=100`,
-      );
+      const res = await api.get<Page<Building>>(`/api/v1/properties/${property.id}/buildings?page=1&page_size=100`);
       setBuildings(res.items);
-      const map: Record<string, Floor[]> = {};
+      
+      const fMap: Record<string, Floor[]> = {};
+      const rMap: Record<string, RoomOut[]> = {};
+
+      const allRooms = await api.get<Page<RoomOut>>(`/api/v1/rooms?property_id=${property.id}&page_size=100`);
+      allRooms.items.forEach(room => {
+        if (!rMap[room.floor_id]) rMap[room.floor_id] = [];
+        rMap[room.floor_id].push(room);
+      });
+
       await Promise.all(res.items.map(async (b) => {
-        const f = await api.get<Page<Floor>>(`/api/v1/buildings/${b.id}/floors?page=1&page_size=100`);
-        map[b.id] = f.items;
+        const floors = await api.get<Page<Floor>>(`/api/v1/buildings/${b.id}/floors?page=1&page_size=100`);
+        fMap[b.id] = floors.items;
       }));
-      setFloorsByBuilding(map);
+      
+      setFloorsByBuilding(fMap);
+      setRoomsByFloor(rMap);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Không tải được cấu trúc.');
     } finally {
@@ -107,39 +101,6 @@ export function BuildingPanel({ property, onClose }: Props) {
     }
   }
 
-  async function submitRooms(e: React.FormEvent) {
-    e.preventDefault();
-    if (!roomForm.floorId) return;
-    const rooms = roomForm.rooms
-      .map((r) => ({ room_code: r.room_code.trim(), area_m2: r.area_m2.trim(), listed_rent: Number(r.listed_rent) }))
-      .filter((r) => r.room_code);
-    if (rooms.length === 0) { setFormError('Cần ít nhất một mã phòng.'); return; }
-    const seen = new Set<string>();
-    for (const r of rooms) {
-      if (!/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(r.room_code)) {
-        setFormError(`Mã phòng không hợp lệ: ${r.room_code}`);
-        return;
-      }
-      if (seen.has(r.room_code.toUpperCase())) { setFormError(`Mã phòng trùng: ${r.room_code}`); return; }
-      seen.add(r.room_code.toUpperCase());
-      if (!(Number(r.area_m2) > 0)) { setFormError(`Diện tích phải > 0: ${r.room_code}`); return; }
-      if (!(Number.isInteger(r.listed_rent) && r.listed_rent >= 0)) { setFormError(`Giá thuê không hợp lệ: ${r.room_code}`); return; }
-    }
-    setSubmitting(true); setFormError(null);
-    try {
-      await api.postIdempotent(
-        `/api/v1/floors/${roomForm.floorId}/rooms/bulk`,
-        { rooms },
-      );
-      setRoomForm({ open: false, floorId: null, rooms: [{ room_code: '', area_m2: '20', listed_rent: '2000000' }] });
-      await load();
-    } catch (err) {
-      setFormError(err instanceof ApiError ? err.message : 'Lỗi khi tạo phòng.');
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
   async function doDeactivate() {
     if (!confirm) return;
     setConfirmLoading(true);
@@ -163,30 +124,20 @@ export function BuildingPanel({ property, onClose }: Props) {
         <h2 className="modal-title">{property.name}</h2>
         <p className="text-muted" style={{ marginBottom: 16 }}>{property.address}</p>
 
-        <PageState
-          loading={loading}
-          error={error}
-          empty={!loading && !error && buildings.length === 0}
-          emptyText="Chưa có dãy nào."
-          onRetry={load}
-        >
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-            <button
-              className="btn-secondary"
-              onClick={() => { setBuildingForm({ open: true, editing: null, name: '' }); setFormError(null); }}
-            >
-              + Thêm dãy
-            </button>
-          </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+          <button className="btn-secondary" onClick={() => { setBuildingForm({ open: true, editing: null, name: '' }); setFormError(null); }}>
+            + Thêm dãy
+          </button>
+        </div>
 
+        <PageState loading={loading} error={error} empty={!loading && !error && buildings.length === 0} emptyText="Chưa có dãy nào." onRetry={load}>
           {buildings.map((b) => (
             <div key={b.id} style={{ border: '1px solid var(--gold-3)', padding: 16, marginBottom: 16 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <strong style={{ color: 'var(--gold-2)' }}>Dãy {b.name}</strong>
+              <div className="building-header">
+                {/* Dãy mặc định + Tên bạn đặt */}
+                <strong className="building-title">Dãy {b.name}</strong>
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <button className="btn-secondary" onClick={() => { setFloorForm({ open: true, buildingId: b.id, editing: null, floor_number: '1', name: '' }); setFormError(null); }}>
-                    + Tầng
-                  </button>
+                  <button className="btn-secondary" onClick={() => { setFloorForm({ open: true, buildingId: b.id, editing: null, floor_number: '1', name: '' }); setFormError(null); }}>+ Tầng</button>
                   <button className="btn-secondary" onClick={() => { setBuildingForm({ open: true, editing: b, name: b.name }); setFormError(null); }}>Sửa</button>
                   {b.status === 'ACTIVE' && (
                     <button className="btn-secondary" style={{ color: 'var(--cinnabar-3)' }} onClick={() => setConfirm({ kind: 'building', id: b.id, name: b.name })}>Vô hiệu hóa</button>
@@ -195,31 +146,56 @@ export function BuildingPanel({ property, onClose }: Props) {
               </div>
 
               {(floorsByBuilding[b.id] ?? []).length === 0 && (
-                <p className="text-muted" style={{ fontSize: 13 }}>Chưa có tầng.</p>
+                <p className="text-muted" style={{ fontSize: 13, marginTop: 8 }}>Chưa có tầng.</p>
               )}
 
-              {(floorsByBuilding[b.id] ?? []).map((f) => (
-                <div key={f.id} style={{ padding: '8px 0', borderTop: '1px dashed var(--gold-3)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span>Tầng {f.floor_number}{f.name ? ` — ${f.name}` : ''}</span>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <button className="btn-secondary" onClick={() => { setRoomForm({ open: true, floorId: f.id, rooms: [{ room_code: '', area_m2: '20', listed_rent: '2000000' }] }); setFormError(null); }}>
-                        + Phòng
-                      </button>
-                      <button className="btn-secondary" onClick={() => { setFloorForm({ open: true, buildingId: b.id, editing: f, floor_number: String(f.floor_number), name: f.name ?? '' }); setFormError(null); }}>Sửa</button>
-                      {f.status === 'ACTIVE' && (
-                        <button className="btn-secondary" style={{ color: 'var(--cinnabar-3)' }} onClick={() => setConfirm({ kind: 'floor', id: f.id, name: `tầng ${f.floor_number} dãy ${b.name}` })}>Vô hiệu hóa</button>
-                      )}
+              {(floorsByBuilding[b.id] ?? []).map((f) => {
+                const roomsInFloor = roomsByFloor[f.id] || [];
+                return (
+                  <div key={f.id} style={{ padding: '12px 0', borderTop: '1px dashed var(--gold-3)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                      {/* Tầng mặc định + Tên bạn đặt */}
+                      <span style={{ fontWeight: 'bold' }}>
+                        Tầng {f.floor_number}{f.name ? ` — ${f.name}` : ''}
+                      </span>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button className="btn-secondary" onClick={() => setBulkRoomFloorId(f.id)}>+ Phòng</button>
+                        <button className="btn-secondary" onClick={() => { setFloorForm({ open: true, buildingId: b.id, editing: f, floor_number: String(f.floor_number), name: f.name ?? '' }); setFormError(null); }}>Sửa</button>
+                        {f.status === 'ACTIVE' && (
+                          <button className="btn-secondary" style={{ color: 'var(--cinnabar-3)' }} onClick={() => setConfirm({ kind: 'floor', id: f.id, name: `tầng ${f.floor_number} dãy ${b.name}` })}>Vô hiệu hóa</button>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      {roomsInFloor.length === 0 && <span className="text-muted" style={{ fontSize: 12 }}>Chưa có phòng.</span>}
+                      {roomsInFloor.map(room => (
+                        <div 
+                          key={room.id} 
+                          style={{ 
+                            padding: '6px 12px', 
+                            border: '1px solid var(--gold-3)', 
+                            borderRadius: 4, 
+                            fontSize: 13, 
+                            background: room.display_occupancy === 'OCCUPIED' ? 'rgba(232, 71, 43, 0.1)' : 'rgba(61, 138, 122, 0.1)',
+                            color: room.display_occupancy === 'OCCUPIED' ? 'var(--cinnabar-3)' : 'var(--jade-hi)'
+                          }}
+                          title={room.display_occupancy === 'OCCUPIED' ? 'Đang thuê' : 'Trống'}
+                        >
+                          {room.room_code}
+                        </div>
+                      ))}
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ))}
         </PageState>
 
+        {/* MODAL THÊM/SỬA DÃY */}
         {buildingForm.open && (
-          <div className="modal-backdrop active" style={{ position: 'fixed' }} onClick={(e) => e.target === e.currentTarget && setBuildingForm({ open: false, editing: null, name: '' })}>
+          <div className="modal-backdrop active" style={{ zIndex: 10000 }} onClick={(e) => e.target === e.currentTarget && setBuildingForm({ open: false, editing: null, name: '' })}>
             <div className="room-modal" style={{ width: 420 }}>
               <button className="modal-close" onClick={() => setBuildingForm({ open: false, editing: null, name: '' })}>×</button>
               <h2 className="modal-title">{buildingForm.editing ? 'Sửa dãy' : 'Thêm dãy'}</h2>
@@ -238,8 +214,9 @@ export function BuildingPanel({ property, onClose }: Props) {
           </div>
         )}
 
+        {/* MODAL THÊM/SỬA TẦNG */}
         {floorForm.open && (
-          <div className="modal-backdrop active" style={{ position: 'fixed' }} onClick={(e) => e.target === e.currentTarget && setFloorForm({ open: false, buildingId: null, editing: null, floor_number: '1', name: '' })}>
+          <div className="modal-backdrop active" style={{ zIndex: 10000 }} onClick={(e) => e.target === e.currentTarget && setFloorForm({ open: false, buildingId: null, editing: null, floor_number: '1', name: '' })}>
             <div className="room-modal" style={{ width: 420 }}>
               <button className="modal-close" onClick={() => setFloorForm({ open: false, buildingId: null, editing: null, floor_number: '1', name: '' })}>×</button>
               <h2 className="modal-title">{floorForm.editing ? 'Sửa tầng' : 'Thêm tầng'}</h2>
@@ -262,47 +239,16 @@ export function BuildingPanel({ property, onClose }: Props) {
           </div>
         )}
 
-        {roomForm.open && (
-          <div className="modal-backdrop active" style={{ position: 'fixed' }} onClick={(e) => e.target === e.currentTarget && setRoomForm({ open: false, floorId: null, rooms: [{ room_code: '', area_m2: '20', listed_rent: '2000000' }] })}>
-            <div className="room-modal" style={{ width: 640 }}>
-              <button className="modal-close" onClick={() => setRoomForm({ open: false, floorId: null, rooms: [{ room_code: '', area_m2: '20', listed_rent: '2000000' }] })}>×</button>
-              <h2 className="modal-title">Thêm phòng (tối đa 100)</h2>
-              {formError && <div className="login-error">{formError}</div>}
-              <form onSubmit={submitRooms}>
-                {roomForm.rooms.map((r, idx) => (
-                  <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 8, marginBottom: 8 }}>
-                    <input placeholder="Mã phòng (VD A101)" value={r.room_code} onChange={(e) => {
-                      const rooms = [...roomForm.rooms];
-                      rooms[idx] = { ...rooms[idx], room_code: e.target.value };
-                      setRoomForm({ ...roomForm, rooms });
-                    }} required />
-                    <input type="number" step="0.01" min="0.01" placeholder="Diện tích m²" value={r.area_m2} onChange={(e) => {
-                      const rooms = [...roomForm.rooms];
-                      rooms[idx] = { ...rooms[idx], area_m2: e.target.value };
-                      setRoomForm({ ...roomForm, rooms });
-                    }} required />
-                    <input type="number" min="0" step="1000" placeholder="Giá niêm yết" value={r.listed_rent} onChange={(e) => {
-                      const rooms = [...roomForm.rooms];
-                      rooms[idx] = { ...rooms[idx], listed_rent: e.target.value };
-                      setRoomForm({ ...roomForm, rooms });
-                    }} required />
-                    <button type="button" className="btn-secondary" onClick={() => {
-                      setRoomForm({ ...roomForm, rooms: roomForm.rooms.filter((_, i) => i !== idx) });
-                    }} disabled={roomForm.rooms.length <= 1}>X</button>
-                  </div>
-                ))}
-                <button type="button" className="btn-secondary" onClick={() => setRoomForm({ ...roomForm, rooms: [...roomForm.rooms, { room_code: '', area_m2: '20', listed_rent: '2000000' }] })} disabled={roomForm.rooms.length >= 100}>
-                  + Thêm dòng
-                </button>
-                <div className="modal-actions" style={{ marginTop: 20 }}>
-                  <button type="button" className="modal-btn" onClick={() => setRoomForm({ open: false, floorId: null, rooms: [{ room_code: '', area_m2: '20', listed_rent: '2000000' }] })} disabled={submitting}>Hủy</button>
-                  <button type="submit" className="modal-btn primary" disabled={submitting}>{submitting ? 'Đang tạo…' : 'Tạo phòng'}</button>
-                </div>
-              </form>
-            </div>
-          </div>
+        {/* MODAL THÊM PHÒNG HÀNG LOẠT */}
+        {bulkRoomFloorId && (
+          <BulkRoomModal
+            floorId={bulkRoomFloorId}
+            onClose={() => setBulkRoomFloorId(null)}
+            onSuccess={() => { setBulkRoomFloorId(null); load(); }}
+          />
         )}
 
+        {/* CONFIRM DIALOG */}
         {confirm && (
           <ConfirmDialog
             title="Vô hiệu hóa?"

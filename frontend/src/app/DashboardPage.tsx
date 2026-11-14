@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../features/auth/AuthContext';
 import { api, ApiError } from '../lib/api/client';
 import type { Page, RoomOut } from '../lib/api/types';
@@ -9,8 +9,11 @@ import '../styles/dashboard.css';
 
 const PINNED_KEY = 'dashboard_pinned_rooms';
 
+interface ShortBuilding { id: string; name: string; }
+interface ShortFloor { id: string; floor_number: number; building_id: string; name: string | null; }
+
 export default function DashboardPage() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const [allRooms, setAllRooms] = useState<RoomOut[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -20,9 +23,9 @@ export default function DashboardPage() {
   });
   
   const [selectedRoom, setSelectedRoom] = useState<RoomOut | null>(null);
+  const [roomLocation, setRoomLocation] = useState<string>('');
   const [showPinModal, setShowPinModal] = useState(false);
   
-  // Đọc danh sách phòng đã ghim
   const [pinnedIds, setPinnedIds] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem(PINNED_KEY);
@@ -36,38 +39,51 @@ export default function DashboardPage() {
   }, [mode]);
 
   const loadRooms = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+    setLoading(true); setError(null);
     try {
       const data = await api.get<Page<RoomOut>>('/api/v1/rooms?page=1&page_size=100');
       setAllRooms(data.items);
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        logout();
-      } else {
-        setError('Không tải được danh sách phòng.');
-      }
+      setError('Không tải được danh sách phòng.');
     } finally {
       setLoading(false);
     }
-  }, [logout]);
+  }, []);
 
-  useEffect(() => {
-    loadRooms();
-  }, [loadRooms]);
+  useEffect(() => { loadRooms(); }, [loadRooms]);
 
-  // Lọc các phòng được ghim để hiển thị
-  const displayRooms = useMemo(() => {
-    if (pinnedIds.length === 0) return []; // Hoặc có thể return allRooms.slice(0, 12) nếu muốn
-    return allRooms.filter(r => pinnedIds.includes(r.id)).slice(0, 12);
-  }, [allRooms, pinnedIds]);
+  const displayRooms = allRooms.filter(r => pinnedIds.length === 0 || pinnedIds.includes(r.id)).slice(0, 12);
 
-  const summary = useMemo(() => {
-    const occupied = displayRooms.filter((r) => r.display_occupancy === 'OCCUPIED').length;
-    const vacant = displayRooms.filter((r) => r.display_occupancy === 'VACANT').length;
-    const inactive = displayRooms.filter((r) => r.display_occupancy === 'INACTIVE').length;
-    return { occupied, vacant, inactive, total: displayRooms.length };
-  }, [displayRooms]);
+  const summary = {
+    occupied: displayRooms.filter((r) => r.display_occupancy === 'OCCUPIED').length,
+    vacant: displayRooms.filter((r) => r.display_occupancy === 'VACANT').length,
+    total: displayRooms.length
+  };
+
+  async function handleSelectRoom(room: RoomOut) {
+    setSelectedRoom(room);
+    setRoomLocation('Đang tải vị trí...');
+    try {
+      const prop = await api.get<any>(`/api/v1/properties/${room.property_id}`);
+      const floor = await api.get<ShortFloor>(`/api/v1/floors/${room.floor_id}`);
+      let buildingName = '';
+      if (floor.building_id) {
+        const b = await api.get<ShortBuilding>(`/api/v1/buildings/${floor.building_id}`);
+        buildingName = b.name;
+      }
+      
+      const floorName = floor.name ? ` - ${floor.name}` : '';
+      const loc = [
+        prop.name, 
+        buildingName ? `Dãy ${buildingName}` : '', 
+        `Tầng ${floor.floor_number}${floorName}`
+      ].filter(Boolean).join(' - ');
+      
+      setRoomLocation(loc);
+    } catch {
+      setRoomLocation('Không xác định được vị trí');
+    }
+  }
 
   function handleSavePins(ids: string[]) {
     setPinnedIds(ids);
@@ -116,11 +132,16 @@ export default function DashboardPage() {
       )}
 
       {!loading && !error && displayRooms.length > 0 && (
-        <RoomScene rooms={displayRooms} onSelect={setSelectedRoom} mode={mode} />
+        <RoomScene rooms={displayRooms} onSelect={handleSelectRoom} mode={mode} />
       )}
 
       {selectedRoom && (
-        <RoomModal room={selectedRoom} onClose={() => setSelectedRoom(null)} />
+        <RoomModal 
+          room={selectedRoom} 
+          locationName={roomLocation} 
+          onClose={() => setSelectedRoom(null)} 
+          onUpdate={() => { setSelectedRoom(null); loadRooms(); }}
+        />
       )}
 
       {showPinModal && (

@@ -1,9 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../../lib/api/client';
 import type { RoomOut, TenantOut, Page } from '../../lib/api/types';
 import { PageState } from '../../components/PageState';
-import { formatVnd } from '../../lib/utils/format';
+import { formatVnd, formatDateVi } from '../../lib/utils/format';
 
 interface FormState {
   contract_code: string;
@@ -31,13 +31,20 @@ const initialForm: FormState = {
 
 export function ContractWizardPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const preSelectedRoomId = searchParams.get('room_id') || '';
+
   const [rooms, setRooms] = useState<RoomOut[]>([]);
   const [tenants, setTenants] = useState<TenantOut[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [form, setForm] = useState<FormState>(initialForm);
+  
+  const [form, setForm] = useState<FormState>({
+    ...initialForm,
+    room_id: preSelectedRoomId,
+  });
 
   async function loadOptions() {
     setLoading(true);
@@ -63,11 +70,27 @@ export function ContractWizardPage() {
   }
 
   function validate(): string | null {
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    
     if (!form.room_id) return 'Chọn phòng.';
     if (!form.representative_tenant_id) return 'Chọn người đại diện.';
     if (!form.start_date) return 'Chọn ngày bắt đầu.';
     if (!form.end_date) return 'Chọn ngày kết thúc.';
-    if (form.end_date < form.start_date) return 'Ngày kết thúc phải >= ngày bắt đầu.';
+    
+    // Validate Ngày bắt đầu không ở quá khứ
+    if (form.start_date < today) {
+      return 'Ngày bắt đầu không được ở trong quá khứ.';
+    }
+
+    // Validate Ngày kết thúc phải sau Ngày bắt đầu
+    if (form.end_date <= form.start_date) {
+      return 'Ngày kết thúc phải lớn hơn ngày bắt đầu.';
+    }
+    
+    // Validate Ngày kết thúc phải lớn hơn hiện tại
+    if (form.end_date <= today) {
+      return 'Ngày kết thúc phải lớn hơn ngày hiện tại.';
+    }
 
     const payer = tenants.find((t) => t.id === form.representative_tenant_id);
     if (payer && !payer.email) {
@@ -124,6 +147,7 @@ export function ContractWizardPage() {
 
   const payer = tenants.find((t) => t.id === form.representative_tenant_id);
   const payerMissingEmail = payer && !payer.email;
+  const todayStr = new Date().toISOString().split('T')[0];
 
   return (
     <div className="page-container">
@@ -186,6 +210,7 @@ export function ContractWizardPage() {
               <input
                 type="date"
                 value={form.start_date}
+                min={todayStr} // Chặn chọn ngày trong quá khứ
                 onChange={(e) => setField('start_date', e.target.value)}
                 required
               />
@@ -195,8 +220,9 @@ export function ContractWizardPage() {
               <input
                 type="date"
                 value={form.end_date}
+                // Phải lớn hơn ngày bắt đầu VÀ lớn hơn ngày hiện tại
+                min={form.start_date ? (form.start_date > todayStr ? form.start_date : todayStr) : todayStr}
                 onChange={(e) => setField('end_date', e.target.value)}
-                min={form.start_date || undefined}
                 required
               />
             </div>

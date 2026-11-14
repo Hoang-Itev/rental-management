@@ -33,7 +33,6 @@ body.dawn {
   --amber: #f2aa4a; --amber-2: #d98529;
   --indigo: #6a8aba; --indigo-2: #4a6a9a;
   
-  /* Màu chữ khi ở chế độ sáng */
   --ink: #2a1a0e; --ink-soft: #5a3a1e; --ink-dim: #8a6a4a;
   --paper: #f8ecd0; --paper-2: #e8d4a8;
   --water-hi: #a8e0c8;
@@ -44,20 +43,15 @@ body.dawn {
    ========================================================= */
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body, #root {
-  min-height: 100vh;
-  width: 100%;
-  overflow-x: hidden; /* Ngăn trình duyệt tự động zoom-out khi có phần tử tràn */
-  background: var(--night-0); 
-  color: var(--ink);
+  min-height: 100vh; width: 100%; overflow-x: hidden;
+  background: var(--night-0); color: var(--ink);
   font-family: 'Lora', 'Noto Serif Display', Georgia, serif;
   font-size: 16px; line-height: 1.55;
   transition: background 0.8s ease, color 0.8s ease;
 }
 
 h1, h2, h3 { font-family: 'Cormorant Garamond', serif; font-weight: 700; }
-
 button { font-family: 'Noto Serif Display', serif; cursor: pointer; }
-
 label { display: block; font-size: 11px; text-transform: uppercase; color: var(--ink-dim); margin-bottom: 6px; }
 
 input, textarea, select {
@@ -70,7 +64,7 @@ input:focus, textarea:focus, select:focus {
 }
 
 /* =========================================================
-   3. SỬA LỖI CHỮ DÍNH TRÊN NAVBAR & MÀU CHỮ
+   3. NAVBAR & HEADER
    ========================================================= */
 .layout-root { display: flex; flex-direction: column; min-height: 100vh; }
 .top-nav {
@@ -79,41 +73,22 @@ input:focus, textarea:focus, select:focus {
   border-bottom: 2px solid var(--gold-3); position: sticky; top: 0; z-index: 100;
 }
 body.dawn .top-nav { background: var(--night-1); }
-
-/* Sửa lỗi chữ "Minh An" và "Quản lý trọ" bị dính */
-.top-nav-brand {
-  display: flex; 
-  flex-direction: column; 
-  gap: 4px; /* Tạo khoảng cách giữa 2 dòng chữ */
-  cursor: pointer;
-}
-.brand-title { 
-  font-family: 'Cormorant Garamond', serif; 
-  font-size: 24px; 
-  font-weight: 700;
-  line-height: 1.1; 
-  color: var(--gold-2); 
-}
+.top-nav-brand { display: flex; flex-direction: column; gap: 4px; cursor: pointer; }
+.brand-title { font-family: 'Cormorant Garamond', serif; font-size: 24px; font-weight: 700; line-height: 1.1; color: var(--gold-2); }
 body.dawn .brand-title { color: var(--cinnabar-2); }
-.brand-sub { 
-  font-size: 10px; 
-  letter-spacing: 0.2em; 
-  text-transform: uppercase; 
-  color: var(--ink-dim); 
-}
+.brand-sub { font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-dim); }
 
 .top-nav-links { display: flex; gap: 8px; height: 100%; }
-.top-nav-item { 
-  display: flex; align-items: center; padding: 0 16px; 
-  color: var(--ink-soft); text-decoration: none; position: relative; 
-  transition: color 0.3s;
+.top-nav-item {
+  display: flex; align-items: center; padding: 0 16px;
+  color: var(--ink-soft); text-decoration: none; position: relative; transition: color 0.3s;
 }
 body.dawn .top-nav-item { color: #5a3a1e; }
 body.dawn .top-nav-item:hover { color: var(--cinnabar); }
 .top-nav-item.active { color: var(--gold-2); font-weight: 700; }
 body.dawn .top-nav-item.active { color: var(--cinnabar-2); }
-.top-nav-item.active::after { 
-  content: ''; position: absolute; bottom: 0; left: 16px; right: 16px; 
+.top-nav-item.active::after {
+  content: ''; position: absolute; bottom: 0; left: 16px; right: 16px;
   height: 3px; background: var(--gold); border-radius: 2px 2px 0 0;
 }
 body.dawn .top-nav-item.active::after { background: var(--cinnabar); }
@@ -121,55 +96,38 @@ body.dawn .top-nav-item.active::after { background: var(--cinnabar); }
 .top-nav-user { display: flex; align-items: center; gap: 20px; }
 .user-name { font-size: 14px; color: var(--ink); font-style: italic; }
 body.dawn .user-name { color: #2a1a0e; }
-
 .layout-main { flex: 1; overflow-y: auto; }
 
 /* =========================================================
-   4. NÚT BẤM VÁT GÓC (FIX LỖI ĐEN THUI / CHÌM)
+   4. BUTTONS
    ========================================================= */
 .btn-vat, .btn-primary, .btn-secondary, .login-submit, .modal-btn {
-  padding: 10px 24px; 
-  background: var(--wood-3); 
-  color: var(--gold-2); 
-  border: 1px solid var(--wood-2); 
-  font-size: 14px; 
-  cursor: pointer;
+  padding: 10px 24px; background: var(--wood-3); color: var(--gold-2);
+  border: 1px solid var(--wood-2); font-size: 14px; cursor: pointer;
   clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
   transition: all 0.3s;
 }
-.btn-vat:hover, .btn-secondary:hover, .modal-btn:hover {
-  background: var(--gold); color: var(--night-0);
-}
-.btn-primary { 
-  background: var(--cinnabar); 
-  border-color: var(--cinnabar-2); 
-  color: #f8d880 !important; /* Ép màu vàng sáng */
-  font-weight: bold;
-}
-.btn-primary:hover { 
-  background: var(--cinnabar-3); 
-  color: #ffffff !important; /* Trắng sáng khi hover */
-  box-shadow: 0 0 15px rgba(232, 71, 43, 0.4);
-}
+.btn-vat:hover, .btn-secondary:hover, .modal-btn:hover { background: var(--gold); color: var(--night-0); }
+.btn-primary { background: var(--cinnabar); border-color: var(--cinnabar-2); color: #f8d880 !important; font-weight: bold; }
+.btn-primary:hover { background: var(--cinnabar-3); color: #ffffff !important; box-shadow: 0 0 15px rgba(232, 71, 43, 0.4); }
+.btn-secondary.primary { background: var(--cinnabar); color: #f8d880 !important; border-color: var(--cinnabar-2); }
 
 /* =========================================================
-   5. SỬA LỖI MÀU LINK "CHI TIẾT" VÀ SỐ TIỀN (FIX CHÌM)
+   5. LINKS & TEXT
    ========================================================= */
 a { color: var(--gold-2); text-decoration: none; transition: color 0.3s; }
 a:hover { color: var(--gold); }
-
-body.dawn a { color: var(--jade-2); font-weight: 700; } 
+body.dawn a { color: var(--jade-2); font-weight: 700; }
 body.dawn a:hover { color: var(--moss-2); }
+body.dawn .data-table td a, body.dawn .data-table td .amount, body.dawn .data-table td strong { color: var(--jade-2) !important; font-weight: 700; }
 
-body.dawn .data-table td a,
-body.dawn .data-table td .amount,
-body.dawn .data-table td strong { 
-  color: var(--jade-2) !important; 
-  font-weight: 700;
-}
+.text-amount { color: var(--gold); font-weight: 600; }
+body.dawn .text-amount { color: var(--jade-2) !important; }
+.text-muted { color: var(--ink-dim); }
+.text-gold { color: var(--gold-2); }
 
 /* =========================================================
-   6. BẢNG, FORM, PHÂN TRANG
+   6. FORMS, TABLES, PAGINATION
    ========================================================= */
 .login-shell { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: radial-gradient(ellipse at 50% 0%, var(--night-3), var(--night-1) 60%, var(--night-0)); }
 .login-card { width: min(420px, 100%); padding: 40px; border: 1px solid var(--gold-3); background: var(--night-2); box-shadow: inset 0 0 60px rgba(0,0,0,0.6), 0 30px 80px rgba(0,0,0,0.6); }
@@ -197,87 +155,117 @@ body.dawn .data-table th { color: var(--cinnabar-2); }
 body.dawn .page-btn { border-color: var(--cinnabar-2); color: var(--cinnabar-2); }
 body.dawn .page-btn:hover:not(:disabled) { background: var(--cinnabar); color: #fff; }
 
-/* Class cho số tiền trong bảng */
-.text-amount {
-  color: var(--gold);
-}
-body.dawn .text-amount {
-  color: var(--jade-2) !important; /* Xanh ngọc đậm ở nền sáng */
-}
-
-.loading-text { padding: 32px; text-align: center; color: var(--ink-soft); font-style: italic; }
-.page-error { padding: 20px; border: 1px solid var(--cinnabar-2); background: rgba(197,46,26,.08); color: var(--cinnabar-3); margin-bottom: 20px; }
-.empty-row { text-align: center; padding: 24px; color: var(--ink-dim); font-style: italic; }
-.filter-bar { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; }
-.filter-bar select, .filter-bar input { max-width: 260px; }
-.badge.active { background: rgba(61,138,122,.15); color: var(--jade-hi); border: 1px solid var(--jade-2); padding: 2px 8px; border-radius: 3px; font-size: 12px; }
-.badge.inactive { background: rgba(122,122,122,.15); color: var(--stone); border: 1px solid var(--stone-2); padding: 2px 8px; border-radius: 3px; font-size: 12px; }
-body.dawn .badge.active { color: var(--jade-2); }
-body.dawn .badge.inactive { color: var(--stone-2); }
-.text-muted { color: var(--ink-dim); }
-.text-gold { color: var(--gold-2); }
-.text-amount { color: var(--gold); font-weight: 600; }
-body.dawn .text-amount { color: var(--jade-2); }
-
-/* Page states & badges (bổ sung cho các trang mới) */
 .loading-text { padding: 32px; text-align: center; color: var(--ink-soft); font-style: italic; }
 .page-error { padding: 20px; border: 1px solid var(--cinnabar-2); background: rgba(197,46,26,.08); color: var(--cinnabar-3); margin-bottom: 20px; }
 .empty-row { text-align: center; padding: 24px; color: var(--ink-dim); font-style: italic; }
 .filter-bar { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; }
 .filter-bar select, .filter-bar input[type="month"] { max-width: 220px; }
+
+/* =========================================================
+   7. BADGES & DETAIL GRID
+   ========================================================= */
 .badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 12px; border: 1px solid transparent; }
 .badge.active { background: rgba(61,138,122,.15); color: var(--jade-hi); border-color: var(--jade-2); }
 .badge.inactive { background: rgba(122,122,122,.15); color: var(--stone); border-color: var(--stone-2); }
 body.dawn .badge.active { color: var(--jade-2); }
 body.dawn .badge.inactive { color: var(--stone-2); }
-.text-muted { color: var(--ink-dim); }
-.text-amount { color: var(--gold); font-weight: 600; }
-body.dawn .text-amount { color: var(--jade-2); }
-.btn-secondary.primary { background: var(--cinnabar); color: #f8d880 !important; border-color: var(--cinnabar-2); }
+
 .detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; padding: 20px; border: 1px solid var(--gold-3); background: var(--night-2); margin-bottom: 20px; }
 body.dawn .detail-grid { background: var(--night-1); }
 .detail-item label { display: block; font-size: 11px; text-transform: uppercase; color: var(--ink-dim); margin-bottom: 4px; }
 .detail-item div { color: var(--ink); }
 body.dawn .detail-item div { color: #2a1a0e; }
 
-/* Fix lỗi Modal nổi lên trên cùng */
+/* =========================================================
+   8. MODALS
+   ========================================================= */
 .modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(4px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999; /* Luôn nổi lên trên */
+  position: fixed; inset: 0; background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 9999;
 }
-
 .room-modal {
-  background: var(--night-2);
-  border: 1px solid var(--gold-3);
-  padding: 24px;
-  position: relative;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.8);
-  border-radius: 4px;
+  background: var(--night-2); border: 1px solid var(--gold-3);
+  padding: 24px; position: relative; max-height: 90vh; overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.8); border-radius: 6px;
 }
+body.dawn .room-modal { background: var(--paper); border-color: var(--cinnabar-2); }
 
-body.dawn .room-modal {
-  background: var(--night-1);
-}
+.room-modal h2, .room-modal h3 { color: var(--gold-2); margin-bottom: 16px; }
+body.dawn .room-modal h2, body.dawn .room-modal h3 { color: var(--cinnabar-2); }
+body.dawn .property-card h3 { color: var(--cinnabar-2) !important; }
+body.dawn .building-title { color: var(--cinnabar-2) !important; font-weight: bold; }
+
+.room-modal p, .room-modal .detail-item { margin-bottom: 8px; line-height: 1.6; font-size: 15px; }
+.room-modal .modal-eyebrow { font-size: 11px; text-transform: uppercase; color: var(--ink-soft); margin-bottom: 4px; }
+.room-modal .modal-title { font-size: 28px; margin-bottom: 16px; }
+body.dawn .room-modal .modal-title { color: var(--cinnabar-2); }
 
 .modal-close {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  background: transparent;
-  border: none;
-  color: var(--ink-soft);
-  font-size: 24px;
-  cursor: pointer;
-  line-height: 1;
+  position: absolute; top: 12px; right: 12px; background: transparent; border: none;
+  color: var(--ink-soft); font-size: 24px; cursor: pointer; line-height: 1;
 }
-.modal-close:hover {
-  color: var(--cinnabar-3);
+.modal-close:hover { color: var(--cinnabar-3); }
+
+.modal-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; }
+.modal-btn { padding: 10px 20px; border: 1px solid var(--gold-3); background: var(--night-1); color: var(--gold-2); cursor: pointer; clip-path: none; }
+.modal-btn.primary { background: var(--cinnabar); color: #fff; border-color: var(--cinnabar-2); }
+body.dawn .modal-btn { background: var(--stone); color: #fff; }
+body.dawn .modal-btn.primary { background: var(--cinnabar-2); color: #fff; }
+
+.room-modal table { width: 100%; border-collapse: collapse; }
+.room-modal th, .room-modal td { padding: 10px; border-bottom: 1px solid var(--gold-3); text-align: left; }
+body.dawn .room-modal th, body.dawn .room-modal td { border-color: var(--stone-2); }
+
+.building-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+
+/* =========================================================
+   9. FIX LỖI MODAL CHI TIẾT (Chữ không bị rớt dòng)
+   ========================================================= */
+.room-modal .modal-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 20px;
+  margin-bottom: 20px;
+}
+.room-modal .modal-grid > div {
+  display: flex;
+  flex-direction: column;
+}
+.room-modal .modal-grid .label {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 4px;
+}
+.room-modal .modal-grid .value {
+  font-size: 16px;
+  color: var(--ink);
+  font-weight: 500;
+}
+.room-modal .modal-state {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  margin-top: 8px;
+}
+.room-modal .modal-state.occupied { background: rgba(232, 71, 43, 0.15); color: var(--cinnabar-3); border: 1px solid var(--cinnabar-2); }
+.room-modal .modal-state.vacant { background: rgba(61, 138, 122, 0.15); color: var(--jade-hi); border: 1px solid var(--jade-2); }
+.room-modal .modal-state.inactive { background: rgba(122, 122, 122, 0.15); color: var(--stone); border: 1px solid var(--stone-2); }
+body.dawn .room-modal .modal-state.occupied { color: var(--cinnabar-2); }
+body.dawn .room-modal .modal-state.vacant { color: var(--jade-2); }
+body.dawn .room-modal .modal-state.inactive { color: var(--stone-2); }
+
+.room-modal .modal-divider {
+  height: 1px;
+  background: var(--gold-3);
+  margin: 20px 0;
+  opacity: 0.5;
+}
+
+/* Đảm bảo Modal con nổi lên trên Modal cha */
+.modal-backdrop > .modal-backdrop {
+  z-index: 10000 !important;
+  background: rgba(0, 0, 0, 0.85); /* Làm tối nền thêm chút để nổi bật modal con */
 }

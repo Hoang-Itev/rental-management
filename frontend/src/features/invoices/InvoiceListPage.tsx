@@ -58,8 +58,9 @@ export function InvoiceListPage() {
       await api.postIdempotent('/api/v1/billing-runs', { billing_month: `${newMonth}-01` });
       setNewMonth('');
       await loadRuns();
+      alert('Đã gửi yêu cầu tạo hóa đơn tự động. Vui lòng đợi hệ thống xử lý.');
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Không tạo được billing run.');
+      alert(err instanceof ApiError ? err.message : 'Không tạo được tiến trình.');
     } finally {
       setCreatingRun(false);
     }
@@ -70,32 +71,32 @@ export function InvoiceListPage() {
       <div className="page-header">
         <h1 className="page-title">Quản lý Hóa đơn</h1>
         <button className="btn-secondary" onClick={() => setShowRuns((v) => !v)}>
-          {showRuns ? 'Ẩn billing runs' : 'Billing runs'}
+          {showRuns ? 'Ẩn lịch sử chạy tự động' : 'Xem lịch sử chạy tự động'}
         </button>
       </div>
 
       {showRuns && (
-        <div className="property-card" style={{ marginBottom: 20 }}>
-          <h3>Chạy lập hóa đơn tháng đã đóng</h3>
-          <form onSubmit={createRun} style={{ display: 'flex', gap: 8, alignItems: 'end', marginTop: 12 }}>
+        <div className="property-card" style={{ marginBottom: 24, padding: 20, border: '1px solid var(--gold-3)' }}>
+          <h3 style={{ marginBottom: 16 }}>Chạy lập hóa đơn tự động (Billing Runs)</h3>
+          <form onSubmit={createRun} style={{ display: 'flex', gap: 16, alignItems: 'flex-end', marginBottom: 20, flexWrap: 'wrap' }}>
             <div className="login-field" style={{ marginBottom: 0 }}>
-              <label>Tháng (YYYY-MM)</label>
+              <label>Chọn tháng cần tạo hóa đơn</label>
               <input type="month" value={newMonth} onChange={(e) => setNewMonth(e.target.value)} required />
             </div>
             <button className="btn-primary" type="submit" disabled={creatingRun}>
-              {creatingRun ? 'Đang tạo…' : 'Tạo run'}
+              {creatingRun ? 'Đang xử lý...' : 'Bắt đầu tạo'}
             </button>
           </form>
-          <table className="data-table" style={{ marginTop: 16 }}>
+          <table className="data-table">
             <thead>
-              <tr><th>Tháng</th><th>Kiểu</th><th>Trạng thái</th><th>Issued</th><th>Waiting</th><th>Skipped</th><th>Failed</th></tr>
+              <tr><th>Tháng</th><th>Hình thức</th><th>Trạng thái</th><th>Đã tạo</th><th>Đang chờ</th><th>Bỏ qua</th><th>Lỗi</th></tr>
             </thead>
             <tbody>
-              {runs.length === 0 && <tr><td colSpan={7} className="empty-row">Chưa có run.</td></tr>}
+              {runs.length === 0 && <tr><td colSpan={7} className="empty-row">Chưa có lịch sử chạy.</td></tr>}
               {runs.map((r) => (
                 <tr key={r.id}>
                   <td>{r.billing_month}</td>
-                  <td>{r.trigger_type}</td>
+                  <td>{r.trigger_type === 'MANUAL' ? 'Thủ công' : 'Tự động'}</td>
                   <td><Badge value={r.status} /></td>
                   <td>{r.issued_count}</td>
                   <td>{r.waiting_count}</td>
@@ -110,26 +111,26 @@ export function InvoiceListPage() {
 
       <div className="filter-bar">
         <select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
-          <option value="">Mọi trạng thái</option>
+          <option value="">Tất cả trạng thái</option>
           <option value="DRAFT">Nháp</option>
           <option value="ISSUED">Đã phát hành</option>
           <option value="PAID">Đã thanh toán</option>
           <option value="VOID">Đã hủy</option>
         </select>
-        <input type="month" value={billingMonth} onChange={(e) => { setBillingMonth(e.target.value); setPage(1); }} placeholder="Tháng" />
-        {contractId && <span className="text-muted">Lọc theo hợp đồng: {contractId.slice(0, 8)}…</span>}
+        <input type="month" value={billingMonth} onChange={(e) => { setBillingMonth(e.target.value); setPage(1); }} placeholder="Lọc theo tháng" />
+        {contractId && <span className="text-muted" style={{ padding: 8 }}>Đang lọc theo hợp đồng: {contractId.slice(0, 8)}…</span>}
       </div>
 
-      <PageState loading={loading} error={error} empty={!loading && !error && (data?.items.length ?? 0) === 0} emptyText="Không có hóa đơn." onRetry={load}>
+      <PageState loading={loading} error={error} empty={!loading && !error && (data?.items.length ?? 0) === 0} emptyText="Không có hóa đơn nào." onRetry={load}>
         <table className="data-table">
           <thead>
             <tr>
               <th>Mã HĐ</th>
               <th>Phòng</th>
-              <th>Kỳ</th>
+              <th>Kỳ hạn</th>
               <th>Tổng tiền</th>
               <th>Trạng thái</th>
-              <th>Hạn</th>
+              <th>Hạn chót</th>
               <th></th>
             </tr>
           </thead>
@@ -143,11 +144,11 @@ export function InvoiceListPage() {
                 <td>
                   <Badge value={inv.status} />
                   {isOverdue(inv.status, inv.due_date) && (
-                    <span style={{ marginLeft: 6, color: 'var(--cinnabar-3)', fontSize: 12 }}>Quá hạn</span>
+                    <span style={{ marginLeft: 8, color: 'var(--cinnabar-3)', fontSize: 12, fontWeight: 'bold' }}>Quá hạn</span>
                   )}
                 </td>
                 <td>{formatDateVi(inv.due_date)}</td>
-                <td><Link to={`/hoa-don/${inv.id}`}>Chi tiết</Link></td>
+                <td><Link to={`/hoa-don/${inv.id}`} className="btn-secondary" style={{ padding: '4px 12px', textDecoration: 'none' }}>Chi tiết</Link></td>
               </tr>
             ))}
           </tbody>
