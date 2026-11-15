@@ -257,6 +257,9 @@ class MeteringService:
                        actor_id: UUID, now: datetime | None = None):
         """Only PENDING can be manually confirmed; confirmed records never overwrite."""
         from app.cutoffs import CutoffError, decimal_3, db_utc, utc
+        from uuid import uuid4
+        from app import models as m
+
         now = utc(now or datetime.now(timezone.utc))
         value = decimal_3(reading_value)
         if len(reason.strip()) < 8:
@@ -277,6 +280,16 @@ class MeteringService:
             cutoff.confirmed_by = actor_id
             cutoff.confirmed_at = now
             cutoff.status = 'CONFIRMED'
+
+            # THÊM ĐOẠN NÀY: Tạo bản ghi Reading lịch sử để "Xem chỉ số" không bị trống
+            existing = self.session.get(m.MeterReading, (cutoff.meter_id, cutoff.cutoff_at))
+            if not existing:
+                self.session.add(m.MeterReading(
+                    meter_id=cutoff.meter_id, measured_at=cutoff.cutoff_at,
+                    reading_value=value, validation_status='VALID',
+                    received_at=now
+                ))
+
             self.session.flush()
         return cutoff
 

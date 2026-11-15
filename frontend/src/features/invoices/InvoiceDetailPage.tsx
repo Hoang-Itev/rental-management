@@ -7,6 +7,15 @@ import { Badge } from '../../components/Badge';
 import { PageState } from '../../components/PageState';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 
+// Hàm dịch tên cột hiển thị sang tiếng Việt
+function translateDescription(desc: string) {
+  if (desc.startsWith('Rent')) return 'Tiền thuê phòng';
+  if (desc.startsWith('Service')) return 'Phí dịch vụ';
+  if (desc.startsWith('Electricity')) return 'Tiền điện tiêu thụ';
+  if (desc.startsWith('Water')) return 'Tiền nước tiêu thụ';
+  return desc;
+}
+
 export function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -16,6 +25,7 @@ export function InvoiceDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [roomLocation, setRoomLocation] = useState<string>('');
 
   const [confirmAction, setConfirmAction] = useState<{ kind: 'issue' | 'void' | 'reissue' | 'reminder'; requireReason?: boolean } | null>(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
@@ -31,6 +41,17 @@ export function InvoiceDetailPage() {
     try {
       const inv = await api.get<InvoiceDetail>(`/api/v1/invoices/${id}`);
       setInvoice(inv);
+      
+      try {
+        const roomData = await api.get<any>(`/api/v1/rooms/${inv.room_id}`);
+        const floor = await api.get<any>(`/api/v1/floors/${roomData.floor_id}`);
+        const building = await api.get<any>(`/api/v1/buildings/${floor.building_id}`);
+        const prop = await api.get<any>(`/api/v1/properties/${roomData.property_id}`);
+        setRoomLocation(`[${prop.name}] - Dãy ${building.name} - Tầng ${floor.floor_number}`);
+      } catch {
+        setRoomLocation('Không xác định');
+      }
+
       const [a, adj] = await Promise.all([
         api.get<Page<PaymentAttemptView>>(`/api/v1/invoices/${id}/payment-attempts?page_size=50`),
         api.get<Page<AdjustmentView>>(`/api/v1/invoices/${id}/adjustments?page_size=50`),
@@ -55,16 +76,10 @@ export function InvoiceDetailPage() {
       else if (confirmAction.kind === 'reissue') await api.post(`/api/v1/invoices/${invoice.id}/reissue`, { reason: reason ?? '' });
       else if (confirmAction.kind === 'reminder') await api.post(`/api/v1/invoices/${invoice.id}/reminders`);
       setConfirmAction(null);
-      if (confirmAction.kind === 'reissue') {
-        navigate(0);
-      } else {
-        await load();
-      }
+      if (confirmAction.kind === 'reissue') { navigate(0); } else { await load(); }
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : 'Thao tác thất bại.');
-    } finally {
-      setConfirmLoading(false);
-    }
+    } finally { setConfirmLoading(false); }
   }
 
   async function createAdjustment(e: React.FormEvent) {
@@ -83,9 +98,7 @@ export function InvoiceDetailPage() {
       await load();
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : 'Lỗi khi tạo adjustment.');
-    } finally {
-      setAdjustSubmitting(false);
-    }
+    } finally { setAdjustSubmitting(false); }
   }
 
   async function resolveAdjustment(a: AdjustmentView, status: 'RESOLVED' | 'REJECTED') {
@@ -101,125 +114,131 @@ export function InvoiceDetailPage() {
 
   return (
     <div className="page-container">
-      <div className="page-header">
+      <style>{`
+        @media print {
+          body { background: white !important; color: black !important; }
+          .no-print { display: none !important; }
+          #print-area { display: block !important; padding: 0 !important; border: none !important; background: white !important; }
+          .invoice-table th, .invoice-table td { border-color: black !important; color: black !important; }
+          .invoice-decorations { display: none !important; }
+        }
+      `}</style>
+
+      <div className="page-header no-print">
         <h1 className="page-title">Hóa đơn: {invoice?.invoice_code ?? '…'}</h1>
         <button className="btn-secondary" onClick={() => navigate('/hoa-don')}>Quay lại</button>
       </div>
 
-      {actionError && <div className="login-error">{actionError}</div>}
+      {actionError && <div className="login-error no-print">{actionError}</div>}
 
       <PageState loading={loading} error={error} onRetry={load}>
         {invoice && (
-          <>
-            <div className="detail-grid">
-              <div className="detail-item"><label>Phòng</label><div>{invoice.room_code_snapshot}</div></div>
-              <div className="detail-item"><label>Trạng thái</label><div><Badge value={invoice.status} /></div></div>
-              <div className="detail-item"><label>Kỳ (bao gồm ngày cuối)</label><div>{formatDateVi(invoice.period_start)} — {formatDateVi(periodEndInclusive(invoice.period_end))}</div></div>
-              <div className="detail-item"><label>Hạn thanh toán</label><div>{formatDateVi(invoice.due_date)}</div></div>
-              <div className="detail-item"><label>Tổng cộng</label><div className="text-amount">{formatVnd(invoice.total_amount)}</div></div>
-              <div className="detail-item"><label>Revision</label><div>{invoice.revision}</div></div>
-              {invoice.blocked_reason && (
-                <div className="detail-item"><label>Blocked</label><div style={{ color: 'var(--cinnabar-3)' }}>{invoice.blocked_reason}</div></div>
-              )}
-              {invoice.void_reason && (
-                <div className="detail-item"><label>Lý do hủy</label><div>{invoice.void_reason}</div></div>
-              )}
+          <div id="print-area" style={{ position: 'relative', background: 'var(--night-1)', padding: 40, borderRadius: 8, border: '1px solid var(--gold-3)', overflow: 'hidden' }}>
+            
+            {/* HIỆU ỨNG PHỐ CỔ (BỊ ẨN KHI IN) */}
+            <div className="invoice-decorations" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 0.15, zIndex: 0 }}>
+              {/* Đèn lồng góc trái */}
+              <svg style={{ position: 'absolute', top: 20, left: 20, width: 60, height: 90, animation: 'lanternSwing 5s ease-in-out infinite' }} viewBox="0 0 24 30" fill="none" stroke="var(--cinnabar-2)" strokeWidth="1.5">
+                <path d="M12 2v4" /><rect x="8" y="6" width="8" height="16" rx="4" fill="var(--cinnabar-2)" fillOpacity="0.3" /><path d="M9 22h6M12 22v4" /><path d="M8 10h8M8 14h8M8 18h8" strokeOpacity="0.5" />
+              </svg>
+              {/* Mây góc phải */}
+              <svg style={{ position: 'absolute', top: 30, right: 30, width: 80, height: 40, animation: 'cloudDrift 20s linear infinite' }} viewBox="0 0 100 50" fill="var(--gold-3)" opacity="0.5">
+                <path d="M10,40 Q20,20 40,30 Q60,10 80,25 Q95,30 90,40 Z" />
+              </svg>
+              {/* Lá trúc rơi */}
+              <svg style={{ position: 'absolute', bottom: 40, left: 40, width: 20, height: 40, animation: 'leafFall 8s linear infinite' }} viewBox="0 0 10 20">
+                <ellipse cx="5" cy="10" rx="3" ry="9" fill="var(--moss)" />
+              </svg>
+              <svg style={{ position: 'absolute', bottom: 80, right: 50, width: 15, height: 30, animation: 'leafFall 12s linear infinite', animationDelay: '2s' }} viewBox="0 0 10 20">
+                <ellipse cx="5" cy="10" rx="3" ry="9" fill="var(--moss)" />
+              </svg>
             </div>
 
-            <div className="action-bar" style={{ marginTop: 20, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {invoice.status === 'DRAFT' && (
-                <button className="btn-primary" onClick={() => setConfirmAction({ kind: 'issue' })}>Phát hành</button>
-              )}
-              {invoice.status === 'ISSUED' && (
-                <>
-                  <button className="btn-primary" style={{ background: 'var(--jade)' }} onClick={async () => {
-                    if (window.confirm('Xác nhận đã thu tiền mặt cho hóa đơn này?')) {
-                      try {
-                        await api.post(`/api/v1/invoices/${invoice.id}/mark-paid`);
-                        await load();
-                      } catch (e: any) { setActionError(e.message); }
-                    }
-                  }}>
-                    Thu tiền mặt
-                  </button>
-                  <button className="btn-secondary" onClick={() => setConfirmAction({ kind: 'reminder' })}>Gửi nhắc nợ</button>
-                  <button className="btn-primary" style={{ background: 'var(--cinnabar-2)' }} onClick={() => setConfirmAction({ kind: 'void', requireReason: true })}>Hủy</button>
-                  <button className="btn-secondary" onClick={() => setConfirmAction({ kind: 'reissue', requireReason: true })}>Phát hành lại</button>
-                </>
-              )}
-              {invoice.status === 'PAID' && (
-                <button className="btn-secondary" onClick={() => setAdjustForm({ open: true, reason: '', amount_delta: '' })}>Tạo điều chỉnh</button>
-              )}
+            {/* NỘI DUNG HÓA ĐƠN */}
+            <div style={{ position: 'relative', zIndex: 1 }}>
+              <div style={{ textAlign: 'center', marginBottom: 40 }}>
+                <h2 style={{ color: 'var(--cinnabar-2)', fontSize: 28, marginBottom: 8, textTransform: 'uppercase', fontFamily: "'Cormorant Garamond', serif" }}>Hóa Đơn Tiền Nhà</h2>
+                <p style={{ color: 'var(--ink-soft)', fontStyle: 'italic' }}>Mã hóa đơn: {invoice.invoice_code}</p>
+                <p style={{ color: 'var(--ink-soft)' }}>Kỳ hạn: Từ {formatDateVi(invoice.period_start)} đến {formatDateVi(periodEndInclusive(invoice.period_end))}</p>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 30 }}>
+                <div>
+                  <h4 style={{ color: 'var(--gold-3)', marginBottom: 8, textTransform: 'uppercase' }}>Đơn vị lập hóa đơn</h4>
+                  <div style={{ fontWeight: 'bold', fontSize: 16 }}>Hệ thống Quản lý Nhà trọ Minh An</div>
+                  <div style={{ color: 'var(--ink-soft)', fontSize: 14 }}>Địa chỉ: Hội An, Quảng Nam</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <h4 style={{ color: 'var(--gold-3)', marginBottom: 8, textTransform: 'uppercase' }}>Thông tin khách hàng</h4>
+                  <div style={{ fontWeight: 'bold', fontSize: 16 }}>{invoice.tenant_name_snapshot}</div>
+                  <div style={{ color: 'var(--ink-soft)', fontSize: 14 }}>Vị trí: {roomLocation}</div>
+                  <div style={{ color: 'var(--cinnabar-2)', fontWeight: 'bold', fontSize: 15 }}>Phòng: {invoice.room_code_snapshot}</div>
+                  <div style={{ color: 'var(--ink-soft)', fontSize: 14 }}>Email: {invoice.tenant_email_snapshot || '—'}</div>
+                </div>
+              </div>
+
+              <table className="invoice-table" style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 30 }}>
+                <thead>
+                  <tr style={{ background: 'rgba(212, 163, 64, 0.1)' }}>
+                    <th style={{ padding: 10, borderBottom: '2px solid var(--gold-3)', textAlign: 'left' }}>STT</th>
+                    <th style={{ padding: 10, borderBottom: '2px solid var(--gold-3)', textAlign: 'left' }}>Nội dung</th>
+                    <th style={{ padding: 10, borderBottom: '2px solid var(--gold-3)', textAlign: 'center' }}>Số lượng</th>
+                    <th style={{ padding: 10, borderBottom: '2px solid var(--gold-3)', textAlign: 'right' }}>Đơn giá</th>
+                    <th style={{ padding: 10, borderBottom: '2px solid var(--gold-3)', textAlign: 'right' }}>Thành tiền</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {invoice.items.map((item, index) => (
+                    <tr key={item.id}>
+                      <td style={{ padding: 10, borderBottom: '1px solid var(--stone)' }}>{index + 1}</td>
+                      <td style={{ padding: 10, borderBottom: '1px solid var(--stone)' }}>{translateDescription(item.description)}</td>
+                      <td style={{ padding: 10, borderBottom: '1px solid var(--stone)', textAlign: 'center' }}>{item.quantity} {item.unit}</td>
+                      <td style={{ padding: 10, borderBottom: '1px solid var(--stone)', textAlign: 'right' }}>{formatVnd(Number(item.unit_price))}</td>
+                      <td style={{ padding: 10, borderBottom: '1px solid var(--stone)', textAlign: 'right', fontWeight: 'bold' }}>{formatVnd(item.amount)}</td>
+                    </tr>
+                  ))}
+                  <tr>
+                    <td colSpan={4} style={{ padding: 15, textAlign: 'right', fontWeight: 'bold', fontSize: 16 }}>TỔNG CỘNG:</td>
+                    {/* SỬA MÀU TỔNG TIỀN: SANG MÀU ĐỎ ĐÔ ĐỂ DỄ ĐỌC Ở CHẾ ĐỘ SÁNG */}
+                    <td style={{ padding: 15, textAlign: 'right', fontWeight: 'bold', fontSize: 22, color: 'var(--cinnabar-2)' }}>{formatVnd(invoice.total_amount)}</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 40 }}>
+                <div style={{ fontStyle: 'italic', color: 'var(--ink-soft)', fontSize: 13 }}>
+                  Hạn thanh toán: <strong style={{ color: 'var(--cinnabar-2)' }}>{formatDateVi(invoice.due_date)}</strong><br/>
+                  Vui lòng thanh toán đúng hạn để tránh gián đoạn dịch vụ.
+                </div>
+                <div style={{ textAlign: 'center', minWidth: 200 }}>
+                  <div style={{ fontStyle: 'italic', color: 'var(--ink-soft)', marginBottom: 60 }}>Ngày ... tháng ... năm ...</div>
+                  <div style={{ fontWeight: 'bold' }}>Người lập hóa đơn</div>
+                </div>
+              </div>
             </div>
-
-            <h3 style={{ marginTop: 28 }}>Chi tiết khoản</h3>
-            <table className="data-table">
-              <thead>
-                <tr><th>Diễn giải</th><th>SL</th><th>Đơn giá</th><th>Thành tiền</th></tr>
-              </thead>
-              <tbody>
-                {invoice.items.length === 0 && <tr><td colSpan={4} className="empty-row">Chưa có dòng.</td></tr>}
-                {invoice.items.map((it) => (
-                  <tr key={it.id}>
-                    <td>{it.description}</td>
-                    <td>{it.quantity} {it.unit}</td>
-                    <td>{formatVnd(Number(it.unit_price))}</td>
-                    <td className="text-amount">{formatVnd(it.amount)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            <h3 style={{ marginTop: 28 }}>Lần thử thanh toán</h3>
-            <table className="data-table">
-              <thead>
-                <tr><th>Provider</th><th>Order</th><th>Số tiền</th><th>Trạng thái</th><th>Xác nhận lúc</th></tr>
-              </thead>
-              <tbody>
-                {attempts.length === 0 && <tr><td colSpan={5} className="empty-row">Chưa có lần thử.</td></tr>}
-                {attempts.map((a) => (
-                  <tr key={a.id}>
-                    <td>{a.provider}</td>
-                    <td style={{ fontSize: 12 }}>{a.order_id}</td>
-                    <td className="text-amount">{formatVnd(a.amount)}</td>
-                    <td><Badge value={a.status} /></td>
-                    <td>{a.confirmed_at ? formatDateTimeVi(a.confirmed_at) : '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            <h3 style={{ marginTop: 28 }}>Điều chỉnh</h3>
-            <table className="data-table">
-              <thead>
-                <tr><th>Lý do</th><th>Chênh lệch</th><th>Trạng thái</th><th>Ghi chú</th><th></th></tr>
-              </thead>
-              <tbody>
-                {adjustments.length === 0 && <tr><td colSpan={5} className="empty-row">Chưa có điều chỉnh.</td></tr>}
-                {adjustments.map((a) => (
-                  <tr key={a.id}>
-                    <td>{a.reason}</td>
-                    <td className="text-amount">{a.amount_delta.toLocaleString('vi-VN')} đ</td>
-                    <td><Badge value={a.status} /></td>
-                    <td>{a.resolution_note || '—'}</td>
-                    <td>
-                      {a.status === 'OPEN' && (
-                        <div style={{ display: 'flex', gap: 6 }}>
-                          <button className="btn-secondary" onClick={() => resolveAdjustment(a, 'RESOLVED')}>Đã xử lý</button>
-                          <button className="btn-secondary" style={{ color: 'var(--cinnabar-3)' }} onClick={() => resolveAdjustment(a, 'REJECTED')}>Từ chối</button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </>
+          </div>
         )}
       </PageState>
 
+      {invoice && (
+        <div className="action-bar no-print" style={{ marginTop: 20, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {/* CHỈ GIỮ LẠI DUY NHẤT 1 NÚT IN Ở ĐÂY */}
+            <button className="btn-primary" style={{ background: 'var(--jade)', borderColor: 'var(--jade-2)' }} onClick={() => window.print()}>In hóa đơn (PDF)</button>
+           {invoice.status === 'DRAFT' && <button className="btn-primary" onClick={() => setConfirmAction({ kind: 'issue' })}>Phát hành hóa đơn</button>}
+           {invoice.status === 'ISSUED' && (
+              <>
+                <button className="btn-secondary" onClick={() => setConfirmAction({ kind: 'reminder' })}>Gửi nhắc nợ</button>
+                <button className="btn-primary" style={{ background: 'var(--cinnabar-2)' }} onClick={() => setConfirmAction({ kind: 'void', requireReason: true })}>Hủy</button>
+                <button className="btn-secondary" onClick={() => setConfirmAction({ kind: 'reissue', requireReason: true })}>Phát hành lại</button>
+              </>
+            )}
+            {invoice.status === 'PAID' && <button className="btn-secondary" onClick={() => setAdjustForm({ open: true, reason: '', amount_delta: '' })}>Tạo điều chỉnh</button>}
+        </div>
+      )}
+
+      {/* PHẦN MODALS (Giữ nguyên) */}
       {adjustForm.open && invoice && (
-        <div className="modal-backdrop active" onClick={(e) => e.target === e.currentTarget && setAdjustForm({ open: false, reason: '', amount_delta: '' })}>
+        <div className="modal-backdrop active no-print" onClick={(e) => e.target === e.currentTarget && setAdjustForm({ open: false, reason: '', amount_delta: '' })}>
           <div className="room-modal" style={{ width: 440 }}>
             <button className="modal-close" onClick={() => setAdjustForm({ open: false, reason: '', amount_delta: '' })}>×</button>
             <h2 className="modal-title">Tạo điều chỉnh</h2>
@@ -242,25 +261,19 @@ export function InvoiceDetailPage() {
       )}
 
       {confirmAction && (
-        <ConfirmDialog
-          title={
-            confirmAction.kind === 'issue' ? 'Phát hành hóa đơn?' :
-            confirmAction.kind === 'void' ? 'Hủy hóa đơn?' :
-            confirmAction.kind === 'reissue' ? 'Phát hành lại?' : 'Gửi nhắc nợ?'
-          }
-          message={
-            confirmAction.kind === 'issue'
-              ? 'Hệ thống sẽ tính lại và phát hành nếu đủ dữ liệu. Nếu thiếu cutoff, hóa đơn vẫn DRAFT với blocked_reason.'
-              : undefined
-          }
-          confirmLabel="Xác nhận"
-          variant={confirmAction.kind === 'void' ? 'danger' : 'primary'}
-          requireReason={!!confirmAction.requireReason}
-          reasonLabel="Lý do"
-          loading={confirmLoading}
-          onCancel={() => setConfirmAction(null)}
-          onConfirm={runAction}
-        />
+        <div className="no-print">
+          <ConfirmDialog
+            title={confirmAction.kind === 'issue' ? 'Phát hành hóa đơn?' : confirmAction.kind === 'void' ? 'Hủy hóa đơn?' : confirmAction.kind === 'reissue' ? 'Phát hành lại?' : 'Gửi nhắc nợ?'}
+            message={confirmAction.kind === 'issue' ? 'Hệ thống sẽ tính lại và phát hành nếu đủ dữ liệu.' : undefined}
+            confirmLabel="Xác nhận"
+            variant={confirmAction.kind === 'void' ? 'danger' : 'primary'}
+            requireReason={!!confirmAction.requireReason}
+            reasonLabel="Lý do"
+            loading={confirmLoading}
+            onCancel={() => setConfirmAction(null)}
+            onConfirm={runAction}
+          />
+        </div>
       )}
     </div>
   );
