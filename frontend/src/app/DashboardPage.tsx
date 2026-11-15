@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../features/auth/AuthContext';
-import { api, ApiError } from '../lib/api/client';
+import { api } from '../lib/api/client';
 import type { Page, RoomOut } from '../lib/api/types';
 import { RoomScene } from '../features/rooms/RoomScene';
 import { RoomModal } from '../features/rooms/RoomModal';

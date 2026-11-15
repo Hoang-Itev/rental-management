@@ -17,7 +17,7 @@ export function InvoiceDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const [confirm, setConfirm] = useState<{ kind: 'issue' | 'void' | 'reissue' | 'reminder'; requireReason?: boolean } | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{ kind: 'issue' | 'void' | 'reissue' | 'reminder'; requireReason?: boolean } | null>(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
 
   const [adjustForm, setAdjustForm] = useState<{ open: boolean; reason: string; amount_delta: string }>({
@@ -47,15 +47,15 @@ export function InvoiceDetailPage() {
   useEffect(() => { load(); }, [load]);
 
   async function runAction(reason?: string) {
-    if (!confirm || !invoice) return;
+    if (!confirmAction || !invoice) return;
     setConfirmLoading(true); setActionError(null);
     try {
-      if (confirm.kind === 'issue') await api.post(`/api/v1/invoices/${invoice.id}/issue`);
-      else if (confirm.kind === 'void') await api.post(`/api/v1/invoices/${invoice.id}/void`, { reason: reason ?? '' });
-      else if (confirm.kind === 'reissue') await api.post(`/api/v1/invoices/${invoice.id}/reissue`, { reason: reason ?? '' });
-      else if (confirm.kind === 'reminder') await api.post(`/api/v1/invoices/${invoice.id}/reminders`);
-      setConfirm(null);
-      if (confirm.kind === 'reissue') {
+      if (confirmAction.kind === 'issue') await api.post(`/api/v1/invoices/${invoice.id}/issue`);
+      else if (confirmAction.kind === 'void') await api.post(`/api/v1/invoices/${invoice.id}/void`, { reason: reason ?? '' });
+      else if (confirmAction.kind === 'reissue') await api.post(`/api/v1/invoices/${invoice.id}/reissue`, { reason: reason ?? '' });
+      else if (confirmAction.kind === 'reminder') await api.post(`/api/v1/invoices/${invoice.id}/reminders`);
+      setConfirmAction(null);
+      if (confirmAction.kind === 'reissue') {
         navigate(0);
       } else {
         await load();
@@ -128,13 +128,23 @@ export function InvoiceDetailPage() {
 
             <div className="action-bar" style={{ marginTop: 20, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {invoice.status === 'DRAFT' && (
-                <button className="btn-primary" onClick={() => setConfirm({ kind: 'issue' })}>Phát hành</button>
+                <button className="btn-primary" onClick={() => setConfirmAction({ kind: 'issue' })}>Phát hành</button>
               )}
               {invoice.status === 'ISSUED' && (
                 <>
-                  <button className="btn-secondary" onClick={() => setConfirm({ kind: 'reminder' })}>Gửi nhắc nợ</button>
-                  <button className="btn-primary" style={{ background: 'var(--cinnabar-2)' }} onClick={() => setConfirm({ kind: 'void', requireReason: true })}>Hủy</button>
-                  <button className="btn-secondary" onClick={() => setConfirm({ kind: 'reissue', requireReason: true })}>Phát hành lại</button>
+                  <button className="btn-primary" style={{ background: 'var(--jade)' }} onClick={async () => {
+                    if (window.confirm('Xác nhận đã thu tiền mặt cho hóa đơn này?')) {
+                      try {
+                        await api.post(`/api/v1/invoices/${invoice.id}/mark-paid`);
+                        await load();
+                      } catch (e: any) { setActionError(e.message); }
+                    }
+                  }}>
+                    Thu tiền mặt
+                  </button>
+                  <button className="btn-secondary" onClick={() => setConfirmAction({ kind: 'reminder' })}>Gửi nhắc nợ</button>
+                  <button className="btn-primary" style={{ background: 'var(--cinnabar-2)' }} onClick={() => setConfirmAction({ kind: 'void', requireReason: true })}>Hủy</button>
+                  <button className="btn-secondary" onClick={() => setConfirmAction({ kind: 'reissue', requireReason: true })}>Phát hành lại</button>
                 </>
               )}
               {invoice.status === 'PAID' && (
@@ -231,24 +241,24 @@ export function InvoiceDetailPage() {
         </div>
       )}
 
-      {confirm && (
+      {confirmAction && (
         <ConfirmDialog
           title={
-            confirm.kind === 'issue' ? 'Phát hành hóa đơn?' :
-            confirm.kind === 'void' ? 'Hủy hóa đơn?' :
-            confirm.kind === 'reissue' ? 'Phát hành lại?' : 'Gửi nhắc nợ?'
+            confirmAction.kind === 'issue' ? 'Phát hành hóa đơn?' :
+            confirmAction.kind === 'void' ? 'Hủy hóa đơn?' :
+            confirmAction.kind === 'reissue' ? 'Phát hành lại?' : 'Gửi nhắc nợ?'
           }
           message={
-            confirm.kind === 'issue'
+            confirmAction.kind === 'issue'
               ? 'Hệ thống sẽ tính lại và phát hành nếu đủ dữ liệu. Nếu thiếu cutoff, hóa đơn vẫn DRAFT với blocked_reason.'
               : undefined
           }
           confirmLabel="Xác nhận"
-          variant={confirm.kind === 'void' ? 'danger' : 'primary'}
-          requireReason={!!confirm.requireReason}
+          variant={confirmAction.kind === 'void' ? 'danger' : 'primary'}
+          requireReason={!!confirmAction.requireReason}
           reasonLabel="Lý do"
           loading={confirmLoading}
-          onCancel={() => setConfirm(null)}
+          onCancel={() => setConfirmAction(null)}
           onConfirm={runAction}
         />
       )}

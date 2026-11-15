@@ -24,7 +24,7 @@ export function RoomListPage() {
   
   const [page, setPage] = useState(1);
   const [keyword, setKeyword] = useState('');
-  const [status, setStatus] = useState('');
+  const [status] = useState(''); // <-- ĐÃ SỬA: bỏ setStatus
   const [occupancy, setOccupancy] = useState('');
   const [propertyId, setPropertyId] = useState('');
   const [buildingId, setBuildingId] = useState('');

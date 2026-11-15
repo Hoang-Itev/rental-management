@@ -15,6 +15,8 @@ interface FormState {
   electricity_unit_price: string;
   water_unit_price: string;
   monthly_service_fee: string;
+  initial_electricity: string;
+  initial_water: string;
 }
 
 const initialForm: FormState = {
@@ -27,6 +29,8 @@ const initialForm: FormState = {
   electricity_unit_price: '3500',
   water_unit_price: '15000',
   monthly_service_fee: '100000',
+  initial_electricity: '0',
+  initial_water: '0',
 };
 
 export function ContractWizardPage() {
@@ -50,24 +54,20 @@ export function ContractWizardPage() {
     setLoading(true);
     setLoadError(null);
     try {
-      // 1. Lấy danh sách phòng TRỐNG
       const roomRes = await api.get<Page<RoomOut>>('/api/v1/rooms?status=ACTIVE&occupancy=VACANT&page_size=100');
       setRooms(roomRes.items);
 
-      // 2. Lấy danh sách người thuê VÀ HỢP ĐỒNG ĐỂ LỌC
       const [tenantRes, contractRes] = await Promise.all([
         api.get<Page<TenantOut>>('/api/v1/tenants?page_size=100'),
         api.get<Page<ContractOut>>('/api/v1/contracts?page_size=100')
       ]);
 
-      // Tìm những người đang có hợp đồng hiệu lực (ACTIVE, SCHEDULED)
       const activeTenantIds = new Set(
         contractRes.items
           .filter(c => ['ACTIVE', 'SCHEDULED', 'EXPIRED_PENDING'].includes(c.status))
           .map(c => c.representative_tenant_id)
       );
 
-      // Chỉ giữ lại những người chưa có hợp đồng nào
       const availableTenants = tenantRes.items.filter(t => !activeTenantIds.has(t.id));
       setTenants(availableTenants);
 
@@ -114,6 +114,8 @@ export function ContractWizardPage() {
         representative_tenant_id: form.representative_tenant_id,
         start_date: form.start_date,
         end_date: form.end_date,
+        initial_electricity: Number(form.initial_electricity),
+        initial_water: Number(form.initial_water),
         initial_terms: {
           effective_from: form.start_date,
           monthly_rent: Number(form.monthly_rent),
@@ -148,16 +150,10 @@ export function ContractWizardPage() {
           <div className="form-row">
             <div className="login-field">
               <label>Chọn Phòng (Chỉ hiện phòng Trống)</label>
-              <select
-                value={form.room_id}
-                onChange={(e) => setField('room_id', e.target.value)}
-                required
-              >
+              <select value={form.room_id} onChange={(e) => setField('room_id', e.target.value)} required>
                 <option value="">— Chọn phòng —</option>
                 {rooms.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.room_code} — niêm yết {formatVnd(r.listed_rent)}
-                  </option>
+                  <option key={r.id} value={r.id}>{r.room_code} — niêm yết {formatVnd(r.listed_rent)}</option>
                 ))}
               </select>
               {rooms.length === 0 && (
@@ -169,16 +165,10 @@ export function ContractWizardPage() {
 
             <div className="login-field">
               <label>Người đại diện</label>
-              <select
-                value={form.representative_tenant_id}
-                onChange={(e) => setField('representative_tenant_id', e.target.value)}
-                required
-              >
+              <select value={form.representative_tenant_id} onChange={(e) => setField('representative_tenant_id', e.target.value)} required>
                 <option value="">— Chọn người thuê —</option>
                 {tenants.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.full_name}{t.phone ? ` (${t.phone})` : ''}{!t.email ? ' — Thiếu email' : ''}
-                  </option>
+                  <option key={t.id} value={t.id}>{t.full_name}{t.phone ? ` (${t.phone})` : ''}{!t.email ? ' — Thiếu email' : ''}</option>
                 ))}
               </select>
               {payerMissingEmail && (
@@ -202,6 +192,17 @@ export function ContractWizardPage() {
             <div className="login-field">
               <label>Ngày kết thúc (bao gồm ngày này)</label>
               <input type="date" value={form.end_date} min={form.start_date || todayStr} onChange={(e) => setField('end_date', e.target.value)} required />
+            </div>
+          </div>
+
+          <div className="form-row" style={{ background: 'var(--night-1)', padding: 12, borderRadius: 4, border: '1px dashed var(--gold-3)' }}>
+            <div className="login-field">
+              <label>Số điện ban đầu (kWh)</label>
+              <input type="number" step="0.01" min="0" value={form.initial_electricity} onChange={(e) => setField('initial_electricity', e.target.value)} />
+            </div>
+            <div className="login-field">
+              <label>Số nước ban đầu (m³)</label>
+              <input type="number" step="0.01" min="0" value={form.initial_water} onChange={(e) => setField('initial_water', e.target.value)} />
             </div>
           </div>
 

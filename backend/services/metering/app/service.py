@@ -471,3 +471,13 @@ class MeteringService:
             alert.resolution_note = note.strip()
             self.session.flush()
         return alert
+
+    def delete_meter_alert(self, alert_id: UUID):
+        from app import models as m
+        from app.cutoffs import CutoffError
+        with self.atomic():
+            alert = self.session.get(m.MeterAlert, alert_id)
+            if alert is None:
+                raise CutoffError('Alert not found', 404)
+            self.session.delete(alert)
+            self.session.flush()

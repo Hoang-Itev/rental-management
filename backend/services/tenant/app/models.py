@@ -30,6 +30,7 @@ class Contract(UUIDPK,AuditTimes,Base):
     status:Mapped[str]=mapped_column(sa.String(32),nullable=False,server_default='DRAFT')
     deposit_amount:Mapped[int|None]=mapped_column(sa.BigInteger)
     end_reason:Mapped[str|None]=mapped_column(sa.Text)
+    attachment_url:Mapped[str|None]=mapped_column(sa.Text)  # <-- THÊM DÒNG NÀY
     representative:Mapped[Tenant]=relationship(back_populates='contracts')
     terms:Mapped[list[ContractTerm]]=relationship(back_populates='contract')
     history:Mapped[list[ContractEvent]]=relationship(back_populates='contract')

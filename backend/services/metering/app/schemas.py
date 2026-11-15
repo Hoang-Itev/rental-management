@@ -38,6 +38,7 @@ class MeterAlertOut(BaseModel):
     related_measured_at: datetime | None
     detected_at: datetime
     detail: dict
+    resolution_note: str | None = None  # <-- THÊM DÒNG NÀY
 
 # P07 cutoffs. Monetary calculations belong to Billing, never Metering.
 class ManualCutoffInput(BaseModel):

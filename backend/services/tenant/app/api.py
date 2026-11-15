@@ -1,8 +1,10 @@
 """Owner-only routes: Nginx auth_request validates JWT before proxying /api/v1."""
 from __future__ import annotations
+import os
+import uuid as uuid_module
 from typing import Annotated
 from uuid import UUID
-from fastapi import APIRouter, Depends, Header, Query
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session
 from app import schemas as s
 from app.clients import RoomClient
@@ -118,3 +120,57 @@ def run_contract_lifecycle(body: s.LifecycleRun, db: Db, settings: Settings):
         now = body.as_of
     return run_due(now=now, sessions=__import__('app.db',fromlist=['get_sessionmaker']).get_sessionmaker(),
                    room_factory=lambda: RoomClient(settings))
+
+
+# ============================================================
+# UPLOAD HỢP ĐỒNG GIẤY
+# ============================================================
+
+UPLOAD_DIR = os.environ.get("UPLOAD_DIR", "/app/uploads")
+ALLOWED_MIME = {"application/pdf", "image/jpeg", "image/png"}
+MAX_BYTES = 10 * 1024 * 1024  # 10 MB
+
+
+@router.post("/contracts/{contract_id}/upload", response_model=s.ContractOut)
+async def upload_contract_attachment(
+    contract_id: UUID,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    settings: TenantSettings = Depends(get_settings),
+):
+    if file.content_type not in ALLOWED_MIME:
+        raise HTTPException(status_code=422, detail="Chỉ nhận file PDF, JPEG hoặc PNG")
+
+    svc = service(db, settings)
+    contract = svc.contract(contract_id)  # raises 404 nếu không tồn tại
+
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in {".pdf", ".jpg", ".jpeg", ".png"}:
+        ext = ".pdf"
+    filename = f"contract_{contract_id.hex}_{uuid_module.uuid4().hex[:8]}{ext}"
+    dest = os.path.join(UPLOAD_DIR, filename)
+
+    written = 0
+    with open(dest, "wb") as out:
+        while chunk := await file.read(64 * 1024):
+            written += len(chunk)
+            if written > MAX_BYTES:
+                out.close()
+                os.remove(dest)
+                raise HTTPException(status_code=413, detail="File vượt quá 10 MB")
+            out.write(chunk)
+
+    # Xóa file cũ nếu có
+    old_url = contract.attachment_url
+    if old_url and old_url.startswith("/uploads/"):
+        old_path = os.path.join(UPLOAD_DIR, old_url.removeprefix("/uploads/"))
+        try:
+            os.remove(old_path)
+        except FileNotFoundError:
+            pass
+
+    contract.attachment_url = f"/uploads/{filename}"
+    db.commit()
+    db.refresh(contract)
+    return contract

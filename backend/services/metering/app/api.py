@@ -177,6 +177,14 @@ def resolve_meter_alert(alert_id: UUID, body: ResolveAlertInput, db: Db,
     return MeterAlertOut.model_validate(row).model_dump(mode='json')
 
 
+# --- THÊM ROUTE XÓA CẢNH BÁO ---
+@alerts_router.delete('/meter-alerts/{alert_id}')
+def delete_meter_alert(alert_id: UUID, db: Db):
+    try:
+        MeteringService(db).delete_meter_alert(alert_id)
+        return {"status": "deleted"}
+    except CutoffError as exc:
+        cutoff_error(exc)
 
 
 room_router = APIRouter(prefix='/api/v1/rooms', tags=['Metering'])

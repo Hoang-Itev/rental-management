@@ -36,7 +36,7 @@ services:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:?Set RABBITMQ_DEFAULT_USER in .env}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:?Set RABBITMQ_DEFAULT_PASS in .env}
     ports:
-      - "127.0.0.1:15672:15672"  # Management UI: local computer only
+      - "127.0.0.1:15672:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
       - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
@@ -68,10 +68,9 @@ services:
     image: axllent/mailpit:latest
     restart: unless-stopped
     ports:
-      - "127.0.0.1:8025:8025"  # Mailpit UI, local only
+      - "127.0.0.1:8025:8025"
     networks: [internal]
 
-  # The API services below build project-scoped images. Migrations and workers reuse them.
   auth-migrate:
     image: ${COMPOSE_PROJECT_NAME}-auth:latest
     pull_policy: never
@@ -163,6 +162,7 @@ services:
       timeout: 5s
       retries: 12
       start_period: 5s
+
   room:
     <<: *service-common
     build: ./backend/services/room
@@ -183,6 +183,7 @@ services:
       timeout: 5s
       retries: 12
       start_period: 5s
+
   tenant:
     <<: *service-common
     build: ./backend/services/tenant
@@ -198,12 +199,16 @@ services:
       RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/
       ROOM_URL: http://room:8000
       SERVICE_TOKEN: ${SERVICE_TOKEN:?Set SERVICE_TOKEN in .env}
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - uploads:/app/uploads
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3).read()"]
       interval: 10s
       timeout: 5s
       retries: 12
       start_period: 5s
+
   metering:
     <<: *service-common
     build: ./backend/services/metering
@@ -224,6 +229,7 @@ services:
       timeout: 5s
       retries: 12
       start_period: 5s
+
   billing:
     <<: *service-common
     build: ./backend/services/billing
@@ -259,6 +265,7 @@ services:
       timeout: 5s
       retries: 12
       start_period: 5s
+
   notification:
     <<: *service-common
     build: ./backend/services/notification
@@ -283,6 +290,7 @@ services:
       timeout: 5s
       retries: 12
       start_period: 5s
+
   nginx:
     build:
       context: .
@@ -291,7 +299,9 @@ services:
     environment:
       SERVICE_TOKEN: ${SERVICE_TOKEN:?Set SERVICE_TOKEN in .env}
     ports:
-      - "127.0.0.1:8080:80"  # Gateway local only; configure TLS later on EC2
+      - "127.0.0.1:8080:80"
+    volumes:
+      - uploads:/usr/share/nginx/html/uploads:ro
     depends_on:
       auth:
         condition: service_healthy
@@ -307,7 +317,6 @@ services:
         condition: service_healthy
     networks: [internal]
 
-  # Optional simulated MQTT telemetry.
   simulator:
     restart: unless-stopped
     profiles: ["simulator"]
@@ -335,6 +344,7 @@ services:
 volumes:
   postgres_data:
   rabbitmq_data:
+  uploads:
 
 networks:
   internal:

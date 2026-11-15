@@ -1,4 +1,4 @@
-import React from 'react';
+
 import '../styles/scene.css';
 
 export function AmbientEffects() {

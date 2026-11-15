@@ -80,7 +80,7 @@ export interface ContractOut {
   status: ContractStatus;
   deposit_amount: number | null;
   end_reason: string | null;
-  attachment_url: string | null; // --- THÊM DÒNG NÀY ---
+  attachment_url: string | null;
 }
 
 // ===== Contract Terms =====
@@ -261,6 +261,7 @@ export interface MeterAlertOut {
   related_measured_at: string | null;
   detected_at: string;
   detail: Record<string, unknown>;
+  resolution_note: string | null;  // <-- THÊM DÒNG NÀY
 }
 
 export interface ReadingOut {

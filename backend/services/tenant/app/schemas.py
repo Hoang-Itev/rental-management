@@ -121,6 +121,7 @@ class ContractOut(BaseModel):
     status: Status
     deposit_amount: int | None
     end_reason: str | None
+    attachment_url: str | None = None  # <-- THÊM DÒNG NÀY
 
 class ContractEventOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
