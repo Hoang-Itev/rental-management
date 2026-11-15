@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { api, ApiError } from '../../lib/api/client';
-import type { ContractOut, Page, TermOut } from '../../lib/api/types';
+import { api, ApiError, getAccessToken } from '../../lib/api/client';
+import type { ContractOut, Page, TermOut, TenantOut } from '../../lib/api/types';
 import { formatDateVi, formatDateTimeVi, contractStatusLabel } from '../../lib/utils/format';
 import { Badge } from '../../components/Badge';
 import { PageState } from '../../components/PageState';
@@ -35,18 +35,24 @@ export function ContractDetailPage() {
   const navigate = useNavigate();
 
   const [contract, setContract] = useState<ContractOut | null>(null);
+  const [tenant, setTenant] = useState<TenantOut | null>(null);
+  const [roomLocation, setRoomLocation] = useState<string>('');
   const [terms, setTerms] = useState<TermOut[]>([]);
   const [events, setEvents] = useState<EventOut[]>([]);
+  
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  // Modal state — một modal duy nhất, các field hiển thị theo `kind`
   const [action, setAction] = useState<ActionKind | null>(null);
   const [endDate, setEndDate] = useState('');
   const [renewEnd, setRenewEnd] = useState('');
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // State cho Upload File
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -61,6 +67,29 @@ export function ContractDetailPage() {
       setContract(c);
       setTerms(t.items);
       setEvents(e.items);
+
+      // 1. Lấy thông tin người thuê
+      if (c.representative_tenant_id) {
+        try {
+          const tenantData = await api.get<TenantOut>(`/api/v1/tenants/${c.representative_tenant_id}`);
+          setTenant(tenantData);
+        } catch {}
+      }
+
+      // 2. Lấy thông tin Vị trí (Khu - Dãy - Tầng)
+      try {
+        const roomData = await api.get<any>(`/api/v1/rooms/${c.room_id}`);
+        const floor = await api.get<any>(`/api/v1/floors/${roomData.floor_id}`);
+        const building = await api.get<any>(`/api/v1/buildings/${floor.building_id}`);
+        const prop = await api.get<any>(`/api/v1/properties/${roomData.property_id}`);
+        
+        const bName = building.name ? `Dãy ${building.name}` : '';
+        const fName = floor.name ? `Tầng ${floor.floor_number} - ${floor.name}` : `Tầng ${floor.floor_number}`;
+        setRoomLocation(`[${prop.name}] - ${bName ? bName + ' - ' : ''}${fName} : ${roomData.room_code}`);
+      } catch {
+        setRoomLocation(`Phòng ${c.room_code_snapshot}`);
+      }
+
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Không tải được hợp đồng.');
     } finally {
@@ -89,41 +118,17 @@ export function ContractDetailPage() {
     if (!action || !contract) return;
     setActionError(null);
 
-    // Validate cục bộ trước khi gọi BE
-    if (action === 'end') {
-      if (!endDate) { setActionError('Cần ngày bàn giao thực tế.'); return; }
-      if (!reason.trim()) { setActionError('Cần lý do.'); return; }
-    }
-    if (action === 'cancel') {
-      if (!reason.trim()) { setActionError('Cần lý do hủy.'); return; }
-    }
-    if (action === 'renew') {
-      if (!renewEnd) { setActionError('Cần ngày kết thúc mới.'); return; }
-      if (renewEnd <= contract.end_date) {
-        setActionError(`Ngày kết thúc mới phải sau ${formatDateVi(contract.end_date)}.`);
-        return;
-      }
-    }
+    if (action === 'end' && (!endDate || !reason.trim())) { setActionError('Cần nhập ngày và lý do.'); return; }
+    if (action === 'cancel' && !reason.trim()) { setActionError('Cần lý do hủy.'); return; }
+    if (action === 'renew' && !renewEnd) { setActionError('Cần ngày kết thúc mới.'); return; }
 
     setSubmitting(true);
     try {
-      if (action === 'confirm') {
-        await api.post(`/api/v1/contracts/${contract.id}/confirm`);
-      } else if (action === 'end') {
-        await api.post(`/api/v1/contracts/${contract.id}/end`, {
-          actual_end_date: endDate,
-          reason: reason.trim(),
-        });
-      } else if (action === 'cancel') {
-        await api.post(`/api/v1/contracts/${contract.id}/cancel`, {
-          reason: reason.trim(),
-        });
-      } else if (action === 'renew') {
-        await api.post(`/api/v1/contracts/${contract.id}/renew`, {
-          new_end_date: renewEnd,
-          reason: reason.trim() || null,
-        });
-      }
+      if (action === 'confirm') await api.post(`/api/v1/contracts/${contract.id}/confirm`);
+      else if (action === 'end') await api.post(`/api/v1/contracts/${contract.id}/end`, { actual_end_date: endDate, reason: reason.trim() });
+      else if (action === 'cancel') await api.post(`/api/v1/contracts/${contract.id}/cancel`, { reason: reason.trim() });
+      else if (action === 'renew') await api.post(`/api/v1/contracts/${contract.id}/renew`, { new_end_date: renewEnd, reason: reason.trim() || null });
+      
       setAction(null);
       await load();
     } catch (err) {
@@ -133,32 +138,109 @@ export function ContractDetailPage() {
     }
   }
 
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !contract) return;
+    
+    setUploading(true);
+    setUploadError(null);
+    
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await fetch(`/api/v1/contracts/${contract.id}/upload`, {
+        method: 'POST',
+        headers: { 
+          Authorization: `Bearer ${getAccessToken()}` 
+        },
+        body: formData,
+      });
+      
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || err.message || 'Upload thất bại');
+      }
+      
+      await load(); // Reload để lấy attachment_url mới
+    } catch (err: any) {
+      setUploadError(err.message || 'Không thể upload file.');
+    } finally {
+      setUploading(false);
+    }
+  }
+
   const dangerAction = action === 'cancel' || action === 'end';
 
   return (
     <div className="page-container">
       <div className="page-header">
-        <h1 className="page-title">
-          Hợp đồng: {contract?.contract_code ?? '…'}
-        </h1>
-        <button className="btn-secondary" onClick={() => navigate('/hop-dong')}>← Quay lại</button>
+        <h1 className="page-title">Hợp đồng: {contract?.contract_code ?? '…'}</h1>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn-secondary" onClick={() => window.print()}>In bản nháp</button>
+          <button className="btn-secondary" onClick={() => navigate('/hop-dong')}>← Quay lại</button>
+        </div>
       </div>
 
       {actionError && !action && <div className="login-error">{actionError}</div>}
 
       <PageState loading={loading} error={error} onRetry={load}>
         {contract && (
-          <>
+          <div id="contract-print-area">
+            
+            {/* KHỐI 1: THÔNG TIN PHÒNG & HỢP ĐỒNG */}
+            <h3 style={{ marginBottom: 12 }}>Thông tin Hợp đồng & Phòng</h3>
             <div className="detail-grid">
-              <div className="detail-item"><label>Phòng</label><div>{contract.room_code_snapshot}</div></div>
-              <div className="detail-item"><label>Trạng thái</label><div><Badge value={contract.status} /> {contractStatusLabel(contract.status)}</div></div>
+              <div className="detail-item"><label>Phòng (Vị trí)</label><div>{roomLocation}</div></div>
+              <div className="detail-item"><label>Trạng thái HĐ</label><div><Badge value={contract.status} /> {contractStatusLabel(contract.status)}</div></div>
               <div className="detail-item"><label>Bắt đầu</label><div>{formatDateVi(contract.start_date)}</div></div>
-              <div className="detail-item"><label>Kết thúc (bao gồm ngày này)</label><div>{formatDateVi(contract.end_date)}</div></div>
+              <div className="detail-item"><label>Kết thúc (bao gồm)</label><div>{formatDateVi(contract.end_date)}</div></div>
               <div className="detail-item"><label>Bàn giao thực tế</label><div>{contract.actual_end_date ? formatDateVi(contract.actual_end_date) : '—'}</div></div>
               <div className="detail-item"><label>Tiền cọc</label><div>{contract.deposit_amount != null ? contract.deposit_amount.toLocaleString('vi-VN') + ' đ' : '—'}</div></div>
             </div>
 
-            <div className="action-bar" style={{ marginTop: 20, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {/* KHỐI 2: THÔNG TIN NGƯỜI THUÊ */}
+            <h3 style={{ marginTop: 28, marginBottom: 12 }}>Thông tin Người đại diện</h3>
+            <div className="detail-grid">
+              <div className="detail-item"><label>Họ tên</label><div>{tenant?.full_name || '—'}</div></div>
+              <div className="detail-item"><label>Số điện thoại</label><div>{tenant?.phone || '—'}</div></div>
+              <div className="detail-item"><label>Email</label><div>{tenant?.email || '—'}</div></div>
+              <div className="detail-item"><label>Ghi chú</label><div>{tenant?.note || '—'}</div></div>
+            </div>
+
+            {/* KHỐI 3: ĐÍNH KÈM HỢP ĐỒNG GIẤY */}
+            <h3 style={{ marginTop: 28, marginBottom: 12 }}>Hợp đồng giấy đính kèm</h3>
+            <div style={{ padding: 16, border: '1px dashed var(--gold-3)', background: 'var(--night-1)', borderRadius: 4 }}>
+              {contract.attachment_url ? (
+                <div>
+                  <p style={{ color: 'var(--jade-hi)', marginBottom: 8 }}>✓ Đã tải lên tệp đính kèm.</p>
+                  <a href={contract.attachment_url} target="_blank" rel="noreferrer" className="btn-secondary" style={{ textDecoration: 'none', display: 'inline-block' }}>
+                    Xem file đã tải
+                  </a>
+                </div>
+              ) : (
+                <div>
+                  <p className="text-muted" style={{ fontSize: 13, marginBottom: 12 }}>
+                    Tải lên bản scan/chụp ảnh hợp đồng giấy đã ký kết bên ngoài để lưu trữ.
+                  </p>
+                  <input 
+                    type="file" 
+                    accept="image/*,application/pdf" 
+                    onChange={handleFileUpload} 
+                    disabled={uploading}
+                    style={{ display: 'none' }}
+                    id="contract-upload"
+                  />
+                  <label htmlFor="contract-upload" className="btn-secondary" style={{ display: 'inline-block', cursor: 'pointer' }}>
+                    {uploading ? 'Đang tải lên...' : 'Tải ảnh/PDF lên'}
+                  </label>
+                  {uploadError && <p style={{ color: 'var(--cinnabar-3)', fontSize: 12, marginTop: 8 }}>{uploadError}</p>}
+                </div>
+              )}
+            </div>
+
+            {/* CÁC NÚT THAO TÁC */}
+            <div className="action-bar" style={{ marginTop: 28, display: 'flex', gap: 8, flexWrap: 'wrap' }} data-html2canvas-ignore="true">
               {contract.status === 'DRAFT' && (
                 <>
                   <button className="btn-primary" onClick={() => openAction('confirm')}>Xác nhận (lên lịch)</button>
@@ -177,6 +259,7 @@ export function ContractDetailPage() {
               <Link className="btn-secondary" to={`/hoa-don?contract_id=${contract.id}`} style={{ textDecoration: 'none' }}>Xem hóa đơn</Link>
             </div>
 
+            {/* BẢNG GIÁ VÀ SỰ KIỆN */}
             <h3 style={{ marginTop: 28 }}>Lịch sử giá thuê</h3>
             <table className="data-table">
               <thead>
@@ -213,76 +296,39 @@ export function ContractDetailPage() {
                 ))}
               </tbody>
             </table>
-          </>
+          </div>
         )}
       </PageState>
 
       {action && contract && (
-        <div className="modal-backdrop active" onClick={(e) => e.target === e.currentTarget && closeAction()}>
+        <div className="modal-backdrop active" data-html2canvas-ignore="true" onClick={(e) => e.target === e.currentTarget && closeAction()}>
           <div className="room-modal" style={{ width: 480 }}>
             <button className="modal-close" onClick={closeAction} disabled={submitting}>×</button>
             <h2 className="modal-title">{ACTION_TITLES[action]}</h2>
-
-            {action === 'confirm' && (
-              <p className="text-muted" style={{ marginBottom: 16 }}>
-                Xác nhận sẽ kiểm tra email người đại diện, điều khoản giá và chống chồng lịch.
-                Trạng thái chuyển DRAFT → SCHEDULED.
-              </p>
-            )}
 
             <form onSubmit={submitAction}>
               {action === 'end' && (
                 <div className="login-field">
                   <label>Ngày bàn giao thực tế *</label>
-                  <input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    max={new Date().toISOString().slice(0, 10)}
-                    min={contract.start_date}
-                    required
-                  />
-                  <p className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
-                    Nếu chọn hôm nay, phòng vẫn OCCUPIED đến 00:00 ngày mai.
-                  </p>
+                  <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} max={new Date().toISOString().slice(0, 10)} min={contract.start_date} required />
                 </div>
               )}
-
               {action === 'renew' && (
                 <div className="login-field">
                   <label>Ngày kết thúc mới * (sau {formatDateVi(contract.end_date)})</label>
-                  <input
-                    type="date"
-                    value={renewEnd}
-                    onChange={(e) => setRenewEnd(e.target.value)}
-                    min={contract.end_date}
-                    required
-                  />
+                  <input type="date" value={renewEnd} onChange={(e) => setRenewEnd(e.target.value)} min={contract.end_date} required />
                 </div>
               )}
-
               {(action === 'end' || action === 'cancel' || action === 'renew') && (
                 <div className="login-field">
                   <label>{action === 'renew' ? 'Lý do (tùy chọn)' : 'Lý do *'}</label>
-                  <textarea
-                    rows={3}
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                    required={action !== 'renew'}
-                  />
+                  <textarea rows={3} value={reason} onChange={(e) => setReason(e.target.value)} required={action !== 'renew'} />
                 </div>
               )}
-
               {actionError && <div className="login-error">{actionError}</div>}
-
               <div className="modal-actions">
                 <button type="button" className="modal-btn" onClick={closeAction} disabled={submitting}>Hủy</button>
-                <button
-                  type="submit"
-                  className="modal-btn primary"
-                  style={dangerAction ? { background: 'var(--cinnabar-2)' } : undefined}
-                  disabled={submitting}
-                >
+                <button type="submit" className="modal-btn primary" style={dangerAction ? { background: 'var(--cinnabar-2)' } : undefined} disabled={submitting}>
                   {submitting ? 'Đang xử lý…' : ACTION_LABELS[action]}
                 </button>
               </div>

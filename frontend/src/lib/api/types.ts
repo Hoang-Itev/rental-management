@@ -80,6 +80,7 @@ export interface ContractOut {
   status: ContractStatus;
   deposit_amount: number | null;
   end_reason: string | null;
+  attachment_url: string | null; // --- THÊM DÒNG NÀY ---
 }
 
 // ===== Contract Terms =====

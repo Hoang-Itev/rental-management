@@ -373,3 +373,92 @@ body.dawn .lantern-svg {
   filter: drop-shadow(0 0 0 transparent);
 }
 
+/* =========================================================
+   CSS DÀNH RIÊNG CHO CHẾ ĐỘ IN (PRINT)
+   ========================================================= */
+@media print {
+  /* 1. Ẩn tất cả các thành phần giao diện không cần thiết */
+  .top-nav, 
+  .page-header button,
+  .action-bar,
+  .property-decorations,
+  .leaves-fall,
+  .fireflies-scene,
+  .building-panel-controls,
+  button {
+    display: none !important;
+  }
+
+  /* 2. Thiết lập lại nền trắng, chữ đen cho toàn bộ trang in */
+  body, html, #root, .layout-main, .page-container {
+    background: #fff !important;
+    color: #000 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    font-family: 'Times New Roman', Times, serif !important;
+    font-size: 14pt !important;
+  }
+
+  /* 3. Định dạng lại tiêu đề in */
+  .page-title {
+    color: #000 !important;
+    font-size: 24pt !important;
+    text-align: center !important;
+    margin-bottom: 30px !important;
+  }
+
+  h3 {
+    color: #000 !important;
+    border-bottom: 1px solid #000;
+    padding-bottom: 5px;
+    margin-top: 20px !important;
+  }
+
+  /* 4. Định dạng lại bảng và khung thông tin */
+  .detail-grid {
+    border: 1px solid #000 !important;
+    background: transparent !important;
+    display: block !important; /* Chuyển từ grid sang block để in dễ hơn */
+  }
+
+  .detail-item {
+    border-bottom: 1px solid #eee;
+    padding: 8px 0;
+  }
+
+  .detail-item label {
+    color: #333 !important;
+    font-weight: bold;
+  }
+
+  .detail-item div {
+    color: #000 !important;
+  }
+
+  .data-table {
+    border: 1px solid #000 !important;
+    width: 100% !important;
+  }
+
+  .data-table th, .data-table td {
+    border: 1px solid #000 !important;
+    color: #000 !important;
+    padding: 8px !important;
+  }
+
+  /* 5. Hiển thị dòng cảnh báo pháp lý ở đầu tờ in */
+  #contract-print-area::before {
+    content: "LƯU Ý: Bản in này chỉ mang tính chất tham khảo và lưu trữ nội bộ. Hợp đồng chính thức có giá trị pháp lý phải được in, ký kết và công chứng theo quy định của pháp luật.";
+    display: block;
+    text-align: center;
+    font-size: 11pt;
+    font-style: italic;
+    color: #d00;
+    margin-bottom: 20px;
+    border: 1px dashed #d00;
+    padding: 10px;
+  }
+  
+  /* Ngắt trang nếu cần */
+  .page-break { page-break-before: always; }
+}
