@@ -8,6 +8,14 @@ interface Props {
   onClose: () => void;
 }
 
+// Hàm dịch trạng thái phòng sang tiếng Việt
+function translateOccupancy(status: string) {
+  if (status === 'VACANT') return 'Trống';
+  if (status === 'OCCUPIED') return 'Đang thuê';
+  if (status === 'INACTIVE') return 'Ngưng';
+  return status;
+}
+
 export function RoomPinModal({ rooms, pinnedIds, onSave, onClose }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set(pinnedIds));
 
@@ -44,7 +52,14 @@ export function RoomPinModal({ rooms, pinnedIds, onSave, onClose }: Props) {
               />
               <div>
                 <div style={{ fontWeight: 'bold' }}>{r.room_code}</div>
-                <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{r.display_occupancy}</div>
+                {/* Gọi hàm dịch và đổi màu chữ cho dễ nhìn */}
+                <div style={{ 
+                  fontSize: 12, 
+                  color: r.display_occupancy === 'VACANT' ? 'var(--jade)' : (r.display_occupancy === 'OCCUPIED' ? 'var(--cinnabar-2)' : 'var(--ink-soft)'),
+                  fontWeight: 600
+                }}>
+                  {translateOccupancy(r.display_occupancy)}
+                </div>
               </div>
             </label>
           ))}
