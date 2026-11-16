@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { RoomOut } from '../../lib/api/types';
+import { api } from '../../lib/api/client';
 
 interface Props {
   rooms: RoomOut[];
@@ -18,6 +19,34 @@ function translateOccupancy(status: string) {
 
 export function RoomPinModal({ rooms, pinnedIds, onSave, onClose }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set(pinnedIds));
+  const [roomDetails, setRoomDetails] = useState<Record<string, {prop: string, bld: string, flr: string}>>({});
+
+  // Tự động tải thông tin Khu/Dãy/Tầng để hiển thị
+  useEffect(() => {
+    async function loadMeta() {
+      try {
+        const propRes = await api.get<any>('/api/v1/properties?page_size=100');
+        const detailMap: Record<string, {prop: string, bld: string, flr: string}> = {};
+        
+        for (const p of propRes.items) {
+          const bRes = await api.get<any>(`/api/v1/properties/${p.id}/buildings?page_size=100`);
+          for (const b of bRes.items) {
+            const fRes = await api.get<any>(`/api/v1/buildings/${b.id}/floors?page_size=100`);
+            for (const f of fRes.items) {
+              const roomsInFloor = rooms.filter(r => r.floor_id === f.id);
+              for (const r of roomsInFloor) {
+                detailMap[r.id] = { prop: p.name, bld: b.name, flr: String(f.floor_number) };
+              }
+            }
+          }
+        }
+        setRoomDetails(detailMap);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    if (rooms.length > 0) loadMeta();
+  }, [rooms]);
 
   function toggle(id: string) {
     const next = new Set(selected);
@@ -35,34 +64,59 @@ export function RoomPinModal({ rooms, pinnedIds, onSave, onClose }: Props) {
 
   return (
     <div className="modal-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="room-modal" style={{ width: 'min(800px, 96vw)' }}>
+      <div className="room-modal" style={{ width: 'min(850px, 96vw)' }}>
         <button className="modal-close" onClick={onClose}>×</button>
         <h2 className="modal-title">Chọn phòng hiển thị trên Sân vườn (Tối đa 12)</h2>
         <p className="text-muted" style={{ marginBottom: 16 }}>
           Đã chọn: {selected.size}/12 phòng.
         </p>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 8, maxHeight: '50vh', overflowY: 'auto', padding: 4 }}>
-          {rooms.map((r) => (
-            <label key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 8, border: '1px solid var(--gold-3)', cursor: 'pointer', background: selected.has(r.id) ? 'var(--gold-3)' : 'transparent', borderRadius: 4 }}>
-              <input 
-                type="checkbox" 
-                checked={selected.has(r.id)} 
-                onChange={() => toggle(r.id)} 
-              />
-              <div>
-                <div style={{ fontWeight: 'bold' }}>{r.room_code}</div>
-                {/* Gọi hàm dịch và đổi màu chữ cho dễ nhìn */}
-                <div style={{ 
-                  fontSize: 12, 
-                  color: r.display_occupancy === 'VACANT' ? 'var(--jade)' : (r.display_occupancy === 'OCCUPIED' ? 'var(--cinnabar-2)' : 'var(--ink-soft)'),
-                  fontWeight: 600
-                }}>
-                  {translateOccupancy(r.display_occupancy)}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12, maxHeight: '60vh', overflowY: 'auto', padding: 4 }}>
+          {rooms.map((r) => {
+            const info = roomDetails[r.id];
+            const isSelected = selected.has(r.id);
+            
+            return (
+              <label 
+                key={r.id} 
+                style={{ 
+                  display: 'flex', alignItems: 'flex-start', gap: 10, padding: 12, 
+                  border: isSelected ? '2px solid var(--cinnabar-2)' : '1px solid var(--gold-3)', 
+                  cursor: 'pointer', 
+                  background: isSelected ? 'rgba(212, 163, 64, 0.2)' : 'var(--night-1)', 
+                  borderRadius: 6,
+                  transition: 'all 0.2s'
+                }}
+              >
+                <input 
+                  type="checkbox" 
+                  checked={isSelected} 
+                  onChange={() => toggle(r.id)} 
+                  style={{ marginTop: 4, width: 16, height: 16, cursor: 'pointer' }}
+                />
+                <div style={{ flex: 1 }}>
+                  {/* Tên phòng in đậm, rõ màu */}
+                  <div style={{ fontWeight: 'bold', fontSize: 16, color: isSelected ? 'var(--cinnabar-2)' : 'var(--gold-2)' }}>
+                    {r.room_code}
+                  </div>
+                  
+                  {/* Địa chỉ Khu - Dãy - Tầng */}
+                  <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 4 }}>
+                    {info ? `${info.prop} - Dãy ${info.bld} - Tầng ${info.flr}` : 'Đang tải vị trí...'}
+                  </div>
+
+                  {/* Trạng thái phòng */}
+                  <div style={{ 
+                    fontSize: 12, 
+                    fontWeight: 600,
+                    color: r.display_occupancy === 'VACANT' ? 'var(--jade-hi)' : 'var(--amber)',
+                  }}>
+                    {translateOccupancy(r.display_occupancy)}
+                  </div>
                 </div>
-              </div>
-            </label>
-          ))}
+              </label>
+            );
+          })}
         </div>
 
         <div className="modal-actions" style={{ marginTop: 20 }}>
