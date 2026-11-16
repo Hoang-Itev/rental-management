@@ -16,6 +16,7 @@ export function AppLayout() {
     { path: '/dong-ho', label: 'Đồng hồ' },
     { path: '/hoa-don', label: 'Hóa đơn' },
     { path: '/email', label: 'Email' },
+    { path: '/doi-mat-khau', label: 'Đổi mật khẩu' },
   ];
 
   return (

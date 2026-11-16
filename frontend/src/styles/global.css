@@ -476,3 +476,40 @@ body.dawn .lantern-svg {
   0% { transform: translateY(0) rotate(0deg); opacity: 1; }
   100% { transform: translateY(100px) rotate(90deg); opacity: 0; }
 }
+
+/* ===============================
+   HIỆU ỨNG HỘI AN PHỐ CỔ
+   =============================== */
+@keyframes lanternSwing {
+  0% { transform: rotate(-10deg); }
+  100% { transform: rotate(10deg); }
+}
+
+.login-card input {
+  background-image: linear-gradient(to right, rgba(212, 163, 64, 0.1), rgba(212, 163, 64, 0.05));
+  transition: box-shadow 0.3s ease;
+}
+
+.login-card input:focus {
+  box-shadow: 0 0 15px rgba(242, 208, 112, 0.4);
+}
+
+/* Cửa sổ nhà cổ (trang trí phía trên form) */
+.login-card::before {
+  content: '';
+  position: absolute;
+  top: -12px;
+  left: -2px;
+  right: -2px;
+  height: 12px;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--wood-3) 0px,
+    var(--wood-3) 10px,
+    var(--wood-2) 10px,
+    var(--wood-2) 20px
+  );
+  border-radius: 8px 8px 0 0;
+  z-index: -1;
+}
+

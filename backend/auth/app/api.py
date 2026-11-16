@@ -1,15 +1,13 @@
 """Two public HTTP routes: POST login and GET the authenticated admin profile."""
-
 from typing import Annotated
-
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
 from app.config import AuthSettings, get_settings
 from app.db import get_db
-from app import service
-from app.schemas import LoginRequest, LoginResponse, UserPublic
+from app import service, security
+from app.schemas import LoginRequest, LoginResponse, UserPublic, ChangePasswordRequest
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Auth"])
 bearer_scheme = HTTPBearer(scheme_name="BearerAuth", auto_error=False)
@@ -50,3 +48,24 @@ def me(
     except service.AuthenticationRejected as exc:
         raise unauthorized() from exc
     return UserPublic.model_validate(user)
+
+
+@router.post("/change-password")
+def change_password(
+    payload: ChangePasswordRequest,
+    session: Annotated[Session, Depends(get_db)],
+    settings: Annotated[AuthSettings, Depends(get_settings)],
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)] = None,
+):
+    if not credentials:
+        raise unauthorized()
+    try:
+        user = service.current_user(session, f"Bearer {credentials.credentials}", settings)
+        if not security.verify_password(payload.old_password, user.password_hash):
+            raise HTTPException(status_code=400, detail="Mật khẩu cũ không đúng.")
+        
+        user.password_hash = security.hash_password(payload.new_password)
+        session.commit()
+        return {"message": "Đổi mật khẩu thành công."}
+    except service.AuthenticationRejected as exc:
+        raise unauthorized() from exc

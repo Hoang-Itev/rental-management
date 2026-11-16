@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './features/auth/AuthContext';
 import LoginPage from './features/auth/LoginPage';
+import ChangePasswordPage from './features/auth/ChangePasswordPage'; // Thêm import này
 import DashboardPage from './app/DashboardPage';
 import PublicInvoicePage from './features/public-invoice/PublicInvoicePage';
 import { ProtectedRoute } from './features/auth/ProtectedRoute';
@@ -24,6 +25,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/dang-nhap" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
+      
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
           <Route path="/" element={<DashboardPage />} />
@@ -37,6 +39,8 @@ export default function App() {
           <Route path="/hoa-don" element={<InvoiceListPage />} />
           <Route path="/hoa-don/:id" element={<InvoiceDetailPage />} />
           <Route path="/email" element={<EmailListPage />} />
+          {/* Đưa route đổi mật khẩu vào đây, nằm trong khu vực có Navbar */}
+          <Route path="/doi-mat-khau" element={<ChangePasswordPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Route>

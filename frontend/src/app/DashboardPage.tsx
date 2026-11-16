@@ -95,7 +95,7 @@ export default function DashboardPage() {
     <div className="dash-root">
       <header className="dash-header">
         <div>
-          <div className="dash-eyebrow">Nhà trọ Minh An · Hội An</div>
+          <div className="dash-eyebrow">Nhà trọ Minh An · Phong cách phố cổ</div>
           <h1 className="dash-title">Phố cổ</h1>
           <div className="dash-subtitle">
             Chào {user?.full_name ?? ''} · Đang hiển thị {summary.total} phòng (Trống: {summary.vacant}, Thuê: {summary.occupied})
