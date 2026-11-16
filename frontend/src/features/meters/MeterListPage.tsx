@@ -13,14 +13,10 @@ type Tab = 'room' | 'cutoffs' | 'bulk' | 'alerts';
 interface Building { id: string; name: string; property_id: string; }
 interface Floor { id: string; floor_number: number; building_id: string; name: string | null; }
 
-// HÀM MỚI: Cắt bỏ phần .000 thừa nếu là số nguyên
 function formatMeterValue(val: string | number | null | undefined) {
   if (val === null || val === undefined) return '—';
   const str = String(val);
-  // Nếu kết thúc bằng .000 thì cắt đi
-  if (str.endsWith('.000')) {
-    return str.slice(0, -4);
-  }
+  if (str.endsWith('.000')) return str.slice(0, -4);
   return str; 
 }
 
@@ -232,7 +228,7 @@ export function MeterListPage() {
       setReadings(res.items);
     } catch (e) { 
       if (e instanceof ApiError && e.status === 404) {
-        setReadingsError('Không tìm thấy dữ liệu đồng hồ này. Có thể dữ liệu cũ chưa được tải lại, vui lòng F5 trang.');
+        setReadingsError('Không tìm thấy dữ liệu đồng hồ này.');
       } else {
         setReadingsError('Lỗi tải chỉ số.');
       }
@@ -439,13 +435,13 @@ export function MeterListPage() {
                   <p>Mã: {m.meter_code}</p>
                   <Badge value={m.status} />
                   <div style={{ marginTop: 12 }}>
-                    <button className="btn-secondary" onClick={() => openReadings(m)}>Xem chỉ số</button>
+                    <button className="btn-secondary" onClick={() => openReadings(m)}>Xem chỉ số (IoT)</button>
                   </div>
                 </div>
               ))}
             </div>
 
-            <h3 style={{ marginTop: 28 }}>Các mốc chốt số</h3>
+            <h3 style={{ marginTop: 28 }}>Các mốc chốt số (Tay)</h3>
             <table className="data-table">
               <thead>
                 <tr><th>Đồng hồ</th><th>Loại mốc</th><th>Thời điểm</th><th>Chỉ số</th><th>Trạng thái</th><th>Ghi chú / Lý do</th><th></th></tr>
@@ -623,13 +619,13 @@ export function MeterListPage() {
         <div className="modal-backdrop active" onClick={(e) => e.target === e.currentTarget && setReadingsFor(null)}>
           <div className="room-modal" style={{ width: 'min(760px, 96vw)' }}>
             <button className="modal-close" onClick={() => setReadingsFor(null)}>×</button>
-            <h2 className="modal-title">Chỉ số — {readingsFor.meter_code}</h2>
+            <h2 className="modal-title">Lịch sử đo tự động (IoT) — {readingsFor.meter_code}</h2>
             {readingsLoading ? (
               <div className="loading-text">Đang tải…</div>
             ) : readingsError ? (
               <div className="login-error">{readingsError}</div>
             ) : readings.length === 0 ? (
-              <div className="empty-row">Chưa có chỉ số.</div>
+              <div className="empty-row">Chưa có dữ liệu từ cảm biến.</div>
             ) : (
               <table className="data-table">
                 <thead><tr><th>Đo lúc</th><th>Giá trị</th><th>Trạng thái</th><th>Ghi chú</th></tr></thead>

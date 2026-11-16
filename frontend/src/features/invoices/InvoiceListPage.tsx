@@ -10,19 +10,37 @@ import { formatVnd, formatDateVi, isOverdue, periodEndInclusive } from '../../li
 interface Building { id: string; name: string; property_id: string; }
 interface Floor { id: string; floor_number: number; building_id: string; name: string | null; }
 
+function translateBillingRunError(msg: string) {
+  if (msg.includes('Select the first day of a closed billing month')) {
+    return 'Vui lòng chọn ngày đầu tiên của một tháng đã kết thúc (ví dụ: tháng 10/2026 nếu hôm nay là 11/2026).';
+  }
+  return msg;
+}
+
 export function InvoiceListPage() {
   const [params] = useSearchParams();
   const [data, setData] = useState<Page<InvoiceDetail> | null>(null);
+  
+  // Filters
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
   const [status, setStatus] = useState('');
   const [billingMonth, setBillingMonth] = useState('');
   const contractId = params.get('contract_id') ?? '';
+  
+  // Location Filters
+  const [properties, setProperties] = useState<PropertyOut[]>([]);
+  const [buildings, setBuildings] = useState<Building[]>([]);
+  const [floors, setFloors] = useState<Floor[]>([]);
+  const [allRooms, setAllRooms] = useState<RoomOut[]>([]);
+  const [propertyId, setPropertyId] = useState('');
+  const [buildingId, setBuildingId] = useState('');
+  const [floorId, setFloorId] = useState('');
+  const [roomId, setRoomId] = useState('');
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [properties, setProperties] = useState<PropertyOut[]>([]);
-  const [allRooms, setAllRooms] = useState<RoomOut[]>([]);
   const [roomDetails, setRoomDetails] = useState<Record<string, {prop: string, bld: string, flr: string}>>({});
 
   const [runs, setRuns] = useState<BillingRunView[]>([]);
@@ -35,7 +53,6 @@ export function InvoiceListPage() {
       try {
         const propRes = await api.get<Page<PropertyOut>>('/api/v1/properties?page_size=100');
         setProperties(propRes.items);
-        
         const roomRes = await api.get<Page<RoomOut>>('/api/v1/rooms?page_size=100');
         setAllRooms(roomRes.items);
 
@@ -57,6 +74,22 @@ export function InvoiceListPage() {
     }
     loadMeta();
   }, []);
+
+  // Load buildings based on property
+  useEffect(() => {
+    if (!propertyId) { setBuildings([]); setBuildingId(''); return; }
+    api.get<Page<Building>>(`/api/v1/properties/${propertyId}/buildings?page_size=100`)
+      .then(res => setBuildings(res.items))
+      .catch(console.error);
+  }, [propertyId]);
+
+  // Load floors based on building
+  useEffect(() => {
+    if (!buildingId) { setFloors([]); setFloorId(''); return; }
+    api.get<Page<Floor>>(`/api/v1/buildings/${buildingId}/floors?page_size=100`)
+      .then(res => setFloors(res.items))
+      .catch(console.error);
+  }, [buildingId]);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -95,11 +128,39 @@ export function InvoiceListPage() {
       await loadRuns();
       alert('Đã gửi yêu cầu tạo hóa đơn tự động. Vui lòng đợi hệ thống xử lý.');
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : 'Không tạo được tiến trình.');
+      const raw = err instanceof ApiError ? err.message : 'Không tạo được tiến trình.';
+      alert(translateBillingRunError(raw));
     } finally {
       setCreatingRun(false);
     }
   }
+
+  // Lọc danh sách hóa đơn ở Client-side dựa trên Khu/Dãy/Tầng/Phòng
+  const filteredItems = (data?.items ?? []).filter(inv => {
+    if (!propertyId && !buildingId && !floorId && !roomId) return true;
+    const room = allRooms.find(r => r.id === inv.room_id);
+    if (!room) return false;
+    
+    if (roomId && inv.room_id !== roomId) return false;
+    if (propertyId && room.property_id !== propertyId) return false;
+    if (floorId && room.floor_id !== floorId) return false;
+    if (buildingId) {
+      const floor = floors.find(f => f.id === room.floor_id);
+      if (floor && floor.building_id !== buildingId) return false;
+    }
+    return true;
+  });
+
+  // Danh sách phòng để hiển thị ở ô Select
+  const availableRooms = allRooms.filter(r => {
+    if (floorId) return r.floor_id === floorId;
+    if (buildingId) {
+      const floor = floors.find(f => f.id === r.floor_id);
+      return floor?.building_id === buildingId;
+    }
+    if (propertyId) return r.property_id === propertyId;
+    return true;
+  });
 
   return (
     <div className="page-container">
@@ -107,6 +168,9 @@ export function InvoiceListPage() {
         @media print {
           .no-print { display: none !important; }
           .data-table { border: none !important; }
+          .invoice-print-only { display: block !important; }
+          .invoice-print-block { page-break-inside: avoid; border-bottom: 1px solid #000; padding: 20px 0; }
+          .invoice-print-block:last-child { border-bottom: none; }
         }
       `}</style>
 
@@ -156,7 +220,7 @@ export function InvoiceListPage() {
         </div>
       )}
 
-      <div className="filter-bar no-print">
+      <div className="filter-bar no-print" style={{ flexWrap: 'wrap' }}>
         <select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
           <option value="">Tất cả trạng thái</option>
           <option value="DRAFT">Nháp</option>
@@ -165,11 +229,40 @@ export function InvoiceListPage() {
           <option value="VOID">Đã hủy</option>
         </select>
         <input type="month" value={billingMonth} onChange={(e) => { setBillingMonth(e.target.value); setPage(1); }} placeholder="Lọc theo tháng" />
+        
+        {/* CÁC BỘ LỌC VỊ TRÍ */}
+        <select value={propertyId} onChange={(e) => { 
+          setPropertyId(e.target.value); setBuildingId(''); setFloorId(''); setRoomId(''); setPage(1); 
+        }}>
+          <option value="">Tất cả Khu trọ</option>
+          {properties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+
+        <select value={buildingId} onChange={(e) => { 
+          setBuildingId(e.target.value); setFloorId(''); setRoomId(''); setPage(1); 
+        }} disabled={!propertyId}>
+          <option value="">Tất cả Dãy</option>
+          {buildings.map(b => <option key={b.id} value={b.id}>Dãy {b.name}</option>)}
+        </select>
+
+        <select value={floorId} onChange={(e) => { 
+          setFloorId(e.target.value); setRoomId(''); setPage(1); 
+        }} disabled={!buildingId}>
+          <option value="">Tất cả Tầng</option>
+          {floors.map(f => <option key={f.id} value={f.id}>Tầng {f.floor_number}</option>)}
+        </select>
+
+        <select value={roomId} onChange={(e) => { setRoomId(e.target.value); setPage(1); }} disabled={!propertyId}>
+          <option value="">Tất cả Phòng</option>
+          {availableRooms.map(r => <option key={r.id} value={r.id}>{r.room_code}</option>)}
+        </select>
+
         {contractId && <span className="text-muted" style={{ padding: 8 }}>Đang lọc theo hợp đồng: {contractId.slice(0, 8)}…</span>}
       </div>
 
-      <PageState loading={loading} error={error} empty={!loading && !error && (data?.items.length ?? 0) === 0} emptyText="Không có hóa đơn nào." onRetry={load}>
-        <table className="data-table">
+      <PageState loading={loading} error={error} empty={!loading && !error && filteredItems.length === 0} emptyText="Không có hóa đơn nào." onRetry={load}>
+        {/* Bảng hiển thị trên màn hình */}
+        <table className="data-table no-print">
           <thead>
             <tr>
               <th>Mã HĐ</th>
@@ -181,11 +274,11 @@ export function InvoiceListPage() {
               <th>Tổng tiền</th>
               <th>Trạng thái</th>
               <th>Hạn chót</th>
-              <th className="no-print">Thao tác</th>
+              <th>Thao tác</th>
             </tr>
           </thead>
           <tbody>
-            {data?.items.map((inv) => {
+            {filteredItems.map((inv) => {
               const roomInfo = roomDetails[inv.room_id];
               return (
                 <tr key={inv.id}>
@@ -203,7 +296,7 @@ export function InvoiceListPage() {
                     )}
                   </td>
                   <td>{formatDateVi(inv.due_date)}</td>
-                  <td className="no-print">
+                  <td>
                     <Link to={`/hoa-don/${inv.id}`} style={{ color: 'var(--gold-2)', fontWeight: 'bold', textDecoration: 'underline' }}>
                       Chi tiết
                     </Link>
@@ -213,6 +306,33 @@ export function InvoiceListPage() {
             })}
           </tbody>
         </table>
+
+        {/* Phần in PDF */}
+        <div className="invoice-print-only" style={{ display: 'none' }}>
+          {filteredItems.map((inv) => {
+            const roomInfo = roomDetails[inv.room_id];
+            return (
+              <div key={inv.id} className="invoice-print-block">
+                <div style={{ textAlign: 'center', marginBottom: 12 }}>
+                  <h3 style={{ margin: 0 }}>HÓA ĐƠN TIỀN NHÀ</h3>
+                  <div style={{ fontStyle: 'italic' }}>Mã: {inv.invoice_code}</div>
+                  <div>Kỳ: {formatDateVi(inv.period_start)} — {formatDateVi(periodEndInclusive(inv.period_end))}</div>
+                </div>
+                <div style={{ marginBottom: 8 }}>
+                  <div><strong>Khách thuê:</strong> {inv.tenant_name_snapshot}</div>
+                  <div><strong>Phòng:</strong> {inv.room_code_snapshot} {roomInfo ? `(${roomInfo.prop} - ${roomInfo.bld} - Tầng ${roomInfo.flr})` : ''}</div>
+                  <div><strong>Email:</strong> {inv.tenant_email_snapshot || '—'}</div>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, paddingTop: 6, borderTop: '2px solid #000', fontWeight: 'bold' }}>
+                  <span>TỔNG CỘNG</span>
+                  <span>{formatVnd(inv.total_amount)}</span>
+                </div>
+                <div style={{ marginTop: 6, fontSize: 13 }}>Hạn thanh toán: {formatDateVi(inv.due_date)}</div>
+              </div>
+            );
+          })}
+        </div>
+
         <div className="no-print">
           {data && <Pagination page={data.meta.page} pageSize={data.meta.page_size} total={data.meta.total} onPageChange={setPage} />}
         </div>

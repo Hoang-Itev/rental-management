@@ -345,6 +345,26 @@ class InvoiceReason(StrictSnapshot):
         return value.strip()
 
 
+class MarkPaidRequest(StrictSnapshot):
+    """Ghi nhận chủ trọ đã thu tiền mặt từ khách."""
+    note: Annotated[str, Field(min_length=8, max_length=2000)]
+
+    @field_validator("note")
+    @classmethod
+    def nonblank_note(cls, value):
+        if not value.strip():
+            raise ValueError("note must not be blank")
+        return value.strip()
+
+
+class MarkPaidResult(BaseModel):
+    """Kết quả trả về sau khi đánh dấu PAID."""
+    invoice_id: UUID
+    status: Literal["PAID"]
+    paid_at: datetime
+    cash_note: str
+
+
 class AdjustmentCreate(InvoiceReason):
     amount_delta: Annotated[int, Field(strict=True, ge=-9223372036854775808, le=9223372036854775807)]
 

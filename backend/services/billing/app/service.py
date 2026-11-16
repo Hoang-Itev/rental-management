@@ -213,6 +213,68 @@ class InvoiceService:
                 self._void(db, invoice, reason)
         return invoice_id
 
+    def mark_paid(self, invoice_id: UUID, note: str):
+        """Chủ trọ xác nhận đã thu tiền mặt. Chuyển PAID + ghi Outbox PaymentSucceeded."""
+        with self.sessions.begin() as db:
+            invoice = self._locked_invoice(db, invoice_id)
+            if invoice.status == "PAID":
+                # Idempotent: nếu đã PAID rồi thì trả về thông tin hiện tại.
+                existing = db.scalar(
+                    select(m.PaymentAttempt)
+                    .where(m.PaymentAttempt.invoice_id == invoice.id,
+                           m.PaymentAttempt.provider == "CASH",
+                           m.PaymentAttempt.status == "SUCCESS")
+                    .order_by(m.PaymentAttempt.confirmed_at.desc())
+                    .limit(1)
+                )
+                return invoice, (existing.result_code if existing else ""), invoice.paid_at
+            if invoice.status != "ISSUED":
+                raise LinkDenied(409, "INVOICE_NOT_ISSUABLE")
+
+            now = datetime.now(timezone.utc)
+            attempt_id = uuid4()
+            attempt = m.PaymentAttempt(
+                id=attempt_id,
+                invoice_id=invoice.id,
+                provider="CASH",
+                order_id=f"CASH-{attempt_id.hex}",
+                request_id=f"CASH-{attempt_id.hex}",
+                amount=invoice.total_amount,
+                status="SUCCESS",
+                result_code=note,
+                confirmed_at=now,
+            )
+            db.add(attempt)
+
+            invoice.status = "PAID"
+            invoice.paid_at = now
+
+            event_id = uuid4()
+            db.add(m.OutboxEvent(
+                id=event_id, aggregate_type="Invoice", aggregate_id=invoice.id,
+                event_type="PaymentSucceeded", event_version=1,
+                correlation_id=event_id, dedupe_key=f"payment.succeeded.v1:{invoice.id}:{attempt_id}",
+                payload={
+                    "event_id": str(event_id), "event_type": "PaymentSucceeded", "event_version": 1,
+                    "occurred_at": now.isoformat(), "correlation_id": str(event_id),
+                    "aggregate_id": str(invoice.id),
+                    "data": {
+                        "invoice_id": str(invoice.id),
+                        "payment_attempt_id": str(attempt_id),
+                        "provider_transaction_id": f"CASH-{attempt_id.hex}",
+                        "paid_amount": invoice.total_amount,
+                        "recipient_email": invoice.tenant_email_snapshot,
+                        "invoice_code": invoice.invoice_code,
+                        "tenant_name": invoice.tenant_name_snapshot,
+                        "room_code": invoice.room_code_snapshot,
+                        "period_start": invoice.period_start.isoformat(),
+                        "period_end_exclusive": invoice.period_end.isoformat(),
+                        "paid_at": now.isoformat(),
+                    },
+                },
+            ))
+        return invoice, note, now
+
     def reissue(self, invoice_id, reason):
         with self.sessions.begin() as db:
             original = self._locked_invoice(db, invoice_id)
@@ -255,7 +317,10 @@ class InvoiceService:
 
     def enqueue_month(self, month: date, trigger: str, key: str | None = None):
         if month.day != 1 or month >= datetime.now(VN).date().replace(day=1):
-            raise InvoiceConflict("Select the first day of a closed billing month")
+            raise InvoiceConflict(
+                "Vui lòng chọn ngày đầu tiên của một tháng đã kết thúc. "
+                "Ví dụ: nếu hôm nay là tháng 11/2026, hãy chọn tháng 10/2026."
+            )
         run_id = uuid5(NAMESPACE_URL, f"rental-management:billing:{trigger}:{key}") if key else uuid4()
         with self.sessions.begin() as db:
             repo.lock_contract(db, run_id)
@@ -264,7 +329,7 @@ class InvoiceService:
                 run = m.BillingRun(id=run_id, billing_month=month, trigger_type=trigger, status="RUNNING")
                 db.add(run)
             elif run.billing_month != month:
-                raise InvoiceConflict("Idempotency-Key already used for another billing month")
+                raise InvoiceConflict("Idempotency-Key đã được dùng cho một tháng khác.")
             elif trigger == "SCHEDULED" and run.status == "FAILED":
                 run.status = "RUNNING"
                 run.finished_at = None
@@ -329,7 +394,8 @@ def create_access_link(db, invoice_id, request, settings):
         token = token_urlsafe(32)
         expires = datetime.now(timezone.utc) + timedelta(seconds=settings.invoice_link_ttl_seconds)
         db.add(m.InvoiceAccessToken(invoice_id=invoice.id, token_hash=hash_link_token(token), expires_at=expires))
-    return AccessLink(url=f"{str(settings.public_base_url).rstrip('/')}/public/v1/invoices/{token}", expires_at=expires)
+    # Link email trỏ về TRANG GIAO DIỆN thanh toán của Frontend (React), không phải API Backend.
+    return AccessLink(url=f"{str(settings.public_base_url).rstrip('/')}/hoa-don-cong-khai/{token}", expires_at=expires)
 
 
 def read_access_link(db, token):

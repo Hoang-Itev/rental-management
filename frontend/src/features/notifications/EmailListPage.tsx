@@ -6,6 +6,17 @@ import { PageState } from '../../components/PageState';
 import { Badge } from '../../components/Badge';
 import { formatDateTimeVi } from '../../lib/utils/format';
 
+// Hàm dịch Loại email sang tiếng Việt
+function translateEmailType(type: string) {
+  switch (type) {
+    case 'INVOICE': return 'Hóa đơn';
+    case 'REMINDER': return 'Nhắc nợ';
+    case 'PAYMENT_RECEIPT': return 'Biên nhận';
+    case 'CONTRACT_EXPIRING': return 'Sắp hết hạn';
+    default: return type;
+  }
+}
+
 export function EmailListPage() {
   const [data, setData] = useState<Page<EmailJobView> | null>(null);
   const [page, setPage] = useState(1);
@@ -25,7 +36,7 @@ export function EmailListPage() {
       const res = await api.get<Page<EmailJobView>>(`/api/v1/email-jobs?${q.toString()}`);
       setData(res);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Không tải được email job.');
+      setError(e instanceof ApiError ? e.message : 'Không tải được danh sách email.');
     } finally {
       setLoading(false);
     }
@@ -39,7 +50,7 @@ export function EmailListPage() {
       await api.post(`/api/v1/email-jobs/${id}/retry`);
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Không thể retry.');
+      setError(err instanceof ApiError ? err.message : 'Không thể gửi lại email.');
     } finally {
       setRetrying(null);
     }
@@ -54,22 +65,22 @@ export function EmailListPage() {
       <div className="filter-bar">
         <select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
           <option value="">Mọi trạng thái</option>
-          <option value="PENDING">Chờ</option>
-          <option value="SENDING">Đang gửi</option>
+          <option value="PENDING">Đang chờ</option>
           <option value="SENT">Đã gửi</option>
           <option value="FAILED">Thất bại</option>
           <option value="SKIPPED">Bỏ qua</option>
         </select>
+
         <select value={emailType} onChange={(e) => { setEmailType(e.target.value); setPage(1); }}>
           <option value="">Mọi loại</option>
           <option value="INVOICE">Hóa đơn</option>
           <option value="REMINDER">Nhắc nợ</option>
           <option value="PAYMENT_RECEIPT">Biên nhận</option>
-          <option value="CONTRACT_EXPIRING">Hợp đồng sắp hết hạn</option>
+          <option value="CONTRACT_EXPIRING">Sắp hết hạn</option>
         </select>
       </div>
 
-      <PageState loading={loading} error={error} empty={!loading && !error && (data?.items.length ?? 0) === 0} emptyText="Chưa có email job." onRetry={load}>
+      <PageState loading={loading} error={error} empty={!loading && !error && (data?.items.length ?? 0) === 0} emptyText="Không có email nào." onRetry={load}>
         <table className="data-table">
           <thead>
             <tr>
@@ -80,23 +91,32 @@ export function EmailListPage() {
               <th>Lần thử</th>
               <th>Lỗi</th>
               <th>Gửi lúc</th>
-              <th></th>
+              <th>Thao tác</th>
             </tr>
           </thead>
           <tbody>
             {data?.items.map((job) => (
               <tr key={job.id}>
-                <td>{job.email_type}</td>
+                <td style={{ fontWeight: 'bold' }}>{translateEmailType(job.email_type)}</td>
                 <td>{job.recipient_email}</td>
-                <td>{job.subject}</td>
+                <td style={{ maxWidth: 200, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={job.subject}>
+                  {job.subject}
+                </td>
                 <td><Badge value={job.status} /></td>
-                <td>{job.attempt_count}</td>
-                <td style={{ fontSize: 12, color: 'var(--cinnabar-3)' }}>{job.last_error || '—'}</td>
+                <td style={{ textAlign: 'center' }}>{job.attempt_count}</td>
+                <td style={{ maxWidth: 150, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={job.last_error || ''}>
+                  {job.last_error || '—'}
+                </td>
                 <td>{job.sent_at ? formatDateTimeVi(job.sent_at) : '—'}</td>
                 <td>
                   {job.status === 'FAILED' && (
-                    <button className="btn-secondary" disabled={retrying === job.id} onClick={() => retry(job.id)}>
-                      {retrying === job.id ? 'Đang retry…' : 'Gửi lại'}
+                    <button 
+                      className="btn-secondary" 
+                      style={{ padding: '4px 12px', fontSize: 12 }} 
+                      onClick={() => retry(job.id)}
+                      disabled={retrying === job.id}
+                    >
+                      {retrying === job.id ? 'Đang gửi...' : 'Gửi lại'}
                     </button>
                   )}
                 </td>
@@ -104,7 +124,9 @@ export function EmailListPage() {
             ))}
           </tbody>
         </table>
-        {data && <Pagination page={data.meta.page} pageSize={data.meta.page_size} total={data.meta.total} onPageChange={setPage} />}
+        <div style={{ marginTop: 20 }}>
+          {data && <Pagination page={data.meta.page} pageSize={data.meta.page_size} total={data.meta.total} onPageChange={setPage} />}
+        </div>
       </PageState>
     </div>
   );
