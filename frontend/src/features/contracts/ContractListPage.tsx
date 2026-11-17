@@ -14,11 +14,16 @@ export function ContractListPage() {
   const navigate = useNavigate();
   const [data, setData] = useState<Page<ContractOut> | null>(null);
   
+  // State lưu trữ toàn bộ danh mục
   const [properties, setProperties] = useState<PropertyOut[]>([]);
-  const [buildings, setBuildings] = useState<Building[]>([]);
-  const [floors, setFloors] = useState<Floor[]>([]);
-  const [rooms, setRooms] = useState<RoomOut[]>([]);
+  const [allBuildings, setAllBuildings] = useState<Building[]>([]);
+  const [allFloors, setAllFloors] = useState<Floor[]>([]);
+  const [allRooms, setAllRooms] = useState<RoomOut[]>([]);
   
+  // State cho bộ lọc (sẽ dùng để hiển thị dropdown)
+  const [filterBuildings, setFilterBuildings] = useState<Building[]>([]);
+  const [filterFloors, setFilterFloors] = useState<Floor[]>([]);
+
   const [propertyId, setPropertyId] = useState('');
   const [buildingId, setBuildingId] = useState('');
   const [floorId, setFloorId] = useState('');
@@ -32,36 +37,48 @@ export function ContractListPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Đã sửa page_size=100 (giới hạn tối đa của backend)
+  // Tải TOÀN BỘ danh mục 1 lần
   useEffect(() => {
-    const fetchMeta = async () => {
+    const fetchAllMeta = async () => {
       try {
-        const [propRes, roomRes] = await Promise.all([
-          api.get<Page<PropertyOut>>('/api/v1/properties?page_size=100'),
-          api.get<Page<RoomOut>>('/api/v1/rooms?page_size=100')
-        ]);
+        const propRes = await api.get<Page<PropertyOut>>('/api/v1/properties?page_size=100');
         setProperties(propRes.items);
-        setRooms(roomRes.items);
+        
+        const roomRes = await api.get<Page<RoomOut>>('/api/v1/rooms?page_size=100');
+        setAllRooms(roomRes.items);
+
+        const bldList: Building[] = [];
+        const flrList: Floor[] = [];
+
+        for (const p of propRes.items) {
+          const bRes = await api.get<Page<Building>>(`/api/v1/properties/${p.id}/buildings?page_size=100`);
+          bldList.push(...bRes.items);
+          
+          for (const b of bRes.items) {
+            const fRes = await api.get<Page<Floor>>(`/api/v1/buildings/${b.id}/floors?page_size=100`);
+            flrList.push(...fRes.items);
+          }
+        }
+        setAllBuildings(bldList);
+        setAllFloors(flrList);
       } catch (e) {
         console.error('Lỗi tải dữ liệu danh mục', e);
       }
     };
-    fetchMeta();
+    fetchAllMeta();
   }, []);
 
+  // Cập nhật dropdown Dãy dựa theo Khu
   useEffect(() => {
-    if (!propertyId) { setBuildings([]); setBuildingId(''); return; }
-    api.get<Page<Building>>(`/api/v1/properties/${propertyId}/buildings?page_size=100`)
-      .then(res => setBuildings(res.items))
-      .catch(console.error);
-  }, [propertyId]);
+    if (!propertyId) { setFilterBuildings([]); setBuildingId(''); return; }
+    setFilterBuildings(allBuildings.filter(b => b.property_id === propertyId));
+  }, [propertyId, allBuildings]);
 
+  // Cập nhật dropdown Tầng dựa theo Dãy
   useEffect(() => {
-    if (!buildingId) { setFloors([]); setFloorId(''); return; }
-    api.get<Page<Floor>>(`/api/v1/buildings/${buildingId}/floors?page_size=100`)
-      .then(res => setFloors(res.items))
-      .catch(console.error);
-  }, [buildingId]);
+    if (!buildingId) { setFilterFloors([]); setFloorId(''); return; }
+    setFilterFloors(allFloors.filter(f => f.building_id === buildingId));
+  }, [buildingId, allFloors]);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -90,15 +107,25 @@ export function ContractListPage() {
 
   const filteredItems = (data?.items ?? []).filter(c => {
     if (!propertyId && !buildingId && !floorId) return true;
-    const room = rooms.find(r => r.id === c.room_id);
+    const room = allRooms.find(r => r.id === c.room_id);
     if (!room) return false;
     
     if (propertyId && room.property_id !== propertyId) return false;
-    if (floorId && room.floor_id !== floorId) return true;
+    if (floorId && room.floor_id !== floorId) return false;
     if (buildingId) {
-      const floor = floors.find(f => f.id === room.floor_id);
+      const floor = allFloors.find(f => f.id === room.floor_id);
       if (floor && floor.building_id !== buildingId) return false;
     }
+    return true;
+  });
+
+  const availableRooms = allRooms.filter(r => {
+    if (floorId) return r.floor_id === floorId;
+    if (buildingId) {
+      const floor = allFloors.find(f => f.id === r.floor_id);
+      return floor?.building_id === buildingId;
+    }
+    if (propertyId) return r.property_id === propertyId;
     return true;
   });
 
@@ -143,7 +170,7 @@ export function ContractListPage() {
               setFloorId(''); setRoomId(''); setPage(1); 
             }} disabled={!propertyId}>
               <option value="">Tất cả Dãy</option>
-              {buildings.map(b => <option key={b.id} value={b.id}>Dãy {b.name}</option>)}
+              {filterBuildings.map(b => <option key={b.id} value={b.id}>Dãy {b.name}</option>)}
             </select>
 
             <select value={floorId} onChange={(e) => { 
@@ -151,16 +178,12 @@ export function ContractListPage() {
               setRoomId(''); setPage(1); 
             }} disabled={!buildingId}>
               <option value="">Tất cả Tầng</option>
-              {floors.map(f => <option key={f.id} value={f.id}>Tầng {f.floor_number}{f.name ? ` - ${f.name}` : ''}</option>)}
+              {filterFloors.map(f => <option key={f.id} value={f.id}>Tầng {f.floor_number}{f.name ? ` - ${f.name}` : ''}</option>)}
             </select>
 
             <select value={roomId} onChange={(e) => { setRoomId(e.target.value); setPage(1); }} disabled={!propertyId}>
               <option value="">Tất cả Phòng</option>
-              {rooms
-                .filter(r => !propertyId || r.property_id === propertyId)
-                .filter(r => !floorId || r.floor_id === floorId)
-                .map(r => <option key={r.id} value={r.id}>{r.room_code}</option>)
-              }
+              {availableRooms.map(r => <option key={r.id} value={r.id}>{r.room_code}</option>)}
             </select>
           </>
         )}
@@ -191,10 +214,11 @@ export function ContractListPage() {
           </thead>
           <tbody>
             {filteredItems.map((c) => {
-              const room = rooms.find(r => r.id === c.room_id);
+              // Tìm từ mảng ALL để đảm bảo luôn có dữ liệu
+              const room = allRooms.find(r => r.id === c.room_id);
               const prop = properties.find(p => p.id === room?.property_id);
-              const building = buildings.find(b => b.id === floors.find(f => f.id === room?.floor_id)?.building_id);
-              const floor = floors.find(f => f.id === room?.floor_id);
+              const floor = allFloors.find(f => f.id === room?.floor_id);
+              const building = allBuildings.find(b => b.id === floor?.building_id);
 
               return (
                 <tr key={c.id}>

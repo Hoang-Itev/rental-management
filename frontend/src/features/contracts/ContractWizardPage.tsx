@@ -122,7 +122,11 @@ export function ContractWizardPage() {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
-  const availableRooms = rooms.filter(r => {
+    const availableRooms = rooms.filter(r => {
+    // 1. CHỈ LẤY CÁC PHÒNG ĐANG TRỐNG (VACANT)
+    if (r.display_occupancy !== 'VACANT') return false; 
+
+    // 2. Lọc theo Tầng/Dãy/Khu như cũ
     if (floorId) return r.floor_id === floorId;
     if (propertyId) return r.property_id === propertyId;
     return true;

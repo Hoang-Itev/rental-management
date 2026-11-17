@@ -6,6 +6,19 @@ import { formatDateVi, formatDateTimeVi, contractStatusLabel } from '../../lib/u
 import { Badge } from '../../components/Badge';
 import { PageState } from '../../components/PageState';
 
+function translateEventType(type: string) {
+  const map: Record<string, string> = {
+    CREATED: 'Khởi tạo',
+    CONFIRMED: 'Xác nhận',
+    STARTED: 'Bắt đầu hiệu lực',
+    EXTENDED: 'Gia hạn',
+    TERMINATION_RECORDED: 'Ghi nhận thanh lý',
+    ENDED: 'Đã kết thúc',
+    CANCELLED: 'Hủy hợp đồng'
+  };
+  return map[type] || type;
+}
+
 interface EventOut {
   id: string;
   event_type: string;
@@ -81,9 +94,10 @@ export function ContractDetailPage() {
         const building = await api.get<any>(`/api/v1/buildings/${floor.building_id}`);
         const prop = await api.get<any>(`/api/v1/properties/${roomData.property_id}`);
         
-        const bName = building.name ? `Dãy ${building.name}` : '';
+               const bName = building.name ? `Dãy ${building.name}` : 'Dãy không tên';
         const fName = floor.name ? `Tầng ${floor.floor_number} - ${floor.name}` : `Tầng ${floor.floor_number}`;
-        setRoomLocation(`[${prop.name}] - ${bName ? bName + ' - ' : ''}${fName} : ${roomData.room_code}`);
+        // Hiển thị rõ ràng: [Tên Khu] - Dãy A - Tầng 1 : Phòng A101
+        setRoomLocation(`[${prop.name}] - ${bName} - ${fName} : ${roomData.room_code}`);
       } catch {
         setRoomLocation(`Phòng ${c.room_code_snapshot}`);
       }
@@ -198,7 +212,6 @@ export function ContractDetailPage() {
       <div className="page-header">
         <h1 className="page-title">Hợp đồng: {contract?.contract_code ?? '…'}</h1>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn-secondary" onClick={() => window.print()}>In bản nháp</button>
           <button className="btn-secondary" onClick={() => navigate('/hop-dong')}>← Quay lại</button>
         </div>
       </div>
@@ -321,13 +334,20 @@ export function ContractDetailPage() {
               </thead>
               <tbody>
                 {events.length === 0 && <tr><td colSpan={3} className="empty-row">Chưa có sự kiện.</td></tr>}
-                {events.map((e) => (
-                  <tr key={e.id}>
-                    <td>{formatDateTimeVi(e.occurred_at)}</td>
-                    <td>{e.event_type}</td>
-                    <td>{e.reason || '—'}</td>
-                  </tr>
-                ))}
+                                {events.map((e) => {
+                  // Trích xuất lý do từ trường details (JSONB) do backend trả về
+                  const detailReason = e.details && typeof e.details === 'object' ? (e.details as any).reason : null;
+                  // Nếu có reason ở cột chính thì dùng, không thì lấy từ details, không có thì để trống
+                  const displayReason = e.reason || detailReason || '—';
+
+                  return (
+                    <tr key={e.id}>
+                      <td>{formatDateTimeVi(e.occurred_at)}</td>
+                      <td>{translateEventType(e.event_type)}</td>
+                      <td>{displayReason}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
