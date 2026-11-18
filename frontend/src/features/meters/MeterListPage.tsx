@@ -539,10 +539,19 @@ export function MeterListPage() {
                       </td>
                       <td><span style={{ color: a.alert_type === 'OFFLINE' ? 'var(--cinnabar-3)' : 'var(--amber)', fontWeight: 600 }}>{translateAlertType(a.alert_type)}</span></td>
                       <td style={{ fontSize: 13, maxWidth: 300 }}>
-                        {a.status === 'RESOLVED' && a.resolution_note ? (
-                          <span style={{ color: 'var(--jade-2)', fontStyle: 'italic' }}>Ghi chú: {a.resolution_note}</span>
-                        ) : `Mất tín hiệu...`}
-                      </td>
+  {a.status === 'RESOLVED' && a.resolution_note ? (
+    <span style={{ color: 'var(--jade-2)', fontStyle: 'italic' }}>
+      {a.resolution_note === 'Telemetry received' ? 'Đã nhận được tín hiệu mới' : `Ghi chú: ${a.resolution_note}`}
+    </span>
+  ) : (
+    <span style={{ color: 'var(--ink-soft)' }}>
+      {a.alert_type === 'OFFLINE' && 'Đồng hồ mất kết nối quá 20 phút'}
+      {a.alert_type === 'READING_DECREASE' && 'Số điện/nước mới nhỏ hơn số cũ'}
+      {a.alert_type === 'CONFLICTING_DUPLICATE' && 'Có 2 số liệu khác nhau cùng 1 thời điểm'}
+      {a.alert_type === 'LATE_AFTER_CUTOFF' && 'Số liệu gửi về sau khi đã chốt sổ'}
+    </span>
+  )}
+</td>
                       <td>
                         <div style={{ display: 'flex', gap: 6 }}>
                           {a.status === 'OPEN' && (

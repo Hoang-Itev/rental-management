@@ -100,7 +100,7 @@ class InvoiceService:
         invoice.blocked_reason = None
         invoice.total_amount = result.total_amount
         invoice.issued_at = now
-        invoice.due_date = now.astimezone(VN).date().replace(day=5)
+        invoice.due_date = now.astimezone(VN).date() + timedelta(days=10)
         event_id = uuid4()
         trace = correlation_id or event_id
         db.add(m.OutboxEvent(

@@ -140,9 +140,16 @@ export function ContractDetailPage() {
       if (action === 'confirm') {
         await api.post(`/api/v1/contracts/${contract.id}/confirm`);
         setSuccessMsg('Đã xác nhận hợp đồng thành công.');
-      } else if (action === 'end') {
+            } else if (action === 'end') {
         await api.post(`/api/v1/contracts/${contract.id}/end`, { actual_end_date: endDate, reason: reason.trim() });
-        setSuccessMsg('Đã ghi nhận bàn giao! Hợp đồng sẽ chính thức chuyển sang "Đã kết thúc" vào 0h ngày mai (hoặc ngay lập tức nếu ngày bàn giao trong quá khứ).');
+        
+        // TỰ ĐỘNG TẠO HÓA ĐƠN NHÁP (FINAL) NGAY KHI BÀN GIAO
+        try {
+          await api.post('/api/v1/final-invoices', { contract_id: contract.id });
+          setSuccessMsg('Đã ghi nhận bàn giao. Hệ thống đã tạo Hóa đơn Nháp (vui lòng vào Đồng hồ chốt số để phát hành).');
+                } catch {
+          setSuccessMsg('Đã ghi nhận bàn giao. Chưa thể tạo hóa đơn do thiếu số điện/nước cuối kỳ.');
+        }
       } else if (action === 'cancel') {
         await api.post(`/api/v1/contracts/${contract.id}/cancel`, { reason: reason.trim() });
         setSuccessMsg('Đã hủy hợp đồng thành công.');
