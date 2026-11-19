@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api, ApiError, getAccessToken } from '../../lib/api/client';
 import type { ContractOut, Page, TermOut, TenantOut } from '../../lib/api/types';
-import { formatDateVi, formatDateTimeVi, contractStatusLabel } from '../../lib/utils/format';
+import { formatDateVi, formatDateTimeVi } from '../../lib/utils/format';
 import { Badge } from '../../components/Badge';
 import { PageState } from '../../components/PageState';
 
@@ -239,7 +239,7 @@ export function ContractDetailPage() {
             <h3 style={{ marginBottom: 12 }}>Thông tin Hợp đồng & Phòng</h3>
             <div className="detail-grid">
               <div className="detail-item"><label>Phòng (Vị trí)</label><div>{roomLocation}</div></div>
-              <div className="detail-item"><label>Trạng thái HĐ</label><div><Badge value={contract.status} /> {contractStatusLabel(contract.status)}</div></div>
+              <div className="detail-item"><label>Trạng thái HĐ</label><div><Badge value={contract.status} /></div></div>
               <div className="detail-item"><label>Bắt đầu</label><div>{formatDateVi(contract.start_date)}</div></div>
               <div className="detail-item"><label>Kết thúc (bao gồm)</label><div>{formatDateVi(contract.end_date)}</div></div>
               

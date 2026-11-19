@@ -13,7 +13,7 @@ class TenantError(Exception):
         super().__init__(message)
 
 def invalid(message): return TenantError(409,'CONFLICT',message)
-def missing(what): return TenantError(404,'NOT_FOUND',f'{what} not found')
+def missing(what): return TenantError(404,'NOT_FOUND',f'Không tìm thấy {what}')
 
 VN = timezone(timedelta(hours=7))  # Vietnam has no DST
 
@@ -22,7 +22,7 @@ def _boundary(day: date) -> datetime:
 
 def _end_exclusive(end: date) -> date:
     if end == date.max:
-        raise invalid('End date is out of supported range')
+        raise invalid('Ngày kết thúc vượt quá giới hạn hỗ trợ.')
     return date.fromordinal(end.toordinal()+1)
 
 class TenantService:
@@ -39,11 +39,11 @@ class TenantService:
         try:
             result=self.room.validate(room_id)
         except RoomUnavailable as exc:
-            raise TenantError(503,'DEPENDENCY_UNAVAILABLE','Room Service validation unavailable') from exc
+            raise TenantError(503,'DEPENDENCY_UNAVAILABLE','Dịch vụ Phòng không phản hồi (Room Service validation unavailable)') from exc
         if not result.exists:
-            raise missing('Room')
+            raise missing('Phòng')
         if operational and not result.operational:
-            raise invalid('Room, floor, building or property is INACTIVE')
+            raise invalid('Phòng, tầng, dãy hoặc khu trọ đang bị vô hiệu hóa (Ngừng hoạt động).')
         return result
 
     @staticmethod
@@ -61,7 +61,7 @@ class TenantService:
                 row=repo.add(self.db,m.Tenant(id=uuid4(),**data.model_dump()))
             return row
         except IntegrityError as exc:
-            raise invalid('Tenant database constraint violation') from exc
+            raise invalid('Dữ liệu khách thuê vi phạm ràng buộc cơ sở dữ liệu.') from exc
 
     def patch_tenant(self, tenant_id: UUID, data: s.TenantPatch):
         try:
@@ -71,7 +71,7 @@ class TenantService:
                 self.db.flush()
             return row
         except IntegrityError as exc:
-            raise invalid('Tenant database constraint violation') from exc
+            raise invalid('Dữ liệu khách thuê vi phạm ràng buộc cơ sở dữ liệu.') from exc
 
     def contracts(self, page=1, page_size=20, room_id=None, status=None):
         c=[]
@@ -96,9 +96,9 @@ class TenantService:
             if contract.status == 'CANCELLED':
                 return contract
             if contract.status not in ('DRAFT', 'SCHEDULED'):
-                raise invalid('Only unstarted contracts can be cancelled')
+                raise invalid('Chỉ có thể hủy hợp đồng chưa bắt đầu hiệu lực.')
             if contract.actual_end_date is not None:
-                raise invalid('Contract already has a recorded handover')
+                raise invalid('Hợp đồng đã được ghi nhận bàn giao, không thể thực hiện thao tác này.')
             contract.status = 'CANCELLED'
             repo.add(self.db, m.ContractEvent(
                 id=uuid4(), contract_id=contract.id, event_type='CANCELLED',
@@ -123,44 +123,44 @@ class TenantService:
                 self._event(self.db,row.id,'CREATED',actor_id=actor_id)
             return row
         except IntegrityError as exc:
-            raise invalid('Duplicate contract code or invalid database constraint') from exc
+            raise invalid('Mã hợp đồng bị trùng hoặc dữ liệu không hợp lệ.') from exc
 
     def patch_contract(self, contract_id: UUID, data: s.ContractPatch):
         try:
             with self.db.begin():
                 row = self._get(m.Contract, contract_id, lock=True)
                 if row.status != 'DRAFT':
-                    raise invalid('Only DRAFT contracts can be edited')
+                    raise invalid('Chỉ có thể chỉnh sửa hợp đồng ở trạng thái Nháp (DRAFT).')
                 changes = data.model_dump(exclude_unset=True)
                 start = changes.get('start_date', row.start_date)
                 end = changes.get('end_date', row.end_date)
                 if end < start or end == date.max:
-                    raise invalid('Invalid contract date interval')
+                    raise invalid('Khoảng thời gian của hợp đồng không hợp lệ.')
                 if 'representative_tenant_id' in changes:
                     self._get(m.Tenant, changes['representative_tenant_id'])
                 terms = repo.terms(self.db, contract_id)
                 if 'start_date' in changes:
                     if not terms:
-                        raise invalid('Missing initial term')
+                        raise invalid('Thiếu điều khoản giá ban đầu.')
                     first = terms[0]
                     if first.effective_to is not None and start >= first.effective_to:
-                        raise invalid('New start date invalidates first price term')
+                        raise invalid('Ngày bắt đầu mới làm sai lệch điều khoản giá đầu tiên.')
                     if len(terms) > 1 and start >= terms[1].effective_from:
-                        raise invalid('New start date crosses the next price term')
+                        raise invalid('Ngày bắt đầu mới vắt qua điều khoản giá tiếp theo.')
                     first.effective_from = start
                 if 'end_date' in changes:
                     exclusive_end = _end_exclusive(end)
                     for term in terms:
                         if term.effective_from >= exclusive_end:
-                            raise invalid('Price term starts after new contract end')
+                            raise invalid('Điều khoản giá bắt đầu sau ngày kết thúc hợp đồng mới.')
                         if term.effective_to is not None and term.effective_to > exclusive_end:
-                            raise invalid('Price term extends beyond new contract end')
+                            raise invalid('Điều khoản giá vượt quá ngày kết thúc hợp đồng mới.')
                 for key, value in changes.items():
                     setattr(row, key, value)
                 self.db.flush()
             return row
         except IntegrityError as exc:
-            raise invalid('Duplicate contract code or invalid database constraint') from exc
+            raise invalid('Mã hợp đồng bị trùng hoặc dữ liệu không hợp lệ.') from exc
 
     def terms(self,contract_id):
         self._get(m.Contract,contract_id)
@@ -170,24 +170,24 @@ class TenantService:
         try:
             with self.db.begin():
                 contract=self._get(m.Contract,contract_id,lock=True)
-                if contract.status!='DRAFT': raise invalid('Price terms can only be changed while DRAFT')
+                if contract.status!='DRAFT': raise invalid('Chỉ có thể thay đổi điều khoản giá khi hợp đồng ở trạng thái Nháp (DRAFT).')
                 if not (contract.start_date < data.effective_from <= contract.end_date):
-                    raise invalid('New term must start after the first term and inside contract period')
+                    raise invalid('Điều khoản giá mới phải bắt đầu sau điều khoản đầu tiên và nằm trong thời hạn hợp đồng.')
                 if data.effective_to is not None and data.effective_to > _end_exclusive(contract.end_date):
-                    raise invalid('Term extends beyond contract end')
+                    raise invalid('Điều khoản giá vượt quá ngày kết thúc hợp đồng.')
                 terms=repo.terms(self.db,contract_id)
-                if not terms: raise invalid('Missing initial term')
+                if not terms: raise invalid('Thiếu điều khoản giá ban đầu.')
                 previous=terms[-1]
                 if data.effective_from<=previous.effective_from:
-                    raise invalid('Term versions must increase in time')
+                    raise invalid('Thời gian của các phiên bản giá phải tăng dần.')
                 if previous.effective_to is not None and previous.effective_to!=data.effective_from:
-                    raise invalid('Term versions must be contiguous')
+                    raise invalid('Các phiên bản giá phải liên tục, không được hở ngày.')
                 previous.effective_to=data.effective_from
                 self.db.flush()
                 row=repo.add(self.db,m.ContractTerm(id=uuid4(),contract_id=contract_id,**data.model_dump()))
             return row
         except IntegrityError as exc:
-            raise invalid('Overlapping/invalid contract term versions') from exc
+            raise invalid('Các phiên bản điều khoản giá bị trùng lặp hoặc không hợp lệ.') from exc
 
     def events(self,contract_id):
         self._get(m.Contract,contract_id)
@@ -198,23 +198,23 @@ class TenantService:
             with self.db.begin():
                 contract=self._get(m.Contract,contract_id,lock=True)
                 if contract.status=='SCHEDULED': return contract  # safe retry
-                if contract.status!='DRAFT': raise invalid('Only DRAFT contracts can be confirmed')
+                if contract.status!='DRAFT': raise invalid('Chỉ có thể xác nhận hợp đồng ở trạng thái Nháp (DRAFT).')
                 tenant=self._get(m.Tenant,contract.representative_tenant_id)
                 if not tenant.email:
-                    raise invalid('Representative payer must have an email address')
+                    raise invalid('Người đại diện thanh toán bắt buộc phải có địa chỉ email.')
                 terms=repo.terms(self.db,contract_id)
                 if not terms or terms[0].effective_from!=contract.start_date:
-                    raise invalid('Price terms do not begin at contract start')
+                    raise invalid('Điều khoản giá không bắt đầu từ ngày bắt đầu hợp đồng.')
                 expected=contract.start_date
                 for term in terms:
-                    if term.effective_from!=expected: raise invalid('Price term versions contain a gap')
+                    if term.effective_from!=expected: raise invalid('Các phiên bản giá không liên tục (bị hở ngày).')
                     expected=term.effective_to or _end_exclusive(contract.end_date)
                 if expected < _end_exclusive(contract.end_date):
-                    raise invalid('Price terms do not cover entire contract')
+                    raise invalid('Điều khoản giá không bao phủ toàn bộ thời hạn hợp đồng.')
                 if terms[-1].effective_to is not None and terms[-1].effective_to > _end_exclusive(contract.end_date):
-                    raise invalid('Last term extends beyond contract end')
+                    raise invalid('Điều khoản giá cuối cùng vượt quá ngày kết thúc hợp đồng.')
                 if repo.overlapping(self.db,contract.room_id,contract.start_date,contract.end_date,contract.id):
-                    raise invalid('Room has a confirmed overlapping contract')
+                    raise invalid('Phòng này đã có hợp đồng khác chiếm chỗ trong khoảng thời gian này. Vui lòng kiểm tra lại lịch.')
                 room=self._room(contract.room_id,operational=True)
                 contract.room_code_snapshot=room.room_code
                 contract.status='SCHEDULED'
@@ -224,7 +224,7 @@ class TenantService:
                 self.db.flush()  # GiST EXCLUDE is authoritative for concurrent confirms
             return contract
         except IntegrityError as exc:
-            raise invalid('Overlapping confirmed contract or database constraint violation') from exc
+            raise invalid('Hợp đồng bị trùng lịch hoặc vi phạm ràng buộc dữ liệu.') from exc
 
     @staticmethod
     def _outbox(db: Session, contract: m.Contract, kind: str, effective_at: datetime):
@@ -261,25 +261,25 @@ class TenantService:
                 if c.status == 'ACTIVE':
                     return c
                 if c.status != 'SCHEDULED':
-                    raise invalid('Only SCHEDULED contracts can activate')
+                    raise invalid('Chỉ có thể kích hoạt hợp đồng đã được lên lịch (SCHEDULED).')
                 if now < _boundary(c.start_date):
-                    raise invalid('Contract start is in the future')
+                    raise invalid('Ngày bắt đầu hợp đồng đang ở tương lai.')
                 if now >= _boundary(_end_exclusive(c.end_date)):
-                    raise invalid('Contract scheduled period has already expired')
+                    raise invalid('Thời hạn dự kiến của hợp đồng đã trôi qua.')
                 if repo.active_occupant(self.db, c.room_id, c.id):
-                    raise invalid('Room already has an ACTIVE or EXPIRED_PENDING contract')
+                    raise invalid('Phòng đã có hợp đồng đang hiệu lực hoặc đang chờ bàn giao.')
                 if repo.actual_occupancy_intersects_start(self.db, c.room_id, c.start_date, c.id):
-                    raise invalid('Contract start overlaps recorded actual occupancy')
+                    raise invalid('Ngày bắt đầu hợp đồng bị trùng với thời gian lưu trú thực tế đã ghi nhận.')
                 state = self._room(c.room_id, operational=True)
                 if state.occupancy_contract_id not in (None, c.id):
-                    raise invalid('Room is physically occupied; retry after ContractEnded')
+                    raise invalid('Phòng đang có người ở thực tế. Vui lòng thử lại sau khi hợp đồng cũ kết thúc.')
                 c.status = 'ACTIVE'
                 self._event(self.db, c.id, 'STARTED', details={'effective_at': _boundary(c.start_date).isoformat()})
                 self._outbox(self.db, c, 'ContractStarted', _boundary(c.start_date))
                 self.db.flush()
             return c
         except IntegrityError as exc:
-            raise invalid('Concurrent contract activation conflict') from exc
+            raise invalid('Xung đột khi kích hoạt hợp đồng cùng lúc.') from exc
 
     def mark_expired(self, contract_id: UUID, *, now: datetime | None = None):
         now = now or datetime.now(timezone.utc)
@@ -290,9 +290,9 @@ class TenantService:
             if c.status == 'EXPIRED_PENDING':
                 return c
             if c.actual_end_date is not None:
-                raise invalid('Contract handover already recorded')
+                raise invalid('Đã ghi nhận bàn giao hợp đồng.')
             if c.status != 'ACTIVE' or now < _boundary(_end_exclusive(c.end_date)):
-                raise invalid('Contract has not reached expiry')
+                raise invalid('Hợp đồng chưa đến ngày hết hạn.')
             c.status = 'EXPIRED_PENDING'
             self.db.flush()
         # EXPIRED_PENDING is still physically OCCUPIED. No ContractEnded.
@@ -304,36 +304,36 @@ class TenantService:
             with self.db.begin():
                 c = self._get(m.Contract, contract_id, lock=True)
                 if c.actual_end_date is not None:
-                    raise invalid('Cannot renew after handover is recorded')
+                    raise invalid('Không thể gia hạn sau khi đã ghi nhận bàn giao.')
                 if c.status not in ('SCHEDULED', 'ACTIVE', 'EXPIRED_PENDING'):
-                    raise invalid('Only confirmed, not-ended contracts can renew')
+                    raise invalid('Chỉ có thể gia hạn hợp đồng đã xác nhận và chưa kết thúc.')
                 old_end = c.end_date
                 if new_end_date <= old_end or new_end_date == date.max:
-                    raise invalid('New end date must extend contract')
+                    raise invalid('Ngày kết thúc mới phải kéo dài hơn ngày kết thúc cũ.')
                 if repo.overlapping(self.db, c.room_id, _end_exclusive(old_end), new_end_date, c.id):
-                    raise invalid('Extension overlaps another confirmed contract')
+                    raise invalid('Thời gian gia hạn bị trùng với một hợp đồng đã xác nhận khác.')
                 terms = repo.terms(self.db, c.id)
                 if not terms:
-                    raise invalid('Contract has no price terms')
+                    raise invalid('Hợp đồng chưa có điều khoản giá.')
                 last = terms[-1]
                 next_day = _end_exclusive(old_end)
                 if new_terms is not None:
                     if new_terms.effective_from != next_day:
-                        raise invalid('Renewal price must start on day after previous end')
+                        raise invalid('Giá gia hạn phải bắt đầu từ ngày tiếp theo sau ngày kết thúc cũ.')
                     if (
                         new_terms.effective_to is not None
                         and new_terms.effective_to != _end_exclusive(new_end_date)
                     ):
-                        raise invalid('Renewal price must cover the full extended period')
+                        raise invalid('Giá gia hạn phải bao phủ toàn bộ thời gian được kéo dài.')
                     if last.effective_to is not None and last.effective_to != next_day:
-                        raise invalid('Existing price history does not cover original period')
+                        raise invalid('Lịch sử giá hiện tại không bao phủ hết thời gian ban đầu.')
                     last.effective_to = next_day
                     self.db.flush()
                     repo.add(self.db, m.ContractTerm(id=uuid4(), contract_id=c.id,
                                                      **new_terms.model_dump()))
                 elif last.effective_to is not None:
                     if last.effective_to != next_day:
-                        raise invalid('Cannot renew through a gap in price history')
+                        raise invalid('Không thể gia hạn vì lịch sử giá đang bị hở ngày.')
                     last.effective_to = None
                 c.end_date = new_end_date
                 if c.status == 'EXPIRED_PENDING':
@@ -347,7 +347,7 @@ class TenantService:
                 self.db.flush()
             return c
         except IntegrityError as exc:
-            raise invalid('Extension violates confirmed contract period exclusion') from exc
+            raise invalid('Thời gian gia hạn vi phạm quy tắc chống trùng lịch hợp đồng.') from exc
 
     
     def end_contract(self, contract_id: UUID, actual_end_date: date, reason: str,
@@ -356,9 +356,9 @@ class TenantService:
         if now.tzinfo is None:
             raise ValueError('now must be timezone-aware')
         if actual_end_date > now.astimezone(VN).date():
-            raise invalid('Cannot end a contract on a future date')
+            raise invalid('Không thể kết thúc hợp đồng với ngày bàn giao ở tương lai.')
         if not reason.strip():
-            raise invalid('Termination reason is required')
+            raise invalid('Bắt buộc phải nhập lý do kết thúc/bàn giao.')
 
         try:
             with self.db.begin():
@@ -367,17 +367,17 @@ class TenantService:
                 if c.status == 'ENDED':
                     if c.actual_end_date == actual_end_date:
                         return c
-                    raise invalid('Contract already ended on another date')
+                    raise invalid('Hợp đồng đã được kết thúc với một ngày khác.')
 
                 if c.status not in ('ACTIVE', 'EXPIRED_PENDING'):
-                    raise invalid('Only occupied contracts can end')
+                    raise invalid('Chỉ có thể kết thúc hợp đồng đang có người thuê.')
 
                 if actual_end_date < c.start_date:
-                    raise invalid('End date before contract start')
+                    raise invalid('Ngày kết thúc không được trước ngày bắt đầu hợp đồng.')
 
                 if c.actual_end_date is not None:
                     if c.actual_end_date != actual_end_date:
-                        raise invalid('Handover date already recorded')
+                        raise invalid('Ngày bàn giao đã được ghi nhận trước đó.')
                 else:
                     c.actual_end_date = actual_end_date
                     c.end_reason = reason
@@ -401,5 +401,4 @@ class TenantService:
             return c
 
         except IntegrityError as exc:
-            raise invalid('Unable to record actual contract end') from exc
-
+            raise invalid('Không thể ghi nhận ngày kết thúc thực tế của hợp đồng.') from exc
