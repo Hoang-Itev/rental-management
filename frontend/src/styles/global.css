@@ -513,3 +513,16 @@ body.dawn .lantern-svg {
   z-index: -1;
 }
 
+/* Ép thanh Navbar xuống dưới cùng khi có Modal */
+body:has(.modal-backdrop) .top-nav {
+  z-index: 0 !important;
+}
+
+/* Đảm bảo Modal luôn nổi lên trên cùng */
+.modal-backdrop {
+  z-index: 99999 !important;
+}
+
+.modal-backdrop .room-modal {
+  z-index: 100000 !important;
+}

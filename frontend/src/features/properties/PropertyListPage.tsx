@@ -29,7 +29,7 @@ export function PropertyListPage() {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  const [confirm, setConfirm] = useState<{ property: PropertyOut } | null>(null);
+  const [confirm, setConfirm] = useState<{ property: PropertyOut, action: 'deactivate' | 'activate' } | null>(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
 
   const load = useCallback(async () => {
@@ -92,15 +92,20 @@ export function PropertyListPage() {
     }
   }
 
-  async function doDeactivate() {
+  async function doConfirmAction() {
     if (!confirm) return;
     setConfirmLoading(true);
     try {
-      await api.delete(`/api/v1/properties/${confirm.property.id}`);
+      if (confirm.action === 'deactivate') {
+        await api.delete(`/api/v1/properties/${confirm.property.id}`);
+      } else {
+        await api.patch(`/api/v1/properties/${confirm.property.id}`, { status: 'ACTIVE' });
+      }
       setConfirm(null);
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Không thể vô hiệu hóa.');
+      setError(err instanceof ApiError ? err.message : 'Thao tác thất bại.');
+      setConfirm(null);
     } finally {
       setConfirmLoading(false);
     }
@@ -128,12 +133,10 @@ export function PropertyListPage() {
               
               {/* TRANG TRÍ: Cửa sổ & Đèn lồng */}
               <div className="property-decorations">
-                {/* Cửa sổ gỗ */}
                 <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--gold-3)' }}>
                   <rect x="3" y="3" width="18" height="18" rx="2" />
                   <path d="M3 12h18M12 3v18" />
                 </svg>
-                {/* Đèn lồng cổ */}
                 <svg className="lantern-svg" width="24" height="30" viewBox="0 0 24 30" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--cinnabar-3)' }}>
                   <path d="M12 2v4" />
                   <rect x="8" y="6" width="8" height="16" rx="4" fill="var(--cinnabar-2)" fillOpacity="0.3" />
@@ -143,7 +146,7 @@ export function PropertyListPage() {
               </div>
 
               {/* NỘI DUNG KHU TRỌ */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16, position: 'relative', zIndex: 1 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16, position: 'relative', zIndex: 1, opacity: p.status === 'INACTIVE' ? 0.6 : 1 }}>
                 <div>
                   <h3 style={{ margin: 0, fontSize: 26, color: 'var(--gold-2)', fontFamily: "'Cormorant Garamond', serif" }}>
                     {p.name}
@@ -165,13 +168,23 @@ export function PropertyListPage() {
                     <button className="btn-secondary" onClick={() => openEdit(p)}>
                       Sửa
                     </button>
-                    {p.status === 'ACTIVE' && (
+                    
+                    {/* THÊM NÚT VÔ HIỆU HÓA / MỞ LẠI */}
+                    {p.status === 'ACTIVE' ? (
                       <button
                         className="btn-secondary"
                         style={{ color: 'var(--cinnabar-3)', borderColor: 'var(--cinnabar-2)' }}
-                        onClick={() => setConfirm({ property: p })}
+                        onClick={() => setConfirm({ property: p, action: 'deactivate' })}
                       >
                         Vô hiệu hóa
+                      </button>
+                    ) : (
+                      <button
+                        className="btn-secondary"
+                        style={{ color: 'var(--jade-hi)', borderColor: 'var(--jade-2)' }}
+                        onClick={() => setConfirm({ property: p, action: 'activate' })}
+                      >
+                        Mở lại
                       </button>
                     )}
                   </div>
@@ -194,7 +207,7 @@ export function PropertyListPage() {
 
       {/* MODAL THÊM/SỬA KHU TRỌ */}
       {showForm && (
-        <div className="modal-backdrop active" onClick={(e) => e.target === e.currentTarget && setShowForm(false)}>
+        <div className="modal-backdrop active" style={{ zIndex: 9999 }} onClick={(e) => e.target === e.currentTarget && setShowForm(false)}>
           <div className="room-modal" style={{ width: 520 }}>
             <button className="modal-close" onClick={() => setShowForm(false)}>×</button>
             <h2 className="modal-title">{editing ? 'Sửa khu trọ' : 'Thêm khu trọ'}</h2>
@@ -223,16 +236,20 @@ export function PropertyListPage() {
         </div>
       )}
 
-      {/* CONFIRM XÓA */}
+      {/* CONFIRM XÓA / MỞ LẠI */}
       {confirm && (
         <ConfirmDialog
-          title="Vô hiệu hóa khu trọ?"
-          message={`Khu trọ "${confirm.property.name}" sẽ chuyển sang INACTIVE. Chỉ thực hiện được khi không còn dãy ACTIVE.`}
-          confirmLabel="Vô hiệu hóa"
-          variant="danger"
+          title={confirm.action === 'deactivate' ? "Vô hiệu hóa khu trọ?" : "Mở lại khu trọ?"}
+          message={
+            confirm.action === 'deactivate' 
+              ? `Khu trọ "${confirm.property.name}" và TOÀN BỘ phòng bên trong sẽ chuyển sang trạng thái Ngừng. Chỉ thực hiện được khi không có phòng nào đang cho thuê.`
+              : `Khu trọ "${confirm.property.name}" sẽ được mở lại. Bạn có chắc chắn không?`
+          }
+          confirmLabel={confirm.action === 'deactivate' ? "Vô hiệu hóa" : "Mở lại"}
+          variant={confirm.action === 'deactivate' ? "danger" : "primary"}
           loading={confirmLoading}
           onCancel={() => setConfirm(null)}
-          onConfirm={doDeactivate}
+          onConfirm={doConfirmAction}
         />
       )}
 

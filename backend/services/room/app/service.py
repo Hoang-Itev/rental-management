@@ -7,6 +7,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -34,13 +35,10 @@ class RoomService:
     @contextmanager
     def atomic(self):
         try:
-            # A caller may have opened an implicit read transaction first.
-            # In that case use a SAVEPOINT and let the caller own the outer TX.
             transaction = self.session.begin_nested() if self.session.in_transaction() else self.session.begin()
             with transaction:
                 yield
         except IntegrityError as exc:
-            # Unique, FK and check violations are expected races; don't leak DB internals.
             raise conflict("Database constraint violation") from exc
 
     def need(self, model, object_id: UUID, *, lock: bool = False):
@@ -49,6 +47,132 @@ class RoomService:
             raise missing(model.__name__)
         return row
 
+    # --- PROPERTY ---
+    def patch_property(self, property_id: UUID, data: s.PropertyPatch):
+        with self.atomic():
+            row = self.need(m.Property, property_id, lock=True)
+            fields = data.model_dump(exclude_unset=True)
+            
+            if "status" in fields and row.status != fields["status"]:
+                new_status = fields["status"]
+                if new_status == "INACTIVE":
+                    has_occupied = self.session.scalar(
+                        select(m.Room.id).join(m.Floor, m.Room.floor_id == m.Floor.id)
+                        .join(m.Building, m.Floor.building_id == m.Building.id)
+                        .where(m.Building.property_id == property_id, m.Room.occupancy_contract_id.is_not(None))
+                        .limit(1)
+                    ) is not None
+                    if has_occupied:
+                        raise conflict("Không thể vô hiệu hóa khu trọ vì đang có phòng cho thuê.")
+                
+                # CASCADE XUỐNG CON
+                self.session.execute(update(m.Building).where(m.Building.property_id == property_id).values(status=new_status))
+                self.session.execute(update(m.Floor).where(m.Floor.building_id.in_(
+                    select(m.Building.id).where(m.Building.property_id == property_id)
+                )).values(status=new_status))
+                self.session.execute(update(m.Room).where(m.Room.property_id == property_id).values(status=new_status))
+                
+            for key, value in fields.items():
+                setattr(row, key, value)
+            self.session.flush()
+        return row
+
+    # --- BUILDING ---
+    def patch_building(self, building_id: UUID, data: s.BuildingPatch):
+        with self.atomic():
+            row = self.need(m.Building, building_id, lock=True)
+            fields = data.model_dump(exclude_unset=True)
+            
+            if "status" in fields and row.status != fields["status"]:
+                new_status = fields["status"]
+                if new_status == "INACTIVE":
+                    has_occupied = self.session.scalar(
+                        select(m.Room.id).join(m.Floor, m.Room.floor_id == m.Floor.id)
+                        .where(m.Floor.building_id == building_id, m.Room.occupancy_contract_id.is_not(None))
+                        .limit(1)
+                    ) is not None
+                    if has_occupied:
+                        raise conflict("Không thể vô hiệu hóa dãy vì đang có phòng cho thuê.")
+                elif new_status == "ACTIVE":
+                    if self.need(m.Property, row.property_id).status != "ACTIVE":
+                        raise conflict("Khu trọ đang vô hiệu hóa. Hãy mở lại khu trọ trước.")
+                
+                # CASCADE XUỐNG CON
+                self.session.execute(update(m.Floor).where(m.Floor.building_id == building_id).values(status=new_status))
+                self.session.execute(update(m.Room).where(m.Room.floor_id.in_(
+                    select(m.Floor.id).where(m.Floor.building_id == building_id)
+                )).values(status=new_status))
+                
+            try:
+                for key, value in fields.items():
+                    setattr(row, key, value)
+                self.session.flush()
+            except IntegrityError:
+                raise conflict("Tên dãy này đã tồn tại trong khu trọ.")
+        return row
+
+    # --- FLOOR ---
+    def patch_floor(self, floor_id: UUID, data: s.FloorPatch):
+        with self.atomic():
+            row = self.need(m.Floor, floor_id, lock=True)
+            fields = data.model_dump(exclude_unset=True)
+            
+            if "status" in fields and row.status != fields["status"]:
+                new_status = fields["status"]
+                if new_status == "INACTIVE":
+                    has_occupied = self.session.scalar(
+                        select(m.Room.id).where(m.Room.floor_id == floor_id, m.Room.occupancy_contract_id.is_not(None)).limit(1)
+                    ) is not None
+                    if has_occupied:
+                        raise conflict("Không thể vô hiệu hóa tầng vì đang có phòng cho thuê.")
+                elif new_status == "ACTIVE":
+                    building = self.need(m.Building, row.building_id)
+                    if building.status != "ACTIVE":
+                        raise conflict("Dãy đang vô hiệu hóa. Hãy mở lại dãy trước.")
+                
+                # CASCADE XUỐNG CON
+                self.session.execute(update(m.Room).where(m.Room.floor_id == floor_id).values(status=new_status))
+                
+            try:
+                for key, value in fields.items():
+                    setattr(row, key, value)
+                self.session.flush()
+            except IntegrityError:
+                raise conflict("Số tầng này đã tồn tại trong dãy.")
+        return row
+
+    # --- ROOM ---
+    def patch_room(self, room_id: UUID, data: s.RoomPatch):
+        with self.atomic():
+            row = self.need(m.Room, room_id, lock=True)
+            fields = data.model_dump(exclude_unset=True)
+            
+            if "status" in fields and row.status != fields["status"]:
+                new_status = fields["status"]
+                if new_status == "INACTIVE":
+                    if row.occupancy_contract_id is not None:
+                        raise conflict("Không thể vô hiệu hóa phòng đang có người thuê.")
+                elif new_status == "ACTIVE":
+                    # CASCADE NGƯỢC LÊN CHA: Nếu phòng bật ACTIVE, cấp cha cũng phải bật ACTIVE
+                    floor = self.need(m.Floor, row.floor_id)
+                    if floor.status != "ACTIVE":
+                        floor.status = "ACTIVE"
+                    building = self.need(m.Building, floor.building_id)
+                    if building.status != "ACTIVE":
+                        building.status = "ACTIVE"
+                    prop = self.need(m.Property, building.property_id)
+                    if prop.status != "ACTIVE":
+                        prop.status = "ACTIVE"
+            
+            try:
+                for field, value in fields.items():
+                    setattr(row, field, value)
+                self.session.flush()
+            except IntegrityError:
+                raise conflict("Mã phòng đã tồn tại trong khu trọ này.")
+        return row
+
+    # (Các hàm list, get, create giữ nguyên như file trước của bạn)
     def list_properties(self, page: int, page_size: int):
         return repo.page(self.session, m.Property, page_number=page, page_size=page_size, order_by=m.Property.name)
 
@@ -58,18 +182,6 @@ class RoomService:
     def create_property(self, data: s.PropertyCreate):
         with self.atomic():
             row = repo.add(self.session, m.Property(id=uuid4(), **data.model_dump()))
-        return row
-
-    def patch_property(self, property_id: UUID, data: s.PropertyPatch):
-        with self.atomic():
-            row = self.need(m.Property, property_id, lock=True)
-            fields = data.model_dump(exclude_unset=True)
-            if fields.get("status") == "INACTIVE" and row.status == "ACTIVE":
-                if repo.any_active(self.session, m.Building, m.Building.property_id, property_id):
-                    raise conflict("Deactivate active buildings first")
-            for key, value in fields.items():
-                setattr(row, key, value)
-            self.session.flush()
         return row
 
     def list_buildings(self, property_id: UUID, page: int, page_size: int):
@@ -84,23 +196,8 @@ class RoomService:
         with self.atomic():
             prop = self.need(m.Property, property_id, lock=True)
             if prop.status != "ACTIVE":
-                raise conflict("Property is inactive")
+                raise conflict("Khu trọ đang bị vô hiệu hóa.")
             row = repo.add(self.session, m.Building(id=uuid4(), property_id=property_id, name=data.name, status="ACTIVE"))
-        return row
-
-    def patch_building(self, building_id: UUID, data: s.BuildingPatch):
-        with self.atomic():
-            row = self.need(m.Building, building_id, lock=True)
-            fields = data.model_dump(exclude_unset=True)
-            if fields.get("status") == "INACTIVE" and row.status == "ACTIVE":
-                if repo.any_active(self.session, m.Floor, m.Floor.building_id, building_id):
-                    raise conflict("Deactivate active floors first")
-            if fields.get("status") == "ACTIVE" and row.status != "ACTIVE":
-                if self.need(m.Property, row.property_id, lock=True).status != "ACTIVE":
-                    raise conflict("Parent property is inactive")
-            for key, value in fields.items():
-                setattr(row, key, value)
-            self.session.flush()
         return row
 
     def list_floors(self, building_id: UUID, page: int, page_size: int):
@@ -115,25 +212,8 @@ class RoomService:
         with self.atomic():
             building = self.need(m.Building, building_id, lock=True)
             if building.status != "ACTIVE" or self.need(m.Property, building.property_id, lock=True).status != "ACTIVE":
-                raise conflict("Building or property is inactive")
+                raise conflict("Dãy hoặc khu trọ đang bị vô hiệu hóa.")
             row = repo.add(self.session, m.Floor(id=uuid4(), building_id=building_id, **data.model_dump(), status="ACTIVE"))
-        return row
-
-    def patch_floor(self, floor_id: UUID, data: s.FloorPatch):
-        with self.atomic():
-            row = self.need(m.Floor, floor_id, lock=True)
-            fields = data.model_dump(exclude_unset=True)
-            if fields.get("status") == "INACTIVE" and row.status == "ACTIVE":
-                if repo.any_active(self.session, m.Room, m.Room.floor_id, floor_id):
-                    raise conflict("Deactivate active rooms first")
-            if fields.get("status") == "ACTIVE" and row.status != "ACTIVE":
-                building = self.need(m.Building, row.building_id, lock=True)
-                prop = self.need(m.Property, building.property_id, lock=True)
-                if building.status != "ACTIVE" or prop.status != "ACTIVE":
-                    raise conflict("Parent building or property is inactive")
-            for key, value in fields.items():
-                setattr(row, key, value)
-            self.session.flush()
         return row
 
     def list_rooms(self, page: int, page_size: int, property_id: UUID | None = None,
@@ -160,7 +240,7 @@ class RoomService:
         building = self.need(m.Building, floor.building_id, lock=True)
         prop = self.need(m.Property, building.property_id, lock=True)
         if any(row.status != "ACTIVE" for row in (floor, building, prop)):
-            raise conflict("Floor, building or property is inactive")
+            raise conflict("Tầng, dãy hoặc khu trọ đang bị vô hiệu hóa.")
         return floor, building, prop
 
     @staticmethod
@@ -180,13 +260,12 @@ class RoomService:
             return None
         batch = event.payload.get("_batch")
         if not isinstance(batch, dict) or batch.get("fingerprint") != fingerprint:
-            raise conflict("Idempotency-Key was already used for a different request")
+            raise conflict("Idempotency-Key đã được sử dụng cho một yêu cầu khác.")
         ids = [UUID(item) for item in batch["room_ids"]]
         rooms = [self.need(m.Room, item) for item in ids]
         return rooms
 
-    def create_rooms(self, floor_id: UUID, data: s.RoomBulkCreate,
-                     idempotency_key: str | None = None, correlation_id: UUID | None = None):
+    def create_rooms(self, floor_id: UUID, data: s.RoomBulkCreate, idempotency_key: str | None = None, correlation_id: UUID | None = None):
         key = self._idempotency_key(floor_id, idempotency_key)
         fingerprint = self._fingerprint(floor_id, data)
         try:
@@ -196,19 +275,16 @@ class RoomService:
                     if replay is not None:
                         return replay
                 floor, building, prop = self._floor_lineage(floor_id)
-                # Re-check after acquiring the floor row lock.
-                # A concurrent request may have committed the same batch
-                # while this transaction was waiting for the lock.
                 if key is not None:
                     replay = self._replay(key, fingerprint)
                     if replay is not None:
                         return replay
                 for item in data.rooms:
                     if item.property_id is not None and item.property_id != prop.id:
-                        raise conflict("Floor does not belong to requested property")
+                        raise conflict("Tầng không thuộc khu trọ đã chọn.")
                 codes = [item.room_code for item in data.rooms]
                 if repo.code_exists(self.session, prop.id, codes):
-                    raise conflict("room_code already exists in this property")
+                    raise conflict("Mã phòng đã tồn tại trong khu trọ này.")
                 now = datetime.now(timezone.utc)
                 trace = correlation_id or uuid4()
                 rows = []
@@ -238,28 +314,11 @@ class RoomService:
                     ))
             return rows
         except RoomError as err:
-            # A racing retry may lose the unique outbox key; re-read after rollback.
             if key is not None and err.code == "CONFLICT" and err.message == "Database constraint violation":
                 replay = self._replay(key, fingerprint)
                 if replay is not None:
                     return replay
             raise
-
-    def patch_room(self, room_id: UUID, data: s.RoomPatch):
-        with self.atomic():
-            row = self.need(m.Room, room_id, lock=True)
-            fields = data.model_dump(exclude_unset=True)
-            if fields.get("status") == "INACTIVE" and row.status == "ACTIVE":
-                if row.occupancy_contract_id is not None:
-                    raise conflict("Cannot deactivate occupied room")
-            if fields.get("status") == "ACTIVE" and row.status != "ACTIVE":
-                self._floor_lineage(row.floor_id)
-            if "room_code" in fields and repo.code_exists(self.session, row.property_id, [fields["room_code"]], exclude_id=room_id):
-                raise conflict("room_code already exists in this property")
-            for field, value in fields.items():
-                setattr(row, field, value)
-            self.session.flush()
-        return row
 
     def deactivate(self, kind: str, object_id: UUID):
         mapping = {"property": (m.Property, s.PropertyPatch),

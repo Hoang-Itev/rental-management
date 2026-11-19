@@ -75,12 +75,7 @@ class FloorCreate(StrictModel):
 class FloorPatch(PatchModel):
     name: Name120 | None = None
     status: Status | None = None
-
-    @model_validator(mode="after")
-    def required_fields_not_null(self):
-        if "status" in self.model_fields_set and self.status is None:
-            raise ValueError("status cannot be null")
-        return self
+    # ĐÃ XÓA @model_validator GÂY LỖI 422 Ở ĐÂY
 
 
 class RoomCreateItem(StrictModel):

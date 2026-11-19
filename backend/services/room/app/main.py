@@ -37,11 +37,14 @@ async def room_error(request: Request, exc: RoomError):
 
 @app.exception_handler(HTTPException)
 async def http_error(request: Request, exc: HTTPException):
-    messages = {401: ("UNAUTHORIZED", "Authentication required"),
-                403: ("FORBIDDEN", "Access denied"),
-                404: ("NOT_FOUND", "Resource not found"),
-                503: ("DEPENDENCY_UNAVAILABLE", "Database not ready")}
-    code, message = messages.get(exc.status_code, ("HTTP_ERROR", "Request failed"))
+    messages = {
+        401: ("UNAUTHORIZED", "Yêu cầu đăng nhập để thực hiện chức năng này"),
+        403: ("FORBIDDEN", "Bạn không có quyền thực hiện thao tác này"),
+        404: ("NOT_FOUND", "Không tìm thấy dữ liệu yêu cầu"),
+        409: ("CONFLICT", str(exc.detail) if exc.detail else "Xung đột dữ liệu"),
+        503: ("DEPENDENCY_UNAVAILABLE", "Hệ thống đang bảo trì, vui lòng thử lại sau")
+    }
+    code, message = messages.get(exc.status_code, ("HTTP_ERROR", str(exc.detail)))
     response = error_response(request, exc.status_code, code, message)
     if exc.headers:
         response.headers.update(exc.headers)
@@ -50,7 +53,7 @@ async def http_error(request: Request, exc: HTTPException):
 
 @app.exception_handler(RequestValidationError)
 async def validation_error(request: Request, exc: RequestValidationError):
-    return error_response(request, 422, "VALIDATION_ERROR", "Request validation failed")
+    return error_response(request, 422, "VALIDATION_ERROR", "Dữ liệu gửi lên không hợp lệ hoặc sai định dạng.")
 
 
 @app.get("/health", include_in_schema=False)

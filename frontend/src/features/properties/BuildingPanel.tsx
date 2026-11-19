@@ -84,12 +84,29 @@ export function BuildingPanel({ property, onClose }: Props) {
     e.preventDefault();
     const n = Number(floorForm.floor_number);
     if (!Number.isFinite(n) || n < -5 || n > 200) { setFormError('Số tầng phải trong khoảng -5..200.'); return; }
+    
+    // Check trùng tên tầng ở Frontend (nếu có nhập tên)
+    if (floorForm.name.trim()) {
+      const currentBuildingFloors = floorsByBuilding[floorForm.buildingId!] || [];
+      const isDuplicate = currentBuildingFloors.some(
+        f => f.id !== floorForm.editing?.id && f.name?.toLowerCase() === floorForm.name.trim().toLowerCase()
+      );
+      if (isDuplicate) {
+        setFormError('Tên tầng này đã tồn tại trong dãy. Vui lòng chọn tên khác.');
+        return;
+      }
+    }
+
     setSubmitting(true); setFormError(null);
     try {
-      const body = { floor_number: n, name: floorForm.name.trim() || null };
       if (floorForm.editing) {
+        // KHI SỬA: Chỉ gửi mỗi name
+        const body = { name: floorForm.name.trim() === '' ? null : floorForm.name.trim() };
         await api.patch(`/api/v1/floors/${floorForm.editing.id}`, body);
       } else {
+        // KHI TẠO MỚI
+        const body: any = { floor_number: n };
+        if (floorForm.name.trim() !== '') body.name = floorForm.name.trim();
         await api.post(`/api/v1/buildings/${floorForm.buildingId}/floors`, body);
       }
       setFloorForm({ open: false, buildingId: null, editing: null, floor_number: '1', name: '' });
@@ -101,12 +118,29 @@ export function BuildingPanel({ property, onClose }: Props) {
     }
   }
 
+  async function toggleStatus(kind: 'building' | 'floor', id: string, currentStatus: string) {
+    if (currentStatus === 'ACTIVE') {
+      setConfirm({ kind, id, name: kind === 'building' ? buildings.find(b => b.id === id)?.name || '' : `tầng ${floorsByBuilding[Object.keys(floorsByBuilding).find(k => floorsByBuilding[k].some(f => f.id === id)) || '']?.find(f => f.id === id)?.floor_number}` });
+    } else {
+      setConfirmLoading(true);
+      try {
+        const url = kind === 'building' ? `/api/v1/buildings/${id}` : `/api/v1/floors/${id}`;
+        await api.patch(url, { status: 'ACTIVE' });
+        await load();
+      } catch (err) {
+        alert(err instanceof ApiError ? err.message : 'Không thể mở lại.');
+      } finally {
+        setConfirmLoading(false);
+      }
+    }
+  }
+
   async function doDeactivate() {
     if (!confirm) return;
     setConfirmLoading(true);
     try {
-      if (confirm.kind === 'building') await api.delete(`/api/v1/buildings/${confirm.id}`);
-      else await api.delete(`/api/v1/floors/${confirm.id}`);
+      const url = confirm.kind === 'building' ? `/api/v1/buildings/${confirm.id}` : `/api/v1/floors/${confirm.id}`;
+      await api.delete(url);
       setConfirm(null);
       await load();
     } catch (err) {
@@ -117,31 +151,39 @@ export function BuildingPanel({ property, onClose }: Props) {
   }
 
   return (
-    <div className="modal-backdrop active" onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="modal-backdrop active" style={{ zIndex: 9999 }} onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="room-modal" style={{ width: 'min(900px, 96vw)', maxHeight: '90vh', overflowY: 'auto' }}>
         <button className="modal-close" onClick={onClose}>×</button>
         <div className="modal-eyebrow">Cấu trúc</div>
         <h2 className="modal-title">{property.name}</h2>
         <p className="text-muted" style={{ marginBottom: 16 }}>{property.address}</p>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-          <button className="btn-secondary" onClick={() => { setBuildingForm({ open: true, editing: null, name: '' }); setFormError(null); }}>
-            + Thêm dãy
-          </button>
-        </div>
+        {error && (
+          <div className="login-error" style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>{error}</span>
+            <button className="btn-secondary" onClick={() => setError(null)}>Đóng</button>
+          </div>
+        )}
 
-        <PageState loading={loading} error={error} empty={!loading && !error && buildings.length === 0} emptyText="Chưa có dãy nào." onRetry={load}>
+        {!error && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+            <button className="btn-secondary" onClick={() => { setBuildingForm({ open: true, editing: null, name: '' }); setFormError(null); }}>
+              + Thêm dãy
+            </button>
+          </div>
+        )}
+
+        <PageState loading={loading} error={null} empty={!loading && buildings.length === 0} emptyText="Chưa có dãy nào." onRetry={load}>
           {buildings.map((b) => (
-            <div key={b.id} style={{ border: '1px solid var(--gold-3)', padding: 16, marginBottom: 16 }}>
+            <div key={b.id} style={{ border: '1px solid var(--gold-3)', padding: 16, marginBottom: 16, opacity: b.status === 'INACTIVE' ? 0.6 : 1 }}>
               <div className="building-header">
-                {/* Dãy mặc định + Tên bạn đặt */}
                 <strong className="building-title">Dãy {b.name}</strong>
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <button className="btn-secondary" onClick={() => { setFloorForm({ open: true, buildingId: b.id, editing: null, floor_number: '1', name: '' }); setFormError(null); }}>+ Tầng</button>
+                  <button className="btn-secondary" disabled={b.status === 'INACTIVE'} onClick={() => { setFloorForm({ open: true, buildingId: b.id, editing: null, floor_number: '1', name: '' }); setFormError(null); }}>+ Tầng</button>
                   <button className="btn-secondary" onClick={() => { setBuildingForm({ open: true, editing: b, name: b.name }); setFormError(null); }}>Sửa</button>
-                  {b.status === 'ACTIVE' && (
-                    <button className="btn-secondary" style={{ color: 'var(--cinnabar-3)' }} onClick={() => setConfirm({ kind: 'building', id: b.id, name: b.name })}>Vô hiệu hóa</button>
-                  )}
+                  <button className="btn-secondary" style={{ color: b.status === 'ACTIVE' ? 'var(--cinnabar-3)' : 'var(--jade-hi)' }} onClick={() => toggleStatus('building', b.id, b.status)}>
+                    {b.status === 'ACTIVE' ? 'Vô hiệu hóa' : 'Mở lại'}
+                  </button>
                 </div>
               </div>
 
@@ -152,39 +194,40 @@ export function BuildingPanel({ property, onClose }: Props) {
               {(floorsByBuilding[b.id] ?? []).map((f) => {
                 const roomsInFloor = roomsByFloor[f.id] || [];
                 return (
-                  <div key={f.id} style={{ padding: '12px 0', borderTop: '1px dashed var(--gold-3)' }}>
+                  <div key={f.id} style={{ padding: '12px 0', borderTop: '1px dashed var(--gold-3)', opacity: f.status === 'INACTIVE' ? 0.6 : 1 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                      {/* Tầng mặc định + Tên bạn đặt */}
                       <span style={{ fontWeight: 'bold' }}>
                         Tầng {f.floor_number}{f.name ? ` — ${f.name}` : ''}
                       </span>
                       <div style={{ display: 'flex', gap: 6 }}>
-                        <button className="btn-secondary" onClick={() => setBulkRoomFloorId(f.id)}>+ Phòng</button>
+                        <button className="btn-secondary" disabled={f.status === 'INACTIVE'} onClick={() => setBulkRoomFloorId(f.id)}>+ Phòng</button>
                         <button className="btn-secondary" onClick={() => { setFloorForm({ open: true, buildingId: b.id, editing: f, floor_number: String(f.floor_number), name: f.name ?? '' }); setFormError(null); }}>Sửa</button>
-                        {f.status === 'ACTIVE' && (
-                          <button className="btn-secondary" style={{ color: 'var(--cinnabar-3)' }} onClick={() => setConfirm({ kind: 'floor', id: f.id, name: `tầng ${f.floor_number} dãy ${b.name}` })}>Vô hiệu hóa</button>
-                        )}
+                        <button className="btn-secondary" style={{ color: f.status === 'ACTIVE' ? 'var(--cinnabar-3)' : 'var(--jade-hi)' }} onClick={() => toggleStatus('floor', f.id, f.status)}>
+                          {f.status === 'ACTIVE' ? 'Vô hiệu hóa' : 'Mở lại'}
+                        </button>
                       </div>
                     </div>
                     
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                       {roomsInFloor.length === 0 && <span className="text-muted" style={{ fontSize: 12 }}>Chưa có phòng.</span>}
-                      {roomsInFloor.map(room => (
-                        <div 
-                          key={room.id} 
-                          style={{ 
-                            padding: '6px 12px', 
-                            border: '1px solid var(--gold-3)', 
-                            borderRadius: 4, 
-                            fontSize: 13, 
-                            background: room.display_occupancy === 'OCCUPIED' ? 'rgba(232, 71, 43, 0.1)' : 'rgba(61, 138, 122, 0.1)',
-                            color: room.display_occupancy === 'OCCUPIED' ? 'var(--cinnabar-3)' : 'var(--jade-hi)'
-                          }}
-                          title={room.display_occupancy === 'OCCUPIED' ? 'Đang thuê' : 'Trống'}
-                        >
-                          {room.room_code}
-                        </div>
-                      ))}
+                      {roomsInFloor.map(room => {
+                        const isOccupied = room.display_occupancy === 'OCCUPIED';
+                        const isInactive = room.display_occupancy === 'INACTIVE' || room.status === 'INACTIVE';
+                        
+                        const bgColor = isOccupied ? 'rgba(232, 71, 43, 0.1)' : isInactive ? 'rgba(138, 122, 90, 0.1)' : 'rgba(61, 138, 122, 0.1)';
+                        const textColor = isOccupied ? 'var(--cinnabar-3)' : isInactive ? 'var(--stone-2)' : 'var(--jade-hi)';
+                        const borderColor = isOccupied ? '1px solid var(--cinnabar-2)' : isInactive ? '1px dashed var(--stone-2)' : '1px solid var(--jade-2)';
+
+                        return (
+                          <div 
+                            key={room.id} 
+                            style={{ padding: '6px 12px', border: borderColor, borderRadius: 4, fontSize: 13, background: bgColor, color: textColor }}
+                            title={isOccupied ? 'Đang thuê' : isInactive ? 'Ngừng sử dụng' : 'Trống'}
+                          >
+                            {room.room_code}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 );
@@ -222,13 +265,18 @@ export function BuildingPanel({ property, onClose }: Props) {
               <h2 className="modal-title">{floorForm.editing ? 'Sửa tầng' : 'Thêm tầng'}</h2>
               {formError && <div className="login-error">{formError}</div>}
               <form onSubmit={submitFloor}>
-                <div className="login-field">
-                  <label>Số tầng * (-5..200)</label>
-                  <input type="number" value={floorForm.floor_number} onChange={(e) => setFloorForm({ ...floorForm, floor_number: e.target.value })} required />
-                </div>
+                
+                {/* ẨN Ô SỐ TẦNG KHI SỬA */}
+                {!floorForm.editing && (
+                  <div className="login-field">
+                    <label>Số tầng *</label>
+                    <input type="number" value={floorForm.floor_number} onChange={(e) => setFloorForm({ ...floorForm, floor_number: e.target.value })} required />
+                  </div>
+                )}
+
                 <div className="login-field">
                   <label>Tên (tùy chọn)</label>
-                  <input value={floorForm.name} onChange={(e) => setFloorForm({ ...floorForm, name: e.target.value })} />
+                  <input value={floorForm.name} onChange={(e) => setFloorForm({ ...floorForm, name: e.target.value })} placeholder="VD: Tầng trệt, Tầng lửng..." />
                 </div>
                 <div className="modal-actions">
                   <button type="button" className="modal-btn" onClick={() => setFloorForm({ open: false, buildingId: null, editing: null, floor_number: '1', name: '' })} disabled={submitting}>Hủy</button>
@@ -252,7 +300,7 @@ export function BuildingPanel({ property, onClose }: Props) {
         {confirm && (
           <ConfirmDialog
             title="Vô hiệu hóa?"
-            message={`Sẽ chuyển "${confirm.name}" sang INACTIVE. Chỉ thành công khi không còn phần tử con ACTIVE.`}
+            message={`Hệ thống sẽ chuyển "${confirm.name}" và TOÀN BỘ phòng bên trong sang trạng thái Ngừng. Chỉ thực hiện được khi không có phòng nào đang cho thuê.`}
             confirmLabel="Vô hiệu hóa"
             variant="danger"
             loading={confirmLoading}
