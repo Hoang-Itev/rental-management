@@ -526,3 +526,27 @@ body:has(.modal-backdrop) .top-nav {
 .modal-backdrop .room-modal {
   z-index: 100000 !important;
 }
+
+/* =========================================================
+   CON TRỎ CHUỘT TÙY CHỈNH BẰNG SVG (KHÔNG CẦN ẢNH)
+   ========================================================= */
+
+/* Con trỏ mặc định: Chấm tròn đỏ son */
+body, .page-container {
+  cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" fill="%23e8472b" stroke="%23f2d070" stroke-width="2" opacity="0.9"/></svg>') 12 12, auto !important;
+}
+
+/* Con trỏ khi bấm (Active): Chấm tròn nhỏ lại và sáng lên */
+body:active, .page-container:active {
+  cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="%23f2d070" stroke="%23e8472b" stroke-width="2" opacity="1"/></svg>') 12 12, auto !important;
+}
+
+/* Vẫn giữ con trỏ hình bàn tay cho các nút bấm và link */
+button, a, select, input[type="submit"], .btn-primary, .btn-secondary {
+  cursor: pointer !important;
+}
+
+/* Con trỏ hình cây gậy chữ I cho ô nhập liệu */
+input[type="text"], input[type="password"], input[type="email"], input[type="number"], input[type="date"], textarea {
+  cursor: text !important;
+}
