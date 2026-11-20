@@ -227,12 +227,21 @@ export function InvoiceDetailPage() {
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 30 }}>
-                <div style={{ fontStyle: 'italic', color: 'var(--ink-soft)', fontSize: 13 }}>
-                  Hạn thanh toán: <strong style={{ color: 'var(--cinnabar-2)' }}>{formatDateVi(invoice.due_date)}</strong><br/>
-                  {invoice.status === 'PAID' && invoice.paid_at && (
-                    <>Đã thanh toán lúc: <strong>{new Date(invoice.paid_at).toLocaleString('vi-VN')}</strong></>
+                                <div style={{ fontStyle: 'italic', color: 'var(--ink-soft)', fontSize: 13 }}>
+                  {/* CHỈ HIỆN HẠN THANH TOÁN KHI HÓA ĐƠN ĐÃ PHÁT HÀNH HOẶC ĐÃ THANH TOÁN */}
+                  {invoice.status !== 'DRAFT' ? (
+                    <>
+                      Hạn thanh toán: <strong style={{ color: 'var(--cinnabar-2)' }}>{formatDateVi(invoice.due_date)}</strong><br/>
+                      {invoice.status === 'PAID' && invoice.paid_at && (
+                        <>Đã thanh toán lúc: <strong>{new Date(invoice.paid_at).toLocaleString('vi-VN')}</strong></>
+                      )}
+                      {invoice.status === 'ISSUED' && 'Vui lòng thanh toán đúng hạn để tránh gián đoạn dịch vụ.'}
+                    </>
+                  ) : (
+                    <span style={{ color: 'var(--ink-dim)' }}>
+                      (Hóa đơn Nháp - Hạn thanh toán sẽ được ấn định khi phát hành)
+                    </span>
                   )}
-                  {invoice.status !== 'PAID' && 'Vui lòng thanh toán đúng hạn để tránh gián đoạn dịch vụ.'}
                 </div>
                 <div style={{ textAlign: 'center', minWidth: 200 }}>
                   <div style={{ fontStyle: 'italic', color: 'var(--ink-soft)', marginBottom: 60 }}>Ngày ... tháng ... năm ...</div>
