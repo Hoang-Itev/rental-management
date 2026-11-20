@@ -225,7 +225,14 @@ export function ContractListPage() {
                   <td style={{ fontWeight: 'bold' }}>{c.contract_code}</td>
                   <td>{prop ? prop.name : '—'}</td>
                   <td>{building ? building.name : '—'}</td>
-                  <td>{floor ? floor.floor_number : '—'}</td>
+                  <td>
+  {floor ? (
+    <>
+      {floor.floor_number}
+      {floor.name ? ` - ${floor.name}` : ''}
+    </>
+  ) : '—'}
+</td>
                   <td style={{ fontWeight: 'bold', color: 'var(--ink)' }}>
                     {room?.room_code || c.room_code_snapshot}
                   </td>

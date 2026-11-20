@@ -204,10 +204,20 @@ export function RoomListPage() {
                     )}
 
                     {r.status === 'ACTIVE' && r.display_occupancy === 'OCCUPIED' && (
-                      <button className="btn-secondary" style={{ color: 'var(--cinnabar-3)' }} onClick={() => navigate(`/hop-dong?room_id=${r.id}`)}>
-                        Xem HĐ
-                      </button>
-                    )}
+  <button 
+    className="btn-secondary" 
+    style={{ color: 'var(--cinnabar-3)' }} 
+    onClick={() => {
+      if (r.occupancy_contract_id) {
+        navigate(`/hop-dong/${r.occupancy_contract_id}`);
+      } else {
+        alert('Không tìm thấy mã hợp đồng hiện tại của phòng này!');
+      }
+    }}
+  >
+    Xem HĐ
+  </button>
+)}
                     
                     {r.status === 'INACTIVE' && (
                       <button className="btn-secondary" onClick={async () => {

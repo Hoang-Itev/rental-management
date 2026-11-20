@@ -48,7 +48,7 @@ export function InvoiceListPage() {
   const [newMonth, setNewMonth] = useState('');
   const [creatingRun, setCreatingRun] = useState(false);
 
-  useEffect(() => {
+   useEffect(() => {
     async function loadMeta() {
       try {
         const propRes = await api.get<Page<PropertyOut>>('/api/v1/properties?page_size=100');
@@ -57,20 +57,33 @@ export function InvoiceListPage() {
         setAllRooms(roomRes.items);
 
         const detailMap: Record<string, {prop: string, bld: string, flr: string}> = {};
-        for (const p of propRes.items) {
+        
+        // Tải TẤT CẢ các dãy của TẤT CẢ khu trọ cùng lúc (Song song)
+        await Promise.all(propRes.items.map(async (p) => {
           const bRes = await api.get<Page<Building>>(`/api/v1/properties/${p.id}/buildings?page_size=100`);
-          for (const b of bRes.items) {
+          
+          // Tải TẤT CẢ các tầng của TẤT CẢ dãy cùng lúc
+          await Promise.all(bRes.items.map(async (b) => {
             const fRes = await api.get<Page<Floor>>(`/api/v1/buildings/${b.id}/floors?page_size=100`);
+            
             for (const f of fRes.items) {
               const roomsInFloor = roomRes.items.filter(r => r.floor_id === f.id);
               for (const r of roomsInFloor) {
-                detailMap[r.id] = { prop: p.name, bld: b.name, flr: String(f.floor_number) };
+                // Cập nhật detailMap với đầy đủ thông tin Khu - Dãy - Tầng (kèm tên nếu có)
+                detailMap[r.id] = { 
+                  prop: p.name, 
+                  bld: b.name, 
+                  flr: f.name ? `${f.floor_number} - ${f.name}` : String(f.floor_number) 
+                };
               }
             }
-          }
-        }
+          }));
+        }));
+
         setRoomDetails(detailMap);
-      } catch (e) { console.error(e); }
+      } catch (e) { 
+        console.error('Lỗi tải danh mục:', e); 
+      }
     }
     loadMeta();
   }, []);
