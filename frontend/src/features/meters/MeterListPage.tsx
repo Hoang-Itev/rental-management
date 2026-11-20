@@ -419,12 +419,16 @@ export function MeterListPage() {
               {buildings.map(b => <option key={b.id} value={b.id}>Dãy {b.name}</option>)}
             </select>
 
-            <select value={filterFlrId} onChange={(e) => { 
-              setFilterFlrId(e.target.value); setSelectedRoom(''); 
-            }} disabled={!filterBldId}>
-              <option value="">— Tất cả Tầng —</option>
-              {floors.map(f => <option key={f.id} value={f.id}>Tầng {f.floor_number}</option>)}
-            </select>
+            <select value={filterFlrId} onChange={(e) => {
+  setFilterFlrId(e.target.value); setSelectedRoom('');
+}} disabled={!filterBldId}>
+  <option value="">— Tất cả Tầng —</option>
+  {floors.map(f => (
+    <option key={f.id} value={f.id}>
+      Tầng {f.floor_number}{f.name ? ` - ${f.name}` : ''}
+    </option>
+  ))}
+</select>
 
             <select value={selectedRoom} onChange={(e) => setSelectedRoom(e.target.value)} disabled={!filterPropId}>
               <option value="">— Chọn phòng để xem —</option>

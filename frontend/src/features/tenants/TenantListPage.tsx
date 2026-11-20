@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '../../lib/api/client';
-import type { Page, TenantOut, ContractOut } from '../../lib/api/types';
+import type { Page, TenantOut } from '../../lib/api/types';
 import { Pagination } from '../../components/Pagination';
 import { PageState } from '../../components/PageState';
-import { ConfirmDialog } from '../../components/ConfirmDialog';
 
 interface FormState {
   full_name: string;
@@ -16,6 +15,7 @@ const empty: FormState = { full_name: '', email: '', phone: '', note: '' };
 
 export function TenantListPage() {
   const [data, setData] = useState<Page<TenantOut> | null>(null);
+  const [allTenants, setAllTenants] = useState<TenantOut[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
   const [loading, setLoading] = useState(true);
@@ -26,24 +26,45 @@ export function TenantListPage() {
   const [form, setForm] = useState<FormState>(empty);
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  
-  // State cho việc Xóa
-  const [confirmDelete, setConfirmDelete] = useState<TenantOut | null>(null);
-  const [deleting, setDeleting] = useState(false);
+
+  const loadAllTenants = useCallback(async (): Promise<TenantOut[]> => {
+    const batchSize = 100;
+    const firstRes = await api.get<Page<TenantOut>>(`/api/v1/tenants?page=1&page_size=${batchSize}`);
+    const items = [...firstRes.items];
+    const totalCount = firstRes.meta?.total ?? items.length;
+    const totalPages = Math.max(1, Math.ceil(totalCount / batchSize));
+
+    for (let p = 2; p <= totalPages; p++) {
+      const nextRes = await api.get<Page<TenantOut>>(`/api/v1/tenants?page=${p}&page_size=${batchSize}`);
+      if (nextRes.items.length === 0) break;
+      items.push(...nextRes.items);
+    }
+
+    setAllTenants(items);
+    return items;
+  }, []);
 
   const load = useCallback(async () => {
-    setLoading(true); setError(null);
+    setLoading(true);
+    setError(null);
     try {
       const res = await api.get<Page<TenantOut>>(`/api/v1/tenants?page=${page}&page_size=${pageSize}`);
       setData(res);
+      try {
+        await loadAllTenants();
+      } catch {
+        // Vẫn giữ danh sách trang hiện tại nếu tải toàn bộ để check trùng bị lỗi
+      }
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Không tải được danh sách người thuê.');
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize]);
+  }, [page, pageSize, loadAllTenants]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   function openCreate() {
     setEditing(null);
@@ -54,7 +75,12 @@ export function TenantListPage() {
 
   function openEdit(t: TenantOut) {
     setEditing(t);
-    setForm({ full_name: t.full_name, email: t.email ?? '', phone: t.phone ?? '', note: t.note ?? '' });
+    setForm({
+      full_name: t.full_name,
+      email: t.email ?? '',
+      phone: t.phone ?? '',
+      note: t.note ?? '',
+    });
     setFormError(null);
     setOpen(true);
   }
@@ -62,67 +88,75 @@ export function TenantListPage() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setFormError(null);
-    if (!form.full_name.trim()) { setFormError('Họ tên bắt buộc.'); return; }
-    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) { setFormError('Email không hợp lệ.'); return; }
-    if (form.phone && form.phone.trim().length < 5) { setFormError('SĐT quá ngắn.'); return; }
-    
+
+    const trimmedName = form.full_name.trim();
+    const trimmedEmail = form.email.trim();
+    const trimmedPhone = form.phone.trim();
+    const trimmedNote = form.note.trim();
+
+    if (!trimmedName) {
+      setFormError('Họ tên bắt buộc.');
+      return;
+    }
+
+    if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      setFormError('Email không hợp lệ.');
+      return;
+    }
+
+    if (trimmedPhone) {
+      if (!/^\d+$/.test(trimmedPhone)) {
+        setFormError('Số điện thoại chỉ được chứa chữ số.');
+        return;
+      }
+      if (trimmedPhone.length < 9 || trimmedPhone.length > 11) {
+        setFormError('Số điện thoại phải từ 9 đến 11 chữ số.');
+        return;
+      }
+    }
+
     setSubmitting(true);
     try {
+      let latestTenants = allTenants;
+      try {
+        latestTenants = await loadAllTenants();
+      } catch {
+        // Dùng tạm allTenants nếu gọi lại danh sách lỗi
+      }
+
+      const otherTenants = latestTenants.filter((t) => !editing || t.id !== editing.id);
+
+      if (
+        trimmedEmail &&
+        otherTenants.some((t) => (t.email ?? '').trim().toLowerCase() === trimmedEmail.toLowerCase())
+      ) {
+        setFormError('Email này đã được sử dụng bởi người thuê khác.');
+        setSubmitting(false);
+        return;
+      }
+
+      if (trimmedPhone && otherTenants.some((t) => (t.phone ?? '').trim() === trimmedPhone)) {
+        setFormError('Số điện thoại này đã được sử dụng bởi người thuê khác.');
+        setSubmitting(false);
+        return;
+      }
+
       const body = {
-        full_name: form.full_name.trim(),
-        email: form.email.trim() || null,
-        phone: form.phone.trim() || null,
-        note: form.note.trim() || null,
+        full_name: trimmedName,
+        email: trimmedEmail || null,
+        phone: trimmedPhone || null,
+        note: trimmedNote || null,
       };
+
       if (editing) await api.patch(`/api/v1/tenants/${editing.id}`, body);
       else await api.post('/api/v1/tenants', body);
+
       setOpen(false);
       await load();
     } catch (err) {
       setFormError(err instanceof ApiError ? err.message : 'Lỗi khi lưu.');
     } finally {
       setSubmitting(false);
-    }
-  }
-
-  async function doDelete() {
-    if (!confirmDelete) return;
-    setDeleting(true);
-    setError(null);
-    
-    try {
-      // 1. Kiểm tra xem khách này có hợp đồng nào đang hiệu lực không
-      // Vì API hiện tại không hỗ trợ lọc theo tenant_id, ta tải 100 hợp đồng gần nhất về và tự lọc.
-      const contractsRes = await api.get<Page<ContractOut>>('/api/v1/contracts?page_size=100');
-      
-      const activeContracts = contractsRes.items.filter(
-        (c) => c.representative_tenant_id === confirmDelete.id && 
-               ['ACTIVE', 'SCHEDULED', 'EXPIRED_PENDING'].includes(c.status)
-      );
-
-      if (activeContracts.length > 0) {
-        setError(`Không thể xóa! Người thuê "${confirmDelete.full_name}" đang có hợp đồng hiệu lực (${activeContracts[0].contract_code}). Vui lòng vào mục Hợp đồng để Ghi nhận bàn giao trước.`);
-        setConfirmDelete(null);
-        setDeleting(false);
-        return;
-      }
-
-      // 2. Nếu không vướng hợp đồng, tiến hành gọi API xóa
-      // (Lưu ý: Backend hiện tại chưa code API DELETE /tenants/{id}. 
-      // Nếu bạn đã code API này ở Backend, nó sẽ chạy. Nếu chưa, nó sẽ báo lỗi 404/405).
-      await api.delete(`/api/v1/tenants/${confirmDelete.id}`);
-      
-      setConfirmDelete(null);
-      await load();
-    } catch (err) {
-      if (err instanceof ApiError && (err.status === 404 || err.status === 405)) {
-         setError('Backend chưa hỗ trợ tính năng Xóa người thuê (Cần bổ sung API DELETE /api/v1/tenants/{id}).');
-      } else {
-         setError(err instanceof ApiError ? err.message : 'Không thể xóa người thuê này.');
-      }
-      setConfirmDelete(null);
-    } finally {
-      setDeleting(false);
     }
   }
 
@@ -147,7 +181,7 @@ export function TenantListPage() {
               <th>Email</th>
               <th>Điện thoại</th>
               <th>Ghi chú</th>
-              <th style={{ width: 160 }}>Thao tác</th>
+              <th style={{ width: 100 }}>Thao tác</th>
             </tr>
           </thead>
           <tbody>
@@ -158,16 +192,7 @@ export function TenantListPage() {
                 <td>{t.phone || <span className="text-muted">—</span>}</td>
                 <td>{t.note || <span className="text-muted">—</span>}</td>
                 <td>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button className="btn-secondary" onClick={() => openEdit(t)}>Sửa</button>
-                    <button 
-                      className="btn-secondary" 
-                      style={{ color: 'var(--cinnabar-3)', borderColor: 'var(--cinnabar-2)' }} 
-                      onClick={() => setConfirmDelete(t)}
-                    >
-                      Xóa
-                    </button>
-                  </div>
+                  <button className="btn-secondary" onClick={() => openEdit(t)}>Sửa</button>
                 </td>
               </tr>
             ))}
@@ -206,18 +231,6 @@ export function TenantListPage() {
             </form>
           </div>
         </div>
-      )}
-
-      {confirmDelete && (
-        <ConfirmDialog
-          title="Xóa người thuê?"
-          message={`Bạn có chắc muốn xóa hồ sơ "${confirmDelete.full_name}"? Hệ thống sẽ kiểm tra xem người này còn hợp đồng nào đang hiệu lực không trước khi xóa.`}
-          confirmLabel="Kiểm tra & Xóa"
-          variant="danger"
-          loading={deleting}
-          onCancel={() => setConfirmDelete(null)}
-          onConfirm={doDelete}
-        />
       )}
     </div>
   );

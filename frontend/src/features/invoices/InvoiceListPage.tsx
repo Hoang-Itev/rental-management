@@ -259,11 +259,15 @@ export function InvoiceListPage() {
         </select>
 
         <select value={floorId} onChange={(e) => { 
-          setFloorId(e.target.value); setRoomId(''); setPage(1); 
-        }} disabled={!buildingId}>
-          <option value="">Tất cả Tầng</option>
-          {floors.map(f => <option key={f.id} value={f.id}>Tầng {f.floor_number}</option>)}
-        </select>
+  setFloorId(e.target.value); setRoomId(''); setPage(1); 
+}} disabled={!buildingId}>
+  <option value="">Tất cả Tầng</option>
+  {floors.map(f => (
+    <option key={f.id} value={f.id}>
+      Tầng {f.floor_number}{f.name ? ` - ${f.name}` : ''}
+    </option>
+  ))}
+</select>
 
         <select value={roomId} onChange={(e) => { setRoomId(e.target.value); setPage(1); }} disabled={!propertyId}>
           <option value="">Tất cả Phòng</option>
