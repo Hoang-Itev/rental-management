@@ -127,7 +127,12 @@ export function MeterListPage() {
             for (const f of fRes.items) {
               const roomsInFloor = roomRes.items.filter(r => r.floor_id === f.id);
               for (const r of roomsInFloor) {
-                const info = { prop: p.name, bld: b.name, flr: String(f.floor_number), code: r.room_code };
+                const info = { 
+  prop: p.name, 
+  bld: b.name, 
+  flr: f.name ? `${f.floor_number} - ${f.name}` : String(f.floor_number), 
+  code: r.room_code 
+};
                 detailMap[r.id] = info;
                 
                 try {

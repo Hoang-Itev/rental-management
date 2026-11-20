@@ -233,7 +233,7 @@ export function ContractListPage() {
     </>
   ) : '—'}
 </td>
-                  <td style={{ fontWeight: 'bold', color: 'var(--ink)' }}>
+                  <td style={{ fontWeight: 'bold', color: 'var(--cinnabar-2)' }}>
                     {room?.room_code || c.room_code_snapshot}
                   </td>
                   <td>

@@ -13,7 +13,7 @@ interface Props {
 function translateOccupancy(status: string) {
   if (status === 'VACANT') return 'Trống';
   if (status === 'OCCUPIED') return 'Đang thuê';
-  if (status === 'INACTIVE') return 'Ngưng';
+  if (status === 'INACTIVE') return 'Ngừng';
   return status;
 }
 
@@ -35,7 +35,11 @@ export function RoomPinModal({ rooms, pinnedIds, onSave, onClose }: Props) {
             for (const f of fRes.items) {
               const roomsInFloor = rooms.filter(r => r.floor_id === f.id);
               for (const r of roomsInFloor) {
-                detailMap[r.id] = { prop: p.name, bld: b.name, flr: String(f.floor_number) };
+                detailMap[r.id] = {
+  prop: p.name,
+  bld: b.name,
+  flr: f.name ? `${f.floor_number} - ${f.name}` : String(f.floor_number),
+};
               }
             }
           }
@@ -96,7 +100,7 @@ export function RoomPinModal({ rooms, pinnedIds, onSave, onClose }: Props) {
                 />
                 <div style={{ flex: 1 }}>
                   {/* Tên phòng in đậm, rõ màu */}
-                  <div style={{ fontWeight: 'bold', fontSize: 16, color: isSelected ? 'var(--cinnabar-2)' : 'var(--gold-2)' }}>
+                  <div style={{ fontWeight: 'bold', fontSize: 16, color: isSelected ? 'var(--cinnabar-2)' : 'var(--ink-soft)' }}>
                     {r.room_code}
                   </div>
                   
