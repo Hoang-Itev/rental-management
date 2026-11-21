@@ -8,7 +8,7 @@ import { PageState } from '../../components/PageState';
 import { Badge } from '../../components/Badge';
 import { Pagination } from '../../components/Pagination';
 
-type Tab = 'room' | 'cutoffs' | 'bulk' | 'alerts';
+type Tab = 'room' | 'cutoffs' | 'alerts';
 
 interface Building { id: string; name: string; property_id: string; }
 interface Floor { id: string; floor_number: number; building_id: string; name: string | null; }
@@ -35,6 +35,13 @@ function translateAlertType(type: string) {
     case 'CONFLICTING_DUPLICATE': return 'Dữ liệu trùng lặp';
     default: return type;
   }
+}
+
+function translateAnomaly(reason: string | null) {
+  if (!reason) return '—';
+  if (reason === 'READING_DECREASE') return 'Số bị giảm';
+  if (reason === 'OUT_OF_ORDER_NON_MONOTONIC') return 'Dữ liệu không tuần tự';
+  return reason;
 }
 
 function translateError(msg: string) {
@@ -64,7 +71,7 @@ export function MeterListPage() {
   const [floors, setFloors] = useState<Floor[]>([]);
   const [allRooms, setAllRooms] = useState<RoomOut[]>([]);
   
-  const [roomDetails, setRoomDetails] = useState<Record<string, {prop: string, bld: string, flr: string, code: string}>>({});
+    const [_roomDetails, setRoomDetails] = useState<Record<string, {prop: string, bld: string, flr: string, code: string}>>({});
   const [meterMap, setMeterMap] = useState<Record<string, {prop: string, bld: string, flr: string, code: string, type: string}>>({});
 
   const [filterPropId, setFilterPropId] = useState('');
@@ -104,10 +111,6 @@ export function MeterListPage() {
   const [resolveTarget, setResolveTarget] = useState<MeterAlertOut | null>(null);
   const [resolveNote, setResolveNote] = useState('');
 
-  const [bulkRows, setBulkRows] = useState<any[]>([]);
-  const [bulkLoading, setBulkLoading] = useState(false);
-  const [bulkSaving, setBulkSaving] = useState(false);
-
   useEffect(() => {
     async function loadMeta() {
       try {
@@ -128,11 +131,11 @@ export function MeterListPage() {
               const roomsInFloor = roomRes.items.filter(r => r.floor_id === f.id);
               for (const r of roomsInFloor) {
                 const info = { 
-  prop: p.name, 
-  bld: b.name, 
-  flr: f.name ? `${f.floor_number} - ${f.name}` : String(f.floor_number), 
-  code: r.room_code 
-};
+                  prop: p.name, 
+                  bld: b.name, 
+                  flr: f.name ? `${f.floor_number} - ${f.name}` : String(f.floor_number), 
+                  code: r.room_code 
+                };
                 detailMap[r.id] = info;
                 
                 try {
@@ -282,59 +285,6 @@ export function MeterListPage() {
     finally { setResolving(null); }
   }
 
-  async function loadBulkRows() {
-    setBulkLoading(true); setError(null);
-    try {
-      const contracts = await api.get<any>('/api/v1/contracts?status=ACTIVE&page_size=100');
-      const rows = [];
-      for (const c of contracts.items) {
-        const meters = await api.get<any>(`/api/v1/rooms/${c.room_id}/meters`);
-        const elec = meters.items.find((m: any) => m.meter_type === 'ELECTRICITY');
-        const water = meters.items.find((m: any) => m.meter_type === 'WATER');
-        const info = roomDetails[c.room_id];
-        
-        rows.push({
-          contract_id: c.id,
-          room_code: info ? info.code : c.room_code_snapshot,
-          property_name: info ? info.prop : '—',
-          building_name: info ? info.bld : '—',
-          floor_name: info ? info.flr : '—',
-          elec_meter_id: elec?.id,
-          water_meter_id: water?.id,
-          elec_val: '',
-          water_val: '',
-        });
-      }
-      setBulkRows(rows);
-    } catch (e) { setError(e instanceof ApiError ? e.message : 'Lỗi tải dữ liệu.'); }
-    finally { setBulkLoading(false); }
-  }
-
-  async function saveBulk() {
-    const validRows = bulkRows.filter(r => r.elec_val || r.water_val);
-    if (validRows.length === 0) { setError('Chưa nhập số nào.'); return; }
-    setBulkSaving(true); setError(null);
-    try {
-      for (const r of validRows) {
-        if (r.elec_val) {
-          const elecCutoffs = await api.get<any>(`/api/v1/meter-cutoffs?meter_id=${r.elec_meter_id}&status=PENDING&page_size=1`);
-          if (elecCutoffs.items.length > 0) {
-             await api.post(`/api/v1/meter-cutoffs/${elecCutoffs.items[0].id}/confirm`, { reading_value: Number(r.elec_val), manual_reason: 'Ghi số hàng loạt' });
-          }
-        }
-        if (r.water_val) {
-          const waterCutoffs = await api.get<any>(`/api/v1/meter-cutoffs?meter_id=${r.water_meter_id}&status=PENDING&page_size=1`);
-          if (waterCutoffs.items.length > 0) {
-             await api.post(`/api/v1/meter-cutoffs/${waterCutoffs.items[0].id}/confirm`, { reading_value: Number(r.water_val), manual_reason: 'Ghi số hàng loạt' });
-          }
-        }
-      }
-      alert('Đã lưu thành công!');
-      setBulkRows([]);
-    } catch (e: any) { setError('Lỗi: ' + (e.message || 'Không thể lưu.')); }
-    finally { setBulkSaving(false); }
-  }
-
   return (
     <div className="page-container">
       <div className="page-header">
@@ -343,14 +293,12 @@ export function MeterListPage() {
 
       <div className="filter-bar" style={{ marginBottom: 12 }}>
         <button className={`btn-secondary ${tab === 'cutoffs' ? 'primary' : ''}`} onClick={() => setTab('cutoffs')}>Chốt số chờ xử lý</button>
-        <button className={`btn-secondary ${tab === 'bulk' ? 'primary' : ''}`} onClick={() => { setTab('bulk'); if (bulkRows.length === 0) loadBulkRows(); }}>Ghi số hàng loạt</button>
         <button className={`btn-secondary ${tab === 'room' ? 'primary' : ''}`} onClick={() => setTab('room')}>Tra cứu theo phòng</button>
         <button className={`btn-secondary ${tab === 'alerts' ? 'primary' : ''}`} onClick={() => setTab('alerts')}>Cảnh báo</button>
       </div>
 
       <div style={{ padding: '12px 16px', background: 'rgba(212, 163, 64, 0.05)', borderLeft: '4px solid var(--gold-3)', marginBottom: 24, fontSize: 14, color: 'var(--ink-soft)' }}>
         {tab === 'cutoffs' && <span><strong>Hộp thư đến:</strong> Hệ thống tự động tạo các mốc chốt. Bạn thấy phòng nào ở đây nghĩa là cần nhập số cho phòng đó.</span>}
-        {tab === 'bulk' && <span><strong>Ghi số nhanh:</strong> Dùng vào ngày 1 hàng tháng. Nhập số cho tất cả các phòng đang thuê cùng 1 lúc rồi bấm Lưu.</span>}
         {tab === 'room' && <span><strong>Tra cứu:</strong> Lọc theo Khu/Dãy/Tầng để chọn phòng, xem lịch sử tất cả các mốc chốt số của phòng đó.</span>}
         {tab === 'alerts' && <span><strong>Cảnh báo:</strong> Xem các lỗi bất thường (mất tín hiệu, số bị giảm). Bấm "Xử lý" để đánh dấu đã kiểm tra.</span>}
       </div>
@@ -420,15 +368,15 @@ export function MeterListPage() {
             </select>
 
             <select value={filterFlrId} onChange={(e) => {
-  setFilterFlrId(e.target.value); setSelectedRoom('');
-}} disabled={!filterBldId}>
-  <option value="">— Tất cả Tầng —</option>
-  {floors.map(f => (
-    <option key={f.id} value={f.id}>
-      Tầng {f.floor_number}{f.name ? ` - ${f.name}` : ''}
-    </option>
-  ))}
-</select>
+              setFilterFlrId(e.target.value); setSelectedRoom('');
+            }} disabled={!filterBldId}>
+              <option value="">— Tất cả Tầng —</option>
+              {floors.map(f => (
+                <option key={f.id} value={f.id}>
+                  Tầng {f.floor_number}{f.name ? ` - ${f.name}` : ''}
+                </option>
+              ))}
+            </select>
 
             <select value={selectedRoom} onChange={(e) => setSelectedRoom(e.target.value)} disabled={!filterPropId}>
               <option value="">— Chọn phòng để xem —</option>
@@ -488,36 +436,6 @@ export function MeterListPage() {
         </>
       )}
 
-      {tab === 'bulk' && (
-        <div>
-          <PageState loading={bulkLoading} error={null} empty={!bulkLoading && bulkRows.length === 0} emptyText="Không có phòng nào đang thuê để ghi số." onRetry={loadBulkRows}>
-            <div style={{ background: 'var(--night-1)', padding: 16, borderRadius: 4, border: '1px solid var(--gold-3)' }}>
-              <table className="data-table">
-                <thead>
-                  <tr><th>Khu trọ</th><th>Dãy</th><th>Tầng</th><th>Phòng</th><th>Số điện mới (kWh)</th><th>Số nước mới (m³)</th></tr>
-                </thead>
-                <tbody>
-                  {bulkRows.map((r, i) => (
-                    <tr key={i}>
-                      <td>{r.property_name}</td>
-                      <td>{r.building_name}</td>
-                      <td>{r.floor_name}</td>
-                      <td style={{ fontWeight: 'bold', color: 'var(--cinnabar-2)' }}>{r.room_code}</td>
-                      <td><input type="number" step="0.01" value={r.elec_val} onChange={e => { const n=[...bulkRows]; n[i].elec_val = e.target.value; setBulkRows(n); }} placeholder="Nhập..." style={{ width: '100%', padding: 6 }} /></td>
-                      <td><input type="number" step="0.01" value={r.water_val} onChange={e => { const n=[...bulkRows]; n[i].water_val = e.target.value; setBulkRows(n); }} placeholder="Nhập..." style={{ width: '100%', padding: 6 }} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-                 <button className="btn-secondary" onClick={loadBulkRows} disabled={bulkSaving}>Tải lại</button>
-                 <button className="btn-primary" onClick={saveBulk} disabled={bulkSaving}>{bulkSaving ? 'Đang lưu...' : 'Lưu tất cả'}</button>
-              </div>
-            </div>
-          </PageState>
-        </div>
-      )}
-
       {tab === 'alerts' && (
         <>
           <div className="filter-bar">
@@ -548,19 +466,19 @@ export function MeterListPage() {
                       </td>
                       <td><span style={{ color: a.alert_type === 'OFFLINE' ? 'var(--cinnabar-3)' : 'var(--amber)', fontWeight: 600 }}>{translateAlertType(a.alert_type)}</span></td>
                       <td style={{ fontSize: 13, maxWidth: 300 }}>
-  {a.status === 'RESOLVED' && a.resolution_note ? (
-    <span style={{ color: 'var(--jade-2)', fontStyle: 'italic' }}>
-      {a.resolution_note === 'Telemetry received' ? 'Đã nhận được tín hiệu mới' : `Ghi chú: ${a.resolution_note}`}
-    </span>
-  ) : (
-    <span style={{ color: 'var(--ink-soft)' }}>
-      {a.alert_type === 'OFFLINE' && 'Đồng hồ mất kết nối quá 20 phút'}
-      {a.alert_type === 'READING_DECREASE' && 'Số điện/nước mới nhỏ hơn số cũ'}
-      {a.alert_type === 'CONFLICTING_DUPLICATE' && 'Có 2 số liệu khác nhau cùng 1 thời điểm'}
-      {a.alert_type === 'LATE_AFTER_CUTOFF' && 'Số liệu gửi về sau khi đã chốt sổ'}
-    </span>
-  )}
-</td>
+                        {a.status === 'RESOLVED' && a.resolution_note ? (
+                          <span style={{ color: 'var(--jade-2)', fontStyle: 'italic' }}>
+                            {a.resolution_note === 'Telemetry received' ? 'Đã nhận được tín hiệu mới' : `Ghi chú: ${a.resolution_note}`}
+                          </span>
+                        ) : (
+                          <span style={{ color: 'var(--ink-soft)' }}>
+                            {a.alert_type === 'OFFLINE' && 'Đồng hồ mất kết nối quá 20 phút'}
+                            {a.alert_type === 'READING_DECREASE' && 'Số điện/nước mới nhỏ hơn số cũ'}
+                            {a.alert_type === 'CONFLICTING_DUPLICATE' && 'Có 2 số liệu khác nhau cùng 1 thời điểm'}
+                            {a.alert_type === 'LATE_AFTER_CUTOFF' && 'Số liệu gửi về sau khi đã chốt sổ'}
+                          </span>
+                        )}
+                      </td>
                       <td>
                         <div style={{ display: 'flex', gap: 6 }}>
                           {a.status === 'OPEN' && (
@@ -653,7 +571,7 @@ export function MeterListPage() {
                       <td>{formatDateTimeVi(r.measured_at)}</td>
                       <td style={{ fontWeight: 'bold', color: 'var(--cinnabar-2)' }}>{formatMeterValue(r.reading_value)}</td>
                       <td><Badge value={r.validation_status} /></td>
-                      <td>{r.anomaly_reason || '—'}</td>
+                      <td>{translateAnomaly(r.anomaly_reason)}</td>
                     </tr>
                   ))}
                 </tbody>
