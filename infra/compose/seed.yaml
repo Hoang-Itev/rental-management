@@ -6,6 +6,8 @@ services:
       - ./scripts/seed:/seed:ro
     environment:
       SEED_MODE: ${SEED_MODE:-disabled}
+      SEED_PROFILE: ${SEED_PROFILE:-baseline}
+      SEED_AS_OF: ${SEED_AS_OF:-}
       SEED_OWNER_PASSWORD: ${SEED_OWNER_PASSWORD:-}
       OWNER_EMAIL: ${OWNER_EMAIL:?Set OWNER_EMAIL in .env}
   room:
@@ -13,23 +15,33 @@ services:
       - ./scripts/seed:/seed:ro
     environment:
       SEED_MODE: ${SEED_MODE:-disabled}
+      SEED_PROFILE: ${SEED_PROFILE:-baseline}
+      SEED_AS_OF: ${SEED_AS_OF:-}
   tenant:
     volumes:
       - ./scripts/seed:/seed:ro
     environment:
       SEED_MODE: ${SEED_MODE:-disabled}
+      SEED_PROFILE: ${SEED_PROFILE:-baseline}
+      SEED_AS_OF: ${SEED_AS_OF:-}
   metering:
     volumes:
       - ./scripts/seed:/seed:ro
     environment:
       SEED_MODE: ${SEED_MODE:-disabled}
+      SEED_PROFILE: ${SEED_PROFILE:-baseline}
+      SEED_AS_OF: ${SEED_AS_OF:-}
   billing:
     volumes:
       - ./scripts/seed:/seed:ro
     environment:
       SEED_MODE: ${SEED_MODE:-disabled}
+      SEED_PROFILE: ${SEED_PROFILE:-baseline}
+      SEED_AS_OF: ${SEED_AS_OF:-}
   notification:
     volumes:
       - ./scripts/seed:/seed:ro
     environment:
       SEED_MODE: ${SEED_MODE:-disabled}
+      SEED_PROFILE: ${SEED_PROFILE:-baseline}
+      SEED_AS_OF: ${SEED_AS_OF:-}

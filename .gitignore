@@ -22,3 +22,5 @@ terraform.tfvars
 *.log
 .idea/
 .vscode/
+# Pinned local presentation seed date (reset together with demo data).
+.seed-demo-date
