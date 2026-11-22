@@ -26,7 +26,10 @@ DATABASES = {s: f"{s}_db" for s in VALID_SERVICES}
 
 
 def sid(kind: str, key: str) -> uuid.UUID:
-    return uuid.uuid5(SEED_NAMESPACE, f"rental-demo-v1:{kind}:{key}")
+    scope = "rental-demo-v1"
+    if os.getenv("SEED_PROFILE", "baseline") == "presentation" and kind != "owner":
+        scope = "rental-presentation-v1:" + os.environ["SEED_AS_OF"]
+    return uuid.uuid5(SEED_NAMESPACE, f"{scope}:{kind}:{key}")
 
 
 def midnight_vn(day: str) -> datetime:
@@ -34,6 +37,12 @@ def midnight_vn(day: str) -> datetime:
 
 
 def dataset() -> dict:
+    profile = os.getenv("SEED_PROFILE", "baseline")
+    if profile == "presentation":
+        from presentation import build_dataset
+        return build_dataset(date.fromisoformat(os.environ["SEED_AS_OF"]))
+    if profile != "baseline":
+        raise RuntimeError("Unknown SEED_PROFILE")
     return json.loads(DATA_FILE.read_text(encoding="utf-8"))
 
 
@@ -88,7 +97,7 @@ def seed_room(session, m, d: dict) -> int:
             f_id=sid("floor",f"{b['code']}{floor_no}")
             n+=add_if_missing(session,m.Floor,id=f_id,building_id=b_id,floor_number=floor_no,name=f"Tầng {floor_no}",status="ACTIVE")
     for code in d["rooms"]:
-        c=next((c for c in d["contracts"] if c["room_code"]==code),None)
+        c=next((c for c in d["contracts"] if c["room_code"]==code and code in d["occupied_rooms"]),None)
         n+=add_if_missing(
             session,m.Room,id=sid("room",code),property_id=prop_id,
             floor_id=sid("floor",code[:2]),room_code=code,
@@ -109,12 +118,19 @@ def seed_tenant(session,m,d:dict)->int:
         n+=add_if_missing(session,m.Contract,id=cid,contract_code=c["code"],room_id=sid("room",c["room_code"]),
             room_code_snapshot=c["room_code"],representative_tenant_id=sid("tenant",str(i)),
             start_date=date.fromisoformat(c["start_date"]),end_date=date.fromisoformat(c["end_date"]),
-            status="ACTIVE",deposit_amount=money_for_room(c["room_code"],d))
+            status=c.get("status", "ACTIVE"),deposit_amount=money_for_room(c["room_code"],d),
+            actual_end_date=date.fromisoformat(c["actual_end_date"]) if c.get("actual_end_date") else None,
+            end_reason="Bàn giao demo, chờ hóa đơn cuối" if c.get("actual_end_date") else None)
         n+=add_if_missing(session,m.ContractTerm,id=sid("term",c["code"]),contract_id=cid,
             effective_from=date.fromisoformat(c["start_date"]),effective_to=None,
             monthly_rent=money_for_room(c["room_code"],d),
             electricity_unit_price=3500,water_unit_price=15000,monthly_service_fee=100000)
-        for evt,day in (("CREATED","2026-08-15"),("CONFIRMED","2026-08-20"),("STARTED",c["start_date"])):
+        start = date.fromisoformat(c["start_date"])
+        history = (("CREATED",(start-timedelta(days=2)).isoformat()),
+                   ("CONFIRMED",(start-timedelta(days=1)).isoformat()),("STARTED",c["start_date"]))
+        if c.get("actual_end_date"):
+            history += (("ENDED",(date.fromisoformat(c["actual_end_date"])+timedelta(days=1)).isoformat()),)
+        for evt,day in history:
             n+=add_if_missing(session,m.ContractEvent,id=sid("contract_event",f"{c['code']}:{evt}"),
                 contract_id=cid,event_type=evt,occurred_at=midnight_vn(day),details={"seed_demo":True})
     return n
@@ -245,10 +261,11 @@ def main() -> int:
     parser=argparse.ArgumentParser()
     parser.add_argument("service",choices=VALID_SERVICES)
     parser.add_argument("--expect-existing", action="store_true", help="Fail if any new seed rows were inserted")
+    parser.add_argument("--queue-reminders", action="store_true", help="Billing only: enqueue real overdue reminders after verification")
     args=parser.parse_args()
     safety_check(args.service)
     d=dataset()
-    if len(d["rooms"])!=12 or len(d["contracts"])!=6:
+    if d["version"] == "demo_v1" and (len(d["rooms"])!=12 or len(d["contracts"])!=6):
         raise RuntimeError("Demo fixture inventory invalid")
     from app import models as m
     from app.db import get_sessionmaker
@@ -256,9 +273,18 @@ def main() -> int:
        "auth":seed_auth,"room":seed_room,"tenant":seed_tenant,
        "metering":seed_metering,"billing":seed_billing,"notification":seed_notification,
     }
+    if d["version"] == "presentation_v1":
+        from presentation import seed_metering as presentation_metering, seed_billing as presentation_billing
+        funcs.update(metering=presentation_metering, billing=presentation_billing)
     with get_sessionmaker()() as session:
         with session.begin():
-            created=funcs[args.service](session,m,d)
+            if args.queue_reminders:
+                if args.service != "billing" or d["version"] != "presentation_v1":
+                    raise RuntimeError("--queue-reminders requires Billing presentation profile")
+                from presentation import queue_reminders
+                created = queue_reminders(session, m, d)
+            else:
+                created=funcs[args.service](session,m,d)
     print(f"[seed] {args.service}_db: {created} new rows; existing deterministic IDs retained")
     if args.expect_existing and created != 0:
         raise RuntimeError(f"Idempotence check failed: {created} new rows on repeat seed")

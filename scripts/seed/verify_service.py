@@ -17,6 +17,10 @@ def check(service: str):
     from app.db import get_sessionmaker
     d=dataset()
     with get_sessionmaker()() as session:
+        if d["version"] == "presentation_v1" and service != "auth":
+            from verify_presentation import check_presentation
+            check_presentation(session, m, d, service)
+            return
         if service=="auth":
             email=os.environ.get("OWNER_EMAIL", "").strip().lower()
             u=session.get(m.User,sid("owner",email))
