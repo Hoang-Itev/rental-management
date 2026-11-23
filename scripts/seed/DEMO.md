@@ -136,3 +136,16 @@ those checks no longer describe runtime data; use the UI and smoke test instead.
 Clicking “remind” again today does not send another mail for an invoice already reminded today.
 Choose another unpaid invoice to show another reminder. Never delete dedupe records or fake PAID state to force a demo.
 Mail is processed asynchronously; if external SMTP rejects a destination the existing retry/FAILED handling applies.
+
+## Ubuntu / cloud equivalent
+
+After migrations succeed on an empty demo database and before starting workers, run:
+
+```bash
+bash scripts/run_seed_demo.sh --cloud --use-demo-password
+```
+
+This uses the same presentation dataset and password `123456789011` as Windows.
+It includes `compose.prod.yaml`, verifies all six seeds, then queues the twelve reminders.
+Omit `--use-demo-password` to enter a password privately. The script does not reset data, migrate schemas or start workers.
+Continue deployment only when `SEED DEMO OK` is printed. Do not load over the old baseline seed.
